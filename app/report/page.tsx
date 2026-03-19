@@ -1173,3 +1173,4 @@ const fetchLogs = async () => {
 export default function ReportPage() {
   return <Suspense fallback={null}><ReportContent /></Suspense>;
 }
+
