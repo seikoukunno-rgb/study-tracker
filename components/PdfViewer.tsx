@@ -13,18 +13,20 @@ const pdfOptions = { cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`, cMa
 
 type PdfViewerProps = {
   pdfUrl: string;
-  drawingMode?: 'none' | 'pen' | 'eraser'; // 🌟 モード型を更新
+  drawingMode?: 'none' | 'pen' | 'marker' | 'eraser'; // 🌟 マーカー追加
+  drawingColor?: string; // 🌟 色を受け取る
 };
 
 export type PdfViewerHandle = { scrollToPage: (pageNumber: number) => void; };
 
-const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawingMode = 'none' }, ref) => {
+const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawingMode = 'none', drawingColor = '#ef4444' }, ref) => {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
-  const transformRef = useRef<ReactZoomPanPinchRef>(null); // 🌟 ズーム用Refを追加
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [currentScale, setCurrentScale] = useState(1);
 
   const file = useMemo(() => ({ url: pdfUrl }), [pdfUrl]);
 
@@ -32,7 +34,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
     scrollToPage: (pageNumber: number) => {
       const node = pageRefs.current[pageNumber];
       if (node && transformRef.current) {
-        // 🌟 ジャンプ機能：ライブラリ専用の移動アニメーションを使う
         transformRef.current.zoomToElement(node, transformRef.current.state.scale, 300);
       } else if (node) {
         node.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -43,8 +44,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
   useEffect(() => {
     const updateWidth = () => {
       if (containerRef.current) {
-        const newWidth = containerRef.current.clientWidth;
-        setContainerWidth(prev => Math.abs(prev - newWidth) > 20 ? newWidth : prev);
+        setContainerWidth(containerRef.current.clientWidth);
       }
     };
     const timer = setTimeout(updateWidth, 100);
@@ -52,21 +52,24 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
     return () => { clearTimeout(timer); window.removeEventListener('resize', updateWidth); };
   }, []);
 
-  const pdfWidth = containerWidth > 0 ? (containerWidth > 800 ? 800 : containerWidth) : undefined;
+  // 🌟 横幅ピッタリに合わせる（余白を作らない）
+  const pdfWidth = containerWidth > 0 ? containerWidth : undefined;
 
   return (
-    // 🌟 これでするするスクロールが復活します！
-    <div ref={containerRef} className="h-full w-full bg-[#0a0a0a] relative no-scrollbar">
+    // 🌟 超重要: overflow-x-hidden を追加し、横スクロールを物理的に抹殺
+    <div ref={containerRef} className="h-full w-full bg-[#0a0a0a] overflow-y-auto overflow-x-hidden relative no-scrollbar">
       {containerWidth > 0 && (
         <TransformWrapper
           ref={transformRef}
           initialScale={1}
           minScale={1}
           maxScale={4}
-          disabled={drawingMode !== 'none'} // ペンの時は動かない
+          disabled={drawingMode !== 'none'}
           centerZoomedOut={false}
-          wheel={{ step: 0.1 }}
+          panning={{ disabled: currentScale <= 1.05 }}
+          wheel={{ wheelDisabled: true }}
           doubleClick={{ disabled: true }}
+          onTransformed={(ref) => setCurrentScale(ref.state.scale)}
         >
           <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full flex flex-col items-center">
             <Document
@@ -74,7 +77,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
               options={pdfOptions}
               onLoadSuccess={({ numPages }) => { setNumPages(numPages); setLoadError(null); }}
               onLoadError={(error) => setLoadError(error.message)}
-              className="flex flex-col items-center py-4 gap-6 w-full"
+              className="flex flex-col items-center gap-2 w-full"
               loading={
                 <div className="flex flex-col items-center justify-center mt-32 absolute top-0">
                   <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -86,6 +89,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
                 <div 
                   key={`page_${index + 1}`}
                   ref={(el) => { pageRefs.current[index + 1] = el; }} 
+                  // 🌟 横揺れを防ぐため、幅をピッタリコンテナサイズにする
                   className="relative shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden bg-white mb-2"
                   style={{ width: pdfWidth }}
                 >
@@ -96,7 +100,8 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  <DrawingCanvas mode={drawingMode} pageIndex={index + 1} />
+                  {/* 🌟 キャンバスに色とモードを渡す */}
+                  <DrawingCanvas mode={drawingMode} color={drawingColor} pageIndex={index + 1} />
                 </div>
               ))}
             </Document>

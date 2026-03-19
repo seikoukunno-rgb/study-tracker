@@ -4,12 +4,13 @@
 import { useRef, useState, useEffect } from 'react';
 
 type DrawingCanvasProps = {
-  // 🌟 モードを「なし」「ペン」「消しゴム」の3種類に変更！
-  mode: 'none' | 'pen' | 'eraser';
+  // 🌟 マーカー（蛍光ペン）を追加
+  mode: 'none' | 'pen' | 'marker' | 'eraser';
+  color: string; // 🌟 ペンの色を受け取る
   pageIndex: number;
 };
 
-export default function DrawingCanvas({ mode, pageIndex }: DrawingCanvasProps) {
+export default function DrawingCanvas({ mode, color, pageIndex }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
@@ -43,10 +44,11 @@ export default function DrawingCanvas({ mode, pageIndex }: DrawingCanvasProps) {
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-    // 🌟 ペンなら「上書き(赤)」、消しゴムなら「透明にして消す(太め)」
-    ctx.globalCompositeOperation = mode === 'eraser' ? 'destination-out' : 'source-over';
-    ctx.lineWidth = mode === 'eraser' ? 25 : 3; 
-    ctx.strokeStyle = '#ef4444';
+    // 🌟 モード別の設定（マーカーは太く半透明、消しゴムは透明にして消す）
+    ctx.globalCompositeOperation = mode === 'eraser' ? 'destination-out' : (mode === 'marker' ? 'multiply' : 'source-over');
+    ctx.lineWidth = mode === 'eraser' ? 30 : (mode === 'marker' ? 18 : 3); 
+    ctx.globalAlpha = mode === 'marker' ? 0.4 : 1.0; // マーカーは透けるように
+    ctx.strokeStyle = mode === 'eraser' ? 'rgba(0,0,0,1)' : color;
 
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
