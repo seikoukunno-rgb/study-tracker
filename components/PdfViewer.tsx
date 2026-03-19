@@ -7,12 +7,13 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import DrawingCanvas from './DrawingCanvas';
 
-// 🌟 Workerバージョンを完全に固定
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+// 🌟 本社（API）に合わせて、現場（Worker）も最新の 4.4.168 に統一！
+// ⚠️ 拡張子が .mjs になっていることに注意！
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs`;
 
-// 🌟 日本語PDF（簿記など）が真っ白になるのを防ぐフォント辞書設定
+// 🌟 日本語フォント辞書も 4.4.168 に統一！
 const pdfOptions = {
-  cMapUrl: `https://unpkg.com/pdfjs-dist@3.11.174/cmaps/`,
+  cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`,
   cMapPacked: true,
 };
 
