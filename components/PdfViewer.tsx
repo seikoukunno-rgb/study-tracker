@@ -10,7 +10,8 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 // 🌟 【最終解決策】ライブラリ自身が持つバージョン (pdfjs.version) をURLに埋め込む
 // これで、APIが3.11.174ならWorkerも確実に3.11.174を取りに行きます
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// cdnjs がダメな場合の予備（どちらでも正解です）
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 type PdfViewerProps = {
   pdfUrl: string;
