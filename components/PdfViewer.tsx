@@ -3,18 +3,17 @@
 
 import { useState, useRef, forwardRef, useImperativeHandle, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import DrawingCanvas from './DrawingCanvas';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs`;
-
 const pdfOptions = { cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`, cMapPacked: true };
 
 type PdfViewerProps = {
   pdfUrl: string;
-  drawingMode?: 'none' | 'pen' | 'eraser'; // 🌟 モードを受け取る
+  drawingMode?: 'none' | 'pen' | 'eraser'; // 🌟 モード型を更新
 };
 
 export type PdfViewerHandle = { scrollToPage: (pageNumber: number) => void; };
@@ -24,18 +23,19 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
   const [loadError, setLoadError] = useState<string | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const transformRef = useRef<ReactZoomPanPinchRef>(null); // 🌟 ズーム用Refを追加
   const [containerWidth, setContainerWidth] = useState<number>(0);
-  
-  // 🌟 現在のズーム倍率を記憶する（これでするするスクロールを実現！）
-  const [currentScale, setCurrentScale] = useState(1);
 
   const file = useMemo(() => ({ url: pdfUrl }), [pdfUrl]);
 
   useImperativeHandle(ref, () => ({
     scrollToPage: (pageNumber: number) => {
-      const pageRefsCurrent = pageRefs.current;
-      if (pageRefsCurrent && pageRefsCurrent[pageNumber]) {
-        pageRefsCurrent[pageNumber]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const node = pageRefs.current[pageNumber];
+      if (node && transformRef.current) {
+        // 🌟 ジャンプ機能：ライブラリ専用の移動アニメーションを使う
+        transformRef.current.zoomToElement(node, transformRef.current.state.scale, 300);
+      } else if (node) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
   }));
@@ -55,21 +55,18 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
   const pdfWidth = containerWidth > 0 ? (containerWidth > 800 ? 800 : containerWidth) : undefined;
 
   return (
-    // 🌟 overflow-y-auto を追加し、純正スクロールを許可！
-    <div ref={containerRef} className="h-full w-full bg-[#0a0a0a] overflow-y-auto relative no-scrollbar">
+    // 🌟 これでするするスクロールが復活します！
+    <div ref={containerRef} className="h-full w-full bg-[#0a0a0a] relative no-scrollbar">
       {containerWidth > 0 && (
         <TransformWrapper
+          ref={transformRef}
           initialScale={1}
           minScale={1}
           maxScale={4}
-          disabled={drawingMode !== 'none'}
+          disabled={drawingMode !== 'none'} // ペンの時は動かない
           centerZoomedOut={false}
-          // 🌟 超重要：ズームしていない(1倍の)時はパン移動を無効化し、純正の「するするスクロール」に任せる！
-          panning={{ disabled: currentScale <= 1.05 }}
-          wheel={{ wheelDisabled: true }} // PCマウスのスクロールもスルスルに！
+          wheel={{ step: 0.1 }}
           doubleClick={{ disabled: true }}
-          // 🌟 ズーム倍率が変わるたびに state を更新
-          onTransformed={(ref) => setCurrentScale(ref.state.scale)}
         >
           <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full flex flex-col items-center">
             <Document
