@@ -5,13 +5,13 @@ import { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import DrawingCanvas from './DrawingCanvas'; // 🌟 キャンバスを呼び出し
+import DrawingCanvas from './DrawingCanvas';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 
 type PdfViewerProps = {
   pdfUrl: string;
-  isDrawingMode?: boolean; // 🌟 ペンモードを受け取る
+  isDrawingMode?: boolean;
 };
 
 export type PdfViewerHandle = {
@@ -20,9 +20,10 @@ export type PdfViewerHandle = {
 
 const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, isDrawingMode = false }, ref) => {
   const [numPages, setNumPages] = useState<number | null>(null);
+  // 🌟 追加：エラーの正体を保存するステート
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  // 親から指定されたページにスッと移動する機能
   useImperativeHandle(ref, () => ({
     scrollToPage: (pageNumber: number) => {
       const pageRefsCurrent = pageRefs.current;
@@ -33,14 +34,24 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, isDrawi
   }));
 
   return (
-    // 🌟 余白（p-8など）を完全削除し、背景色を全体のダークトーン(#0a0a0a)に統一！
-    <div className="h-full w-full overflow-y-auto bg-[#0a0a0a] flex flex-col items-center">
+    <div className="h-full w-full overflow-auto bg-[#0a0a0a] flex flex-col items-center">
       <Document
-        file={pdfUrl}
+        // 文字列ではなく、オブジェクト形式でURLを渡す
+        file={{ url: pdfUrl }} 
         onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-        className="flex flex-col items-center py-8 gap-8" // 上下の呼吸スペースだけ確保
+        // 🌟 追加：エラーが起きたらここでキャッチ！
+        onLoadError={(error) => setLoadError(error)}
+        className="flex flex-col items-center py-8 gap-8 w-full"
         loading={<div className="text-indigo-400 font-black animate-pulse mt-20">LOADING PDF...</div>}
-        error={<div className="text-rose-500 font-bold mt-20">Error Loading PDF</div>}
+        // 🌟 修正：TypeScriptに怒られない形に変更
+        error={
+          <div className="mt-20 bg-rose-500/10 border border-rose-500/30 p-8 rounded-2xl max-w-lg text-center shadow-xl mx-4">
+            <h3 className="text-rose-500 font-black text-xl mb-3">🚨 PDF読み込みエラー</h3>
+            <p className="text-rose-400 text-sm font-mono break-all">
+              {loadError ? loadError.message : "詳細不明のエラー"}
+            </p>
+          </div>
+        }
       >
         {numPages && Array.from(new Array(numPages), (_, index) => (
           <div 
@@ -54,7 +65,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, isDrawi
               renderTextLayer={true}
               renderAnnotationLayer={true}
             />
-            {/* 🌟 ここに透明な画用紙（キャンバス）を被せる！ */}
             <DrawingCanvas isDrawingMode={isDrawingMode} pageIndex={index + 1} />
           </div>
         ))}

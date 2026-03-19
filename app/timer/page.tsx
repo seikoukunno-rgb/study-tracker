@@ -221,7 +221,7 @@ function TimerContent() {
     const currentFileName = pdfList[currentIndex].split('/').pop()?.replace(/^\d+_/, '') || `PDF ${currentIndex + 1}`;
 
     return (
-      <div className="relative h-[100dvh] w-screen bg-[#0a0a0a] overflow-hidden select-none flex">
+      <div className="relative h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden select-none flex">
         
         {/* 🌟 修正5：新しいPDFリーダー本体（最背面） */}
         <div className="absolute inset-0 z-0">
