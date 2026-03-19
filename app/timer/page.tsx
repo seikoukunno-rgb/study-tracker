@@ -1,3 +1,4 @@
+// app/timer/page.tsx
 "use client";
 
 import { useState, useEffect, Suspense, useCallback, useRef } from "react";
@@ -8,7 +9,7 @@ import {
   BookOpen, CheckCircle2, PencilLine, X, Loader2, AlertCircle, FileText, Plus, Send, PenTool
 } from "lucide-react";
 
-// 🌟 修正1：新しく作ったPDFビューアーを読み込む
+// 🌟 唯一の正しいPDFビューアー
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
 
 function TimerContent() {
@@ -19,7 +20,6 @@ function TimerContent() {
   const title = searchParams.get("title") || "名称未設定の教材";
   const imageUrl = searchParams.get("image_url");
 
-  // --- 既存の基本ステート ---
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -28,14 +28,12 @@ function TimerContent() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // --- 複数PDF・セキュア管理用のステート ---
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [securePdfUrl, setSecurePdfUrl] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // 🌟 修正2：新機能（書き込み・メモ）用のステートを追加
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [notes, setNotes] = useState<any[]>([]);
@@ -43,7 +41,6 @@ function TimerContent() {
   const [notePage, setNotePage] = useState(1);
   const [noteContent, setNoteContent] = useState("");
 
-  // 1. DBからPDFのリストを取得する (変更なし)
   const fetchMaterialPaths = useCallback(async () => {
     if (!materialId) {
       setIsInitializing(false);
@@ -83,7 +80,6 @@ function TimerContent() {
     }
   }, [materialId]);
 
-  // 2. 「5分間チケット（Signed URL）」を発行する (変更なし)
   const fetchSignedUrl = useCallback(async () => {
     if (pdfList.length === 0) return;
     setPdfError(null);
@@ -112,20 +108,18 @@ function TimerContent() {
   useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
   useEffect(() => { fetchSignedUrl(); }, [fetchSignedUrl]);
 
-  // 🌟 修正3：DBからメモを取得する
   const fetchNotes = useCallback(async () => {
     if (!materialId) return;
     const { data } = await supabase
       .from('notes')
       .select('*')
-      .eq('pdf_id', materialId) // PDFごとにメモを管理
+      .eq('pdf_id', materialId)
       .order('page_number', { ascending: true });
     if (data) setNotes(data);
   }, [materialId]);
 
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
-  // 🌟 修正4：メモを保存する関数
   const handleSaveNote = async () => {
     if (!noteContent.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -143,7 +137,6 @@ function TimerContent() {
     fetchNotes();
   };
 
-  // --- タイマー＆保存ロジック (変更なし) ---
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) {
@@ -192,10 +185,9 @@ function TimerContent() {
     }
   };
 
-  // --- エラー＆ロード画面 (変更なし) ---
   if (pdfError) {
     return (
-      <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none">
+      <div className="h-[100dvh] w-full bg-black flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none">
         <AlertCircle className="w-12 h-12 mb-4 animate-pulse" />
         <p className="font-black mb-6 text-sm">{pdfError}</p>
         <button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">
@@ -207,23 +199,19 @@ function TimerContent() {
 
   if (isInitializing) {
     return (
-      <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center select-none">
+      <div className="h-[100dvh] w-full bg-black flex flex-col items-center justify-center select-none">
         <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
         <p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p>
       </div>
     );
   }
 
-  // ==========================================
-  // 🎨 パターンA: スマートピル ＋ サイドバー UI
-  // ==========================================
   if (pdfList.length > 0 && securePdfUrl) {
     const currentFileName = pdfList[currentIndex].split('/').pop()?.replace(/^\d+_/, '') || `PDF ${currentIndex + 1}`;
 
     return (
       <div className="relative h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden select-none flex">
         
-        {/* 🌟 修正5：新しいPDFリーダー本体（最背面） */}
         <div className="absolute inset-0 z-0">
           <PdfViewer 
             ref={pdfViewerRef} 
@@ -232,7 +220,6 @@ function TimerContent() {
           />
         </div>
 
-        {/* 戻るボタン */}
         <button 
           onClick={() => router.back()} 
           className="absolute top-6 left-4 z-40 p-3 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60"
@@ -240,7 +227,6 @@ function TimerContent() {
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        {/* 🌟 修正6：書き込みON/OFFボタン (スマートピルの左側に配置) */}
         <button
           onClick={() => setIsDrawingMode(!isDrawingMode)}
           className={`absolute top-6 right-56 z-40 px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 font-black text-sm transition-all active:scale-95 border ${
@@ -253,7 +239,6 @@ function TimerContent() {
           {isDrawingMode ? '書き込みON' : '書き込みOFF'}
         </button>
 
-        {/* 🌟 1. スマートピル (右上の小さな情報窓・変更なし) */}
         <button 
           onClick={() => setIsSidebarOpen(true)}
           className={`absolute top-6 right-6 z-40 bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl px-5 py-3 rounded-full flex items-center gap-4 transition-all duration-500 hover:scale-105 hover:bg-black/80 ${isSidebarOpen ? 'opacity-0 pointer-events-none translate-x-10' : 'opacity-100 translate-x-0'}`}
@@ -273,17 +258,12 @@ function TimerContent() {
           </div>
         </button>
 
-        {/* 🌟 2. サイドバー (コントロールパネル) */}
-        {/* 暗転オーバーレイ */}
         <div 
           className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] z-40 transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
           onClick={() => setIsSidebarOpen(false)}
         />
 
-        {/* サイドバー本体 */}
         <div className={`absolute top-0 right-0 w-80 max-w-[85vw] h-full bg-[#1c1c1e]/95 backdrop-blur-2xl border-l border-white/10 shadow-2xl z-50 flex flex-col transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          
-          {/* ヘッダー */}
           <div className="flex items-center justify-between p-6 border-b border-white/10">
             <h3 className="text-white font-black tracking-widest text-sm">CONTROL PANEL</h3>
             <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 transition-colors">
@@ -293,7 +273,6 @@ function TimerContent() {
 
           <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
             
-            {/* タイマー操作エリア (変更なし) */}
             <div className="flex flex-col items-center">
               <span className="text-[10px] text-indigo-400 font-black tracking-[0.2em] mb-2 uppercase">Study Timer</span>
               <div className="text-5xl font-black font-mono text-white mb-6 tracking-wider drop-shadow-lg">{formatTime(seconds)}</div>
@@ -325,7 +304,6 @@ function TimerContent() {
 
             <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
 
-            {/* 🌟 修正7：メモ（Notes）セクションをサイドバーに追加 */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase block">Notes</span>
@@ -361,7 +339,7 @@ function TimerContent() {
                     key={note.id}
                     onClick={() => {
                       pdfViewerRef.current?.scrollToPage(note.page_number);
-                      if (window.innerWidth < 768) setIsSidebarOpen(false); // スマホならジャンプ後に閉じる
+                      if (window.innerWidth < 768) setIsSidebarOpen(false);
                     }}
                     className="w-full text-left p-3 rounded-2xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all group"
                   >
@@ -380,7 +358,6 @@ function TimerContent() {
 
             <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
 
-            {/* PDF切り替えリストエリア（複数対応・変更なし） */}
             <div>
               <span className="text-[10px] text-emerald-400 font-black tracking-[0.2em] mb-4 block uppercase">Attached Materials ({pdfList.length})</span>
               <div className="space-y-2">
@@ -410,7 +387,6 @@ function TimerContent() {
           </div>
         </div>
 
-        {/* 🌟 3. 保存モーダル＆完了表示 (変更なし) */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -448,9 +424,6 @@ function TimerContent() {
     );
   }
 
-  // ==========================================
-  // 📄 パターンB: 通常モード (PDFがない場合・変更なし)
-  // ==========================================
   return (
     <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4">
       <div className="absolute top-6 left-6">
@@ -538,7 +511,7 @@ function TimerContent() {
 export default function TimerPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-[100dvh] bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-[100dvh] w-full bg-[#0a0a0a] flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-indigo-500 animate-spin opacity-20" />
       </div>
     }>
