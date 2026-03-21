@@ -22,7 +22,8 @@ function ReportContent() {
   const [activeTab, setActiveTab] = useState<"record" | "timeline">("timeline");
   
   // 🌟 追加：期間フィルター用のState
-  const [timeFilter, setTimeFilter] = useState<"all" | "today" | "yesterday">("all");
+  // 🌟 追加：期間フィルター用のState（olderを追加）
+  const [timeFilter, setTimeFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
   // 🌟 追加：教材検索用のState
   const [materialSearchQuery, setMaterialSearchQuery] = useState("");
 
@@ -504,18 +505,22 @@ function ReportContent() {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    if (timeFilter === "today") {
+if (timeFilter === "today") {
       filtered = filtered.filter(log => new Date(log.created_at) >= today);
     } else if (timeFilter === "yesterday") {
       filtered = filtered.filter(log => {
         const logDate = new Date(log.created_at);
         return logDate >= yesterday && logDate < today;
       });
+    } else if (timeFilter === "older") {
+      // 🌟 追加：「3日以上前」の判定（一昨日の0:00より前のデータ）
+      const boundary = new Date(today);
+      boundary.setDate(boundary.getDate() - 2); 
+      filtered = filtered.filter(log => new Date(log.created_at) < boundary);
     }
     
     return filtered;
   };
-
   const filteredLogs = getFilteredLogs();
 
   const formatTimeForChart = (minutes: number) => {
