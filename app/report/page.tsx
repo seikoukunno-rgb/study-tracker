@@ -948,7 +948,7 @@ function ReportContent() {
             {/* =================================================================
                 左側：RECORD（レポート）タブ
             ================================================================= */}
-            <div className={`w-1/2 px-4 space-y-6 transition-opacity duration-300 ${activeTab === "record" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+            <div className={`w-1/2 px-4 space-y-6 transition-all duration-300 ${activeTab === "record" ? "opacity-100 h-auto" : "opacity-0 h-0 overflow-hidden pointer-events-none"}`}>
               
               <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
                 <div className="flex justify-between items-center mb-6">
@@ -1081,53 +1081,29 @@ function ReportContent() {
                       else if (diffDays === 1) { daysAgoText = "昨日"; badgeClass = isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"; }
                       else { daysAgoText = `${diffDays}日前`; }
                     }
-
+// 🌟 修正：スワイプ機能や隠しボタンを削り、シンプルなリストに変更
                     return (
-                      <div key={title as string} className={`relative rounded-2xl overflow-hidden bg-indigo-500`}>
-                        
-                        <div className="absolute inset-0 flex items-center justify-end pr-5">
-                          <button 
-                             onClick={() => {
-                               setSwipedSubject(null);
-                               setReminderSubject(title as string);
-                               setReminderDateTime("");
-                               setShowReminderSetup(true);
-                             }}
-                             className="flex flex-col items-center justify-center p-3 bg-white/20 hover:bg-white/30 rounded-2xl text-white transition-colors"
-                          >
-                            <Bell className="w-5 h-5 mb-1" />
-                            <span className="text-[8px] font-black tracking-widest">リマインド</span>
-                          </button>
+                      <div key={title as string} className={`flex items-center justify-between p-4 rounded-2xl border ${bgSubCard}`}>
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-16 rounded-lg border flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-200'}`}>
+                            {imageUrl ? <img src={imageUrl} alt={title as string} className="w-full h-full object-cover pointer-events-none" /> : <Book className={`w-6 h-6 pointer-events-none ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />}
+                          </div>
+                          <div className="pointer-events-none">
+                            <h4 className={`text-sm font-black line-clamp-1 mb-1 ${textMain}`}>{title as string}</h4>
+                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
+                              <span className={`px-2 py-0.5 rounded-md ${badgeClass}`}>{daysAgoText}</span>
+                              <span className={`flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> 累計</span>
+                              <FormatDurationJSX minutes={totalMinutes} />
+                            </div>
+                          </div>
                         </div>
-
-                        <div 
-                          onTouchStart={handleTouchStart}
-                          onTouchMove={handleTouchMove}
-                          onTouchEnd={() => handleTouchEnd(title as string)}
-                          onClick={() => { if (swipedSubject === title) setSwipedSubject(null); }}
-                          className={`relative flex items-center justify-between p-4 border transition-transform duration-300 ease-out ${swipedSubject === title ? '-translate-x-24' : 'translate-x-0'} ${bgSubCard}`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-16 rounded-lg border flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-200'}`}>
-                              {imageUrl ? <img src={imageUrl} alt={title as string} className="w-full h-full object-cover pointer-events-none" /> : <Book className={`w-6 h-6 pointer-events-none ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />}
-                            </div>
-                            <div className="pointer-events-none">
-                              <h4 className={`text-sm font-black line-clamp-1 mb-1 ${textMain}`}>{title as string}</h4>
-                              <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
-                                <span className={`px-2 py-0.5 rounded-md ${badgeClass}`}>{daysAgoText}</span>
-                                <span className={`flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> 累計</span>
-                                <FormatDurationJSX minutes={totalMinutes} />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
-                            {activeReminders.map((timeIso, idx) => (
-                              <span key={idx} className={`text-[9px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 pointer-events-none ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'text-indigo-600 bg-indigo-50 border-indigo-100'}`}>
-                                <Bell className="w-2.5 h-2.5" /> {getCountdownDisplay(timeIso)}
-                              </span>
-                            ))}
-                          </div>
+                        
+                        <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
+                          {activeReminders.map((timeIso, idx) => (
+                            <span key={idx} className={`text-[9px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 pointer-events-none ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'text-indigo-600 bg-indigo-50 border-indigo-100'}`}>
+                              <Bell className="w-2.5 h-2.5" /> {getCountdownDisplay(timeIso)}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     );
@@ -1139,7 +1115,7 @@ function ReportContent() {
             {/* =================================================================
                 右側：TIMELINE タブ
             ================================================================= */}
-            <div className={`w-1/2 px-4 space-y-4 transition-opacity duration-300 ${activeTab === "timeline" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+            <div className={`w-1/2 px-4 space-y-4 transition-all duration-300 ${activeTab === "timeline" ? "opacity-100 h-auto" : "opacity-0 h-0 overflow-hidden pointer-events-none"}`}>
               
               <div className="relative mb-6 z-40 flex flex-col gap-3">
                 {/* 🌟 修正：TIMELINE用の独立フィルター */}

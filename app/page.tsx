@@ -10,7 +10,7 @@ export default function Home() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalTime, setTotalTime] = useState(0);
-
+const [searchQuery, setSearchQuery] = useState("");
   const [selectedPdfs, setSelectedPdfs] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
@@ -456,12 +456,27 @@ export default function Home() {
       </header>
 
       {/* --- MAIN MATERIAL LIST --- */}
+      {/* --- MAIN MATERIAL LIST --- */}
       <main className="max-w-4xl mx-auto p-5">
-        <div className="flex justify-between items-center mb-6 px-1">
+        <div className="flex justify-between items-center mb-4 px-1">
           <h2 className={`text-sm font-black tracking-[0.2em] uppercase ${textSub}`}>マイ本棚</h2>
           <button onClick={() => setShowAddModal(true)} className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-600 text-white shadow-md'}`}>
             <Plus className="w-4 h-4" /> 教材を追加
           </button>
+        </div>
+
+        {/* 🌟 追加：マイ本棚の検索バー */}
+        <div className="relative mb-6 px-1">
+          <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+            <Search className={`w-4 h-4 ${textSub}`} />
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="教材を検索..."
+            className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-bold outline-none transition-all border shadow-sm ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a] focus:border-indigo-500 text-white' : 'bg-white border-slate-100 focus:border-indigo-400 text-slate-800'}`}
+          />
         </div>
 
         {isLoading ? (
@@ -474,7 +489,10 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {materials.map((material) => {
+            {/* 🌟 修正：materials ではなく、検索で絞り込んだ結果を .map する */}
+            {materials
+              .filter(material => material.title.toLowerCase().includes(searchQuery.toLowerCase()))
+              .map((material) => {
               const hasPdf = material.pdf_url && material.pdf_url !== '[]' && material.pdf_url !== '';
 
               return (
