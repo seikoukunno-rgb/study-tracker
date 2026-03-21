@@ -519,48 +519,60 @@ const handleAddCustomMaterial = async () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {materials.map((material) => (
-            
-              // 🌟 修正：親から overflow-hidden と bg-rose を外す！
-              <div key={material.id} className="relative h-full">
-                
-                {/* 🌟 修正：背景のゴミ箱エリア（ここで赤色と角丸を設定して、カードの裏にピタッと合わせる） */}
-                <div className="absolute inset-0 bg-rose-500 rounded-3xl flex items-center justify-end pr-6">
-                  <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingMaterialId === material.id && swipeOffset < -40 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
-                    <Trash2 className="w-6 h-6 text-white mb-1" />
-                    <span className="text-white text-[10px] font-black tracking-widest">削除</span>
-                  </div>
-                </div>
+{materials.map((material) => {
+              // 🌟 追加：PDFがあるかどうかをここで判定
+              const hasPdf = material.pdf_url && material.pdf_url !== '[]' && material.pdf_url !== '';
 
-                <button 
-                  onTouchStart={(e) => handleMaterialTouchStart(e, material.id)}
-                  onTouchMove={handleMaterialTouchMove}
-                  onTouchEnd={() => handleMaterialTouchEnd(material.id, material.title)}
-                  onClick={() => {
-                    if (Math.abs(swipeOffset) < 10) setSelectedMaterial(material);
-                  }}
-                  style={{ 
-                    transform: swipingMaterialId === material.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
-                    transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
-                  }}
-                  className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl shadow-sm border ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'} ${swipingMaterialId === material.id ? 'shadow-2xl' : ''}`}
-                >
-                  <div className={`w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none ${bgSubCard}`}>
-                    {material.image_url ? (
-                      <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
-                    ) : (
-                      <Book className={`w-8 h-8 transition-colors ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />
-                    )}
+              return (
+                <div key={material.id} className="relative h-full">
+                  
+                  {/* 背景のゴミ箱エリア（変更なし） */}
+                  <div className="absolute inset-0 bg-rose-500 rounded-3xl flex items-center justify-end pr-6">
+                    <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingMaterialId === material.id && swipeOffset < -40 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
+                      <Trash2 className="w-6 h-6 text-white mb-1" />
+                      <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+                    </div>
                   </div>
-                  <h3 className={`text-xs font-black line-clamp-2 leading-snug px-1 pointer-events-none ${textMain}`}>
-                    {material.title}
-                  </h3>
-                  <div className={`mt-3 text-[10px] font-black px-4 py-1.5 rounded-full transition-colors pointer-events-none ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-50 text-indigo-600'}`}>
-                    記録する
-                  </div>
-                </button>
-              </div>
-            ))}   
+
+                  <button 
+                    onTouchStart={(e) => handleMaterialTouchStart(e, material.id)}
+                    onTouchMove={handleMaterialTouchMove}
+                    onTouchEnd={() => handleMaterialTouchEnd(material.id, material.title)}
+                    onClick={() => {
+                      if (Math.abs(swipeOffset) < 10) setSelectedMaterial(material);
+                    }}
+                    style={{ 
+                      transform: swipingMaterialId === material.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
+                      transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
+                    }}
+                    // 🌟 修正：hasPdf のときだけ border-rose-500（赤枠）と太さを適用！
+                    className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl shadow-sm border-2 transition-all
+                      ${hasPdf 
+                        ? 'border-rose-500 shadow-rose-100' 
+                        : isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'
+                      } ${swipingMaterialId === material.id ? 'shadow-2xl' : ''}`}
+                  >
+                    {/* 🌟 修正：PDF教材のときは、画像の枠も少し赤っぽくすると統一感が出ます */}
+                    <div className={`w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none ${hasPdf ? 'border-rose-100' : bgSubCard}`}>
+                      {material.image_url ? (
+                        <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
+                      ) : (
+                        // PDFがあるのに画像がない場合は、アイコンも赤っぽく
+                        <Book className={`w-8 h-8 transition-colors ${hasPdf ? 'text-rose-300' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                      )}
+                    </div>
+
+                    <h3 className={`text-xs font-black line-clamp-2 leading-snug px-2 ${hasPdf ? 'text-rose-900' : ''}`}>
+                      {material.title}
+                    </h3>
+
+                    <div className={`mt-3 text-[10px] font-black px-4 py-1.5 rounded-full transition-colors ${hasPdf ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                      記録する
+                    </div>
+                  </button>
+                </div>
+              );
+            })}  
           </div>
         )}
       </main>

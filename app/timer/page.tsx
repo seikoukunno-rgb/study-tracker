@@ -7,7 +7,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   Play, Pause, RotateCcw, Save, ArrowLeft, 
   BookOpen, CheckCircle2, PencilLine, X, Loader2, AlertCircle, FileText, Plus, Send, PenTool,
-  ChevronRight, ChevronLeft, Menu, Eraser, Highlighter // 🌟 マーカー追加
+  ChevronRight, ChevronLeft, Menu, Eraser, Highlighter
 } from "lucide-react";
 
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
@@ -18,6 +18,7 @@ function TimerContent() {
 
   const materialId = searchParams.get("id") || searchParams.get("material_id"); 
   const title = searchParams.get("title") || "名称未設定の教材";
+  const imageUrl = searchParams.get("image_url");
 
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -31,14 +32,14 @@ function TimerContent() {
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [securePdfUrl, setSecurePdfUrl] = useState<string | null>(null);
+  
+  // 🌟 初期化中かどうかの判定
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
-  
-  // 🌟 ペン・マーカー・消しゴム・色のステート
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser'>('none');
-  const [drawingColor, setDrawingColor] = useState<string>('#ef4444'); // デフォルトは赤
+  const [drawingColor, setDrawingColor] = useState<string>('#ef4444');
 
   const [notes, setNotes] = useState<any[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -50,7 +51,14 @@ function TimerContent() {
     try {
       const { data: material, error: dbError } = await supabase.from('materials').select('pdf_url').eq('id', materialId).single();
       if (dbError) throw new Error("教材データの取得に失敗しました");
-      if (!material || !material.pdf_url) { setIsInitializing(false); return; }
+      
+      // PDFURLが空っぽ（nullや空文字）の場合はPDFなしと判定
+      if (!material || !material.pdf_url || material.pdf_url === '[]') { 
+        setPdfList([]);
+        setIsInitializing(false); 
+        return; 
+      }
+
       let paths: string[] = [];
       if (Array.isArray(material.pdf_url)) paths = material.pdf_url;
       else if (typeof material.pdf_url === 'string') {
@@ -62,11 +70,15 @@ function TimerContent() {
         }
       }
       setPdfList(paths);
-    } catch (e: any) { setPdfError(e.message); } finally { setIsInitializing(false); }
+    } catch (e: any) { setPdfError(e.message); } 
+    // fetchSignedUrlでローディングを解除するため、ここではまだ isInitializing を false にしない
   }, [materialId]);
 
   const fetchSignedUrl = useCallback(async () => {
-    if (pdfList.length === 0) return;
+    if (pdfList.length === 0) {
+      setIsInitializing(false); // PDFがない場合はここでローディング終了
+      return;
+    }
     setPdfError(null);
     try {
       let filePath = pdfList[currentIndex];
@@ -76,7 +88,9 @@ function TimerContent() {
       const { data, error: storageError } = await supabase.storage.from('pdfs').createSignedUrl(filePath, 300);
       if (storageError) throw new Error("セキュアPDFの発行に失敗しました");
       setSecurePdfUrl(data.signedUrl);
-    } catch (e: any) { setPdfError(e.message); }
+    } catch (e: any) { setPdfError(e.message); } finally {
+      setIsInitializing(false); // 取得が終わったらローディング終了
+    }
   }, [pdfList, currentIndex]);
 
   useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
@@ -128,15 +142,22 @@ function TimerContent() {
     else { setIsSaved(true); setIsRunning(false); setShowSaveModal(false); setTimeout(() => router.push("/"), 1500); }
   };
 
-  if (pdfError || isInitializing) return <div className="h-[100dvh] w-full bg-black flex items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin" /></div>;
+  // --- ローディング画面 ---
+  if (isInitializing) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
+  // --- エラー画面 ---
+  if (pdfError) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
+
+
+  // ==========================================
+  // 🎨 パターンA: PDFがある場合の「最強学習ルーム」
+  // ==========================================
   if (pdfList.length > 0 && securePdfUrl) {
+    const currentFileName = pdfList[currentIndex].split('/').pop()?.replace(/^\d+_/, '') || `PDF ${currentIndex + 1}`;
+
     return (
-      <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans">
-        
-        {/* 📚 左側：PDF Area */}
+      <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
         <div className="flex-1 relative flex flex-col border-r border-[#2c2c2e]">
-          
           <div className="absolute inset-0 z-0">
             <PdfViewer ref={pdfViewerRef} pdfUrl={securePdfUrl} drawingMode={drawingMode} drawingColor={drawingColor} />
           </div>
@@ -145,43 +166,20 @@ function TimerContent() {
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          {/* 🌟 進化したツールバーポップアップ */}
-          <div 
-            className={`absolute top-6 right-0 z-40 flex items-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              isPillMinimized ? 'translate-x-[calc(100%-28px)]' : '-translate-x-4'
-            }`}
-          >
-            <button 
-              onClick={() => setIsPillMinimized(!isPillMinimized)}
-              className="h-12 w-7 bg-[#1c1c1e] border-y border-l border-white/10 rounded-l-xl flex items-center justify-center text-white/50 hover:text-white transition-colors shadow-[-5px_0_15px_rgba(0,0,0,0.5)]"
-            >
+          {/* 🌟 ツールバーポップアップ */}
+          <div className={`absolute top-6 right-0 z-40 flex items-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isPillMinimized ? 'translate-x-[calc(100%-28px)]' : '-translate-x-4'}`}>
+            <button onClick={() => setIsPillMinimized(!isPillMinimized)} className="h-12 w-7 bg-[#1c1c1e] border-y border-l border-white/10 rounded-l-xl flex items-center justify-center text-white/50 hover:text-white transition-colors shadow-[-5px_0_15px_rgba(0,0,0,0.5)]">
               {isPillMinimized ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
-
             <div className="bg-[#1c1c1e] border border-white/10 shadow-2xl pl-3 pr-2 py-2 flex items-center h-12 rounded-r-xl">
-              
-              {/* タイマー */}
               <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 hover:opacity-80 transition-opacity pr-2">
                 {isRunning ? <Play className="w-4 h-4 text-indigo-400 animate-pulse fill-current" /> : <Pause className="w-4 h-4 text-amber-400 fill-current" />}
                 <span className="text-white font-black font-mono text-lg tracking-wider w-16 text-left">{formatTime(seconds)}</span>
               </button>
-
               <div className="w-[1px] h-6 bg-white/20 mx-1"></div>
-
-              {/* 🖊 ペン */}
-              <button onClick={() => setDrawingMode(drawingMode === 'pen' ? 'none' : 'pen')} className={`p-2 rounded-lg transition-all ${drawingMode === 'pen' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}>
-                <PenTool className="w-4 h-4" />
-              </button>
-              {/* 🖍 マーカー */}
-              <button onClick={() => setDrawingMode(drawingMode === 'marker' ? 'none' : 'marker')} className={`p-2 rounded-lg transition-all ${drawingMode === 'marker' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}>
-                <Highlighter className="w-4 h-4" />
-              </button>
-              {/* 🧽 消しゴム */}
-              <button onClick={() => setDrawingMode(drawingMode === 'eraser' ? 'none' : 'eraser')} className={`p-2 rounded-lg transition-all ${drawingMode === 'eraser' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}>
-                <Eraser className="w-4 h-4" />
-              </button>
-
-              {/* 🎨 色選択パレット (ペンかマーカーの時だけ出現！) */}
+              <button onClick={() => setDrawingMode(drawingMode === 'pen' ? 'none' : 'pen')} className={`p-2 rounded-lg transition-all ${drawingMode === 'pen' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}><PenTool className="w-4 h-4" /></button>
+              <button onClick={() => setDrawingMode(drawingMode === 'marker' ? 'none' : 'marker')} className={`p-2 rounded-lg transition-all ${drawingMode === 'marker' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}><Highlighter className="w-4 h-4" /></button>
+              <button onClick={() => setDrawingMode(drawingMode === 'eraser' ? 'none' : 'eraser')} className={`p-2 rounded-lg transition-all ${drawingMode === 'eraser' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}><Eraser className="w-4 h-4" /></button>
               {(drawingMode === 'pen' || drawingMode === 'marker') && (
                 <div className="flex items-center gap-2 ml-2 pl-3 border-l border-white/20 animate-in fade-in slide-in-from-left-2 duration-200">
                   <button onClick={() => setDrawingColor('#ef4444')} className={`w-4 h-4 rounded-full bg-red-500 transition-all ${drawingColor === '#ef4444' ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'}`} />
@@ -189,26 +187,20 @@ function TimerContent() {
                   <button onClick={() => setDrawingColor('#eab308')} className={`w-4 h-4 rounded-full bg-yellow-500 transition-all ${drawingColor === '#eab308' ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'}`} />
                 </div>
               )}
-
-              {/* スマホ用サイドバー開閉 */}
               <div className="md:hidden flex items-center ml-2 pl-2 border-l border-white/20">
-                <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-white/10 rounded-lg transition-colors">
-                  <Menu className="w-4 h-4" />
-                </button>
+                <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-white/10 rounded-lg transition-colors"><Menu className="w-4 h-4" /></button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* --- 以下のサイドバーやモーダルは省略なしでそのまま機能します --- */}
+        {/* 🌟 サイドバー */}
         <div className={`md:hidden absolute inset-0 bg-black/40 backdrop-blur-[2px] z-[45] transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsSidebarOpen(false)} />
-
         <div className={`absolute md:relative top-0 right-0 w-80 max-w-[85vw] h-full bg-[#1c1c1e] md:bg-[#141414] border-l border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] md:shadow-none z-[50] md:z-10 flex flex-col transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
           <div className="flex items-center justify-between p-6 border-b border-white/10">
             <h3 className="text-white font-black tracking-widest text-sm">CONTROL PANEL</h3>
             <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 transition-colors"><X className="w-5 h-5" /></button>
           </div>
-
           <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
             <div className="flex flex-col items-center">
               <span className="text-[10px] text-indigo-400 font-black tracking-[0.2em] mb-2 uppercase">Study Timer</span>
@@ -223,9 +215,7 @@ function TimerContent() {
                 </div>
               )}
             </div>
-
             <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase block">Notes</span>
@@ -251,9 +241,7 @@ function TimerContent() {
                 {notes.length === 0 && !isAddingNote && <p className="text-xs font-bold text-slate-600 text-center py-4">メモはありません</p>}
               </div>
             </div>
-
             <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
             <div>
               <span className="text-[10px] text-emerald-400 font-black tracking-[0.2em] mb-4 block uppercase">Attached Materials ({pdfList.length})</span>
               <div className="space-y-2">
@@ -271,6 +259,7 @@ function TimerContent() {
           </div>
         </div>
 
+        {/* 🌟 セーブモーダル */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -293,9 +282,97 @@ function TimerContent() {
     );
   }
 
-  return <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4">PDFが取得できません</div>;
+  // ==========================================
+  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」
+  // ==========================================
+  return (
+    <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4 relative">
+      <div className="absolute top-6 left-6">
+        <button onClick={() => router.back()} className="p-3 bg-white hover:bg-slate-100 rounded-full shadow-sm transition-colors">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+      </div>
+
+      <div className="w-full max-w-md bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 flex flex-col items-center transition-all">
+        <div className="flex flex-col items-center mt-2 mb-8">
+          <div className="text-[10px] font-black text-slate-400 flex items-center gap-1 mb-3 tracking-widest">
+            <BookOpen className="w-4 h-4" /> CURRENT SUBJECT
+          </div>
+          {imageUrl ? (
+            <img src={imageUrl} alt={title} className="w-20 h-28 object-cover rounded-lg shadow-sm border border-slate-200 mb-4" />
+          ) : (
+            <div className="w-20 h-28 bg-slate-100 rounded-lg shadow-sm border border-slate-200 mb-4 flex items-center justify-center">
+              <BookOpen className="w-8 h-8 text-slate-300" />
+            </div>
+          )}
+          <h2 className="text-base font-black text-slate-800 text-center px-4 leading-relaxed line-clamp-3">
+            {title}
+          </h2>
+        </div>
+
+        <div className="mb-8 font-black tabular-nums tracking-tighter text-indigo-600" style={{ fontSize: seconds >= 3600 ? '4rem' : '5rem', lineHeight: '1' }}>
+          {formatTime(seconds)}
+        </div>
+
+        {isSaved ? (
+          <div className="w-full bg-green-50 border border-green-200 text-green-600 py-6 rounded-3xl flex flex-col items-center justify-center gap-2 animate-in zoom-in duration-300">
+            <CheckCircle2 className="w-10 h-10" />
+            <span className="font-black">記録を保存しました！</span>
+          </div>
+        ) : (
+          <div className="w-full space-y-4">
+            <div className="flex gap-4">
+              <button 
+                onClick={() => { setIsRunning(false); setSeconds(0); setMemo(""); }}
+                className="flex-1 py-5 bg-slate-100 text-slate-600 rounded-3xl font-black flex items-center justify-center gap-2 hover:bg-slate-200 active:scale-95 transition-all"
+              >
+                <RotateCcw className="w-5 h-5" /> リセット
+              </button>
+              <button 
+                onClick={() => setIsRunning(!isRunning)}
+                className={`flex-[2] py-5 text-white rounded-3xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg ${isRunning ? 'bg-amber-500 shadow-amber-200' : 'bg-indigo-600 shadow-indigo-200'}`}
+              >
+                {isRunning ? (
+                  <><Pause className="w-6 h-6 fill-current" /> 一時停止</>
+                ) : (
+                  <><Play className="w-6 h-6 fill-current ml-1" /> {seconds > 0 ? "再開" : "スタート"}</>
+                )}
+              </button>
+            </div>
+
+            <div className={`transition-all duration-500 overflow-hidden ${!isRunning && seconds > 0 ? 'max-h-96 opacity-100 mt-6' : 'max-h-0 opacity-0'}`}>
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="flex items-center gap-1 text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">
+                    <PencilLine className="w-3 h-3" /> メモ・感想 (任意)
+                  </label>
+                  <textarea
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    placeholder="今日の学びや反省などを記録..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none h-24"
+                  />
+                </div>
+                <button 
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="w-full bg-black text-white py-5 rounded-3xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl disabled:opacity-50"
+                >
+                  {isSaving ? "保存中..." : <><Save className="w-5 h-5" /> この記録を保存して終了</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function TimerPage() {
-  return <Suspense fallback={<div className="min-h-[100dvh] w-full bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin opacity-20" /></div>}><TimerContent /></Suspense>;
+  return (
+    <Suspense fallback={<div className="min-h-[100dvh] w-full bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin opacity-20" /></div>}>
+      <TimerContent />
+    </Suspense>
+  );
 }
