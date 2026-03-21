@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-// 🌟 修正：ChevronLeft を追加インポートしています
-import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft,Menu } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { 
+  Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, 
+  History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft,
+  Menu, ChevronRight, Sun, Moon // 🌟 追加インポート
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
 
@@ -47,6 +50,23 @@ export default function Home() {
   const [modalSwipeY, setModalSwipeY] = useState(0);
   const [isModalClosing, setIsModalClosing] = useState(false);
 
+  // ==========================================
+  // 🌟 ステップ A：サイドバー用のStateとタッチ処理
+  // ==========================================
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [sidebarOffset, setSidebarOffset] = useState(0);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const sidebarStartX = useRef<number | null>(null);
+
+  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
+  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
+
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
+  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
+  // ==========================================
+
   const handleMaterialTouchStart = (e: React.TouchEvent, materialId: string) => {
     setSwipingMaterialId(materialId);
     setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
@@ -74,7 +94,6 @@ export default function Home() {
     if (!isSwiping) return;
     setIsSwiping(false);
     
-    // 🌟 修正：狭いカードに合わせて、-60px の移動で削除モードになるよう調整
     if (swipeOffset < -60) {
       setSwipeOffset(-window.innerWidth); 
       setTimeout(() => {
@@ -91,7 +110,6 @@ export default function Home() {
     setTouchStart(null);
   };
 
-  // モーダルを下スワイプで閉じる処理
   const handleModalTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     if (target.tagName.toLowerCase() === 'textarea' || target.tagName.toLowerCase() === 'input') return;
@@ -448,9 +466,9 @@ export default function Home() {
       {/* --- HEADER --- */}
       <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors duration-300`}>
         <div className="flex items-center gap-3">
-          {/* 🌟 追加：サイドバーを呼び出すハンバーガーメニュー */}
+          {/* 🌟 ハンバーガーメニュー */}
           <button 
-            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            onClick={() => setShowProfileMenu(true)} 
             className={`p-2 -ml-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}
           >
             <Menu className="w-6 h-6" />
@@ -504,8 +522,6 @@ export default function Home() {
 
               return (
                 <div key={material.id} className="relative h-full">
-                  
-                  {/* 🌟 修正：削除エリアの背景色を強調 */}
                   <div className={`absolute inset-0 rounded-3xl flex items-center justify-end pr-6 overflow-hidden transition-colors duration-300 ${swipingMaterialId === material.id && swipeOffset < -60 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
                     <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingMaterialId === material.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -60 ? 'scale-125' : 'scale-100'}`}>
                       <Trash2 className={`w-6 h-6 text-white mb-1 ${swipeOffset < -60 ? 'animate-bounce' : ''}`} />
@@ -524,7 +540,7 @@ export default function Home() {
                     }}
                     style={{ 
                       transform: swipingMaterialId === material.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
-                      opacity: swipingMaterialId === material.id ? Math.max(1 + swipeOffset / 150, 0.3) : 1, // 🌟 引くほど透ける
+                      opacity: swipingMaterialId === material.id ? Math.max(1 + swipeOffset / 150, 0.3) : 1,
                       transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s' 
                     }}
                     className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2
@@ -537,7 +553,6 @@ export default function Home() {
                       } ${swipingMaterialId === material.id ? 'shadow-2xl' : 'shadow-sm'}`}
                   >
                     
-                    {/* 🌟 修正：スライドを促すアニメーション付き矢印（スワイプしていない時だけ表示） */}
                     {swipingMaterialId !== material.id && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 animate-pulse-horizontal pointer-events-none opacity-40">
                         <ChevronLeft className="w-5 h-5 text-slate-300" />
@@ -574,7 +589,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 🌟 SELECTED MATERIAL MODAL (学習記録・起動モーダル) 🌟 */}
+      {/* 🌟 SELECTED MATERIAL MODAL */}
       {selectedMaterial && (
         <>
           <div 
@@ -589,13 +604,12 @@ export default function Home() {
             style={{ 
               transform: `translateY(${isModalClosing ? '100%' : modalSwipeY > 0 ? `${modalSwipeY}px` : '0'})`,
               transition: isModalClosing ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : modalSwipeY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
-              ,willChange: 'transform',      // GPUを強制稼働させてカクつきを消す
-              overscrollBehaviorY: 'contain', // 背後のページがリロードされるのを防ぐ
-              touchAction: modalSwipeY > 0 ? 'none' : 'pan-y' // スワイプ中はブラウザの挙動を完全にOFF
+              ,willChange: 'transform',
+              overscrollBehaviorY: 'contain',
+              touchAction: modalSwipeY > 0 ? 'none' : 'pan-y'
             }}
             className={`fixed bottom-0 left-0 right-0 w-full z-[501] rounded-t-[2.5rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
           >
-            {/* スワイプで閉じられることを示すバー */}
             <div className={`absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-slate-300'}`}></div>
 
             <button onClick={closeModal} className={`absolute top-6 right-6 p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>
@@ -615,13 +629,9 @@ export default function Home() {
               
               <div className="flex flex-col justify-center">
                 <p className={`text-sm font-black line-clamp-2 leading-snug ${textMain}`}>{selectedMaterial.title}</p>
-                
-                {/* 前回の学習日時表示 */}
                 <div className={`flex items-center gap-1 mt-2 text-xs font-bold px-2 py-1 rounded-md self-start ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                   <History className="w-3 h-3" /> 前回: {lastStudiedDate || "読込中..."}
                 </div>
-
-                {/* 前回のメモを表示するエリア */}
                 {lastMemo && (
                   <div className={`mt-3 p-3 rounded-xl border border-dashed text-[11px] leading-relaxed font-bold ${isDarkMode ? 'bg-indigo-500/5 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>
                     <div className="flex items-center gap-1 mb-1 opacity-70">
@@ -634,21 +644,11 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              <button
-                onClick={() => router.push(`/timer?id=${selectedMaterial.id}&title=${encodeURIComponent(selectedMaterial.title)}&image_url=${encodeURIComponent(selectedMaterial.image_url || '')}`)}
-                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all mb-4"
-              >
-                <Clock className="w-5 h-5" />
-                今からタイマーで測る
+              <button onClick={() => router.push(`/timer?id=${selectedMaterial.id}&title=${encodeURIComponent(selectedMaterial.title)}&image_url=${encodeURIComponent(selectedMaterial.image_url || '')}`)} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all mb-4">
+                <Clock className="w-5 h-5" /> 今からタイマーで測る
               </button>
 
-              <button
-                onClick={() => {
-                  const url = `/nfc-setup?id=${selectedMaterial.id}&subject=${encodeURIComponent(selectedMaterial.title)}${selectedMaterial.image_url ? `&image=${encodeURIComponent(selectedMaterial.image_url)}` : ''}`;
-                  router.push(url);
-                }}
-                className={`w-full font-black py-4 rounded-[2rem] transition-all flex justify-center items-center gap-2 active:scale-95 border-2 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a] text-slate-300 hover:bg-[#38383a]' : 'bg-white border-slate-100 text-slate-700 hover:bg-slate-50'}`}
-              >
+              <button onClick={() => { const url = `/nfc-setup?id=${selectedMaterial.id}&subject=${encodeURIComponent(selectedMaterial.title)}${selectedMaterial.image_url ? `&image=${encodeURIComponent(selectedMaterial.image_url)}` : ''}`; router.push(url); }} className={`w-full font-black py-4 rounded-[2rem] transition-all flex justify-center items-center gap-2 active:scale-95 border-2 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a] text-slate-300 hover:bg-[#38383a]' : 'bg-white border-slate-100 text-slate-700 hover:bg-slate-50'}`}>
                 <SmartphoneNfc className="w-5 h-5" /> NFCにかざして起動
               </button>
 
@@ -661,13 +661,7 @@ export default function Home() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className={`block text-xs font-black mb-3 uppercase tracking-widest ${textSub}`}>学習時間 (分)</label>
-                  <input
-                    type="number"
-                    value={timeInput}
-                    onChange={(e) => setTimeInput(e.target.value)}
-                    placeholder="例: 60"
-                    className={`w-full border-2 rounded-2xl px-5 py-4 text-xl font-black outline-none transition-all ${bgInput}`}
-                  />
+                  <input type="number" value={timeInput} onChange={(e) => setTimeInput(e.target.value)} placeholder="例: 60" className={`w-full border-2 rounded-2xl px-5 py-4 text-xl font-black outline-none transition-all ${bgInput}`} />
                 </div>
               </div>
               
@@ -675,19 +669,10 @@ export default function Home() {
                 <label className={`flex items-center gap-1 text-[10px] font-black mb-3 uppercase tracking-widest ${textSub}`}>
                   <PencilLine className="w-3 h-3" /> メモ・感想 (任意)
                 </label>
-                <textarea
-                  value={memoInput}
-                  onChange={(e) => setMemoInput(e.target.value)}
-                  placeholder="今日の学びや反省など..."
-                  className={`w-full border-2 rounded-2xl px-5 py-4 text-sm font-bold outline-none transition-all resize-none h-24 ${bgInput}`}
-                />
+                <textarea value={memoInput} onChange={(e) => setMemoInput(e.target.value)} placeholder="今日の学びや反省など..." className={`w-full border-2 rounded-2xl px-5 py-4 text-sm font-bold outline-none transition-all resize-none h-24 ${bgInput}`} />
               </div>
 
-              <button
-                onClick={handleSaveRecord}
-                disabled={!timeInput}
-                className="w-full bg-black text-white disabled:bg-slate-300 disabled:text-slate-500 font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all mt-4"
-              >
+              <button onClick={handleSaveRecord} disabled={!timeInput} className="w-full bg-black text-white disabled:bg-slate-300 disabled:text-slate-500 font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all mt-4">
                 手動で保存する
               </button>
             </div>
@@ -723,6 +708,67 @@ export default function Home() {
           </div>
         </>
       )}
+
+      {/* =========================================================
+          🌟 画面左端の「付箋風」メニュータブ ＆ サイドバー本体
+      ========================================================= */}
+      
+      {/* 1. スワイプ検知用の透明エリア */}
+      {!showProfileMenu && (
+        <div
+          onTouchStart={handleEdgeTouchStart}
+          onTouchMove={handleEdgeTouchMove}
+          onTouchEnd={handleEdgeTouchEnd}
+          className="fixed top-0 left-0 bottom-0 w-6 z-[90]"
+        />
+      )}
+
+      {/* 2. 付箋風のタブボタン */}
+      <button
+        onClick={() => setShowProfileMenu(true)}
+        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
+        className="fixed left-0 top-24 z-[90] bg-indigo-600 text-white py-3 pl-1 pr-2 rounded-r-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center transition-transform duration-300 opacity-90 hover:opacity-100 hover:pr-3 active:scale-95"
+      >
+        <Menu className="w-5 h-5" />
+        <ChevronRight className="w-4 h-4 -ml-1 opacity-70" />
+      </button>
+
+      {/* 3. サイドバー本体 */}
+      <div 
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
+        onClick={() => setShowProfileMenu(false)} 
+      />
+      <div
+        onTouchStart={handleSidebarMenuTouchStart}
+        onTouchMove={handleSidebarMenuTouchMove}
+        onTouchEnd={handleSidebarMenuTouchEnd}
+        style={{
+          transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`,
+          transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
+        }}
+        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+      >
+        <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
+          <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-4 h-4" /></button>
+          <h2 className="text-xl font-black mt-4">MENU</h2>
+        </div>
+        <div className="flex-grow p-6 overflow-y-auto">
+          {/* ダークモード切り替えボタン */}
+          <button 
+            onClick={() => {
+              const newMode = !isDarkMode;
+              setIsDarkMode(newMode);
+              localStorage.setItem('dark_mode', newMode.toString());
+              document.body.style.backgroundColor = newMode ? '#0a0a0a' : '#f8fafc';
+              window.dispatchEvent(new Event('darkModeChanged'));
+            }} 
+            className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            {isDarkMode ? <Sun className="text-amber-400 w-5 h-5"/> : <Moon className="w-5 h-5 text-slate-500"/>}
+            <span className={`text-sm font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ダークモード</span>
+          </button>
+        </div>
+      </div>
 
       {/* 🌟 魔法のアニメーションCSS（マイ本棚用） */}
       <style jsx global>{`

@@ -917,14 +917,14 @@ function ReportContent() {
 
       <header className={`${bgHeader} pt-6 sticky top-0 z-50 shadow-sm transition-colors duration-300`}>
         <div className="flex justify-between items-center px-6 mb-4">
-          {/* 🌟 変更：人のマークから、誰もが分かる三本線メニューへ */}
+          {/* 🌟 修正：Menuアイコンに変更し、Stateを操作するように変更 */}
           <button 
-            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            onClick={() => setShowProfileMenu(true)} 
             className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
           >
             <Menu className="w-5 h-5 text-slate-500" />
           </button>
-          <h1 className="text-lg font-black italic tracking-tighter text-indigo-500">STUDY REPORT</h1>
+          <h1 className="text-lg font-black italic text-indigo-500 tracking-tighter">STUDY REPORT</h1>
           <div className="w-10 h-10"></div> 
         </div>
         <div className="flex px-4 relative">
@@ -1247,6 +1247,54 @@ function ReportContent() {
           </div>
         )}
       </main>
+      
+{/* =========================================================
+          🌟 レポート画面用：付箋風メニュータブ ＆ サイドバー本体
+      ========================================================= */}
+      
+      {/* 1. スワイプ検知エリア */}
+      {!showProfileMenu && (
+        <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[90]" />
+      )}
+
+      {/* 2. 付箋ボタン */}
+      <button
+        onClick={() => setShowProfileMenu(true)}
+        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
+        className="fixed left-0 top-32 z-[90] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-transform duration-300 opacity-95 active:scale-95 border-y border-r border-indigo-400"
+      >
+        <Menu className="w-5 h-5" />
+        <ChevronRight className="w-4 h-4 -mt-1 opacity-60 animate-pulse-horizontal" />
+      </button>
+
+      {/* 3. サイドバー本体 */}
+      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setShowProfileMenu(false)} />
+      <div
+        onTouchStart={handleSidebarMenuTouchStart} onTouchMove={handleSidebarMenuTouchMove} onTouchEnd={handleSidebarMenuTouchEnd}
+        style={{ transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`, transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+      >
+        <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
+          <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full"><X className="w-4 h-4" /></button>
+          <h2 className="text-xl font-black mt-4">Study Menu</h2>
+        </div>
+        <div className="flex-grow p-6 overflow-y-auto">
+          <div className="space-y-2">
+            <button onClick={() => { const newMode = !isDarkMode; setIsDarkMode(newMode); localStorage.setItem('dark_mode', newMode.toString()); document.body.style.backgroundColor = newMode ? '#0a0a0a' : '#f8fafc'; window.dispatchEvent(new Event('darkModeChanged')); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+              {isDarkMode ? <Sun className="text-amber-400 w-5 h-5"/> : <Moon className="w-5 h-5 text-slate-500"/>}
+              <span className={`text-sm font-black ${textMain}`}>ダークモード</span>
+            </button>
+            <button onClick={() => router.push('/')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+              <BookOpen className="w-5 h-5 text-indigo-500" />
+              <span className={`text-sm font-black ${textMain}`}>マイ本棚</span>
+            </button>
+            <button onClick={() => router.push('/calendar')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+              <Calendar className="w-5 h-5 text-emerald-500" />
+              <span className={`text-sm font-black ${textMain}`}>カレンダー</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* 🌟 魔法のアニメーションCSS */}
       <style jsx global>{`
