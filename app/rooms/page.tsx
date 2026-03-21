@@ -26,21 +26,27 @@ export default function RoomsPage() {
   // 🌟 ダークモード用のステートを追加
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [sidebarOffset, setSidebarOffset] = useState(0);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  // ==========================================
+  // 🌟 共通サイドバー呼び出し処理 (極限までシンプル化)
+  // ==========================================
   const sidebarStartX = useRef<number | null>(null);
 
-  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
-  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
-
-  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
-  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
-
-
-
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
+    sidebarStartX.current = e.touches[0].clientX; 
+  };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+    if (sidebarStartX.current === null) return;
+    const diffX = e.touches[0].clientX - sidebarStartX.current;
+    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 40) {
+      window.dispatchEvent(new Event('openSidebar'));
+      sidebarStartX.current = null; // 連続発火防止
+    }
+  };
+  const handleEdgeTouchEnd = () => { 
+    sidebarStartX.current = null; 
+  };
+  // ==========================================
 
   useEffect(() => {
     // 🌟 ダークモードの同期処理
@@ -185,7 +191,13 @@ const [showProfileMenu, setShowProfileMenu] = useState(false);
   return (
     <div className={`min-h-screen pb-24 font-sans transition-colors duration-300 ${bgPage}`}>
       <header className={`${bgHeader} backdrop-blur-md shadow-sm px-4 py-5 flex justify-between items-center sticky top-0 z-10 border-b transition-colors duration-300`}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
+          >
+            <Menu className="w-5 h-5 text-slate-500" />
+          </button>
           <Users className={`w-6 h-6 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
           <h1 className={`text-xl font-black ${textMain}`}>ルーム</h1>
         </div>
@@ -299,27 +311,29 @@ const [showProfileMenu, setShowProfileMenu] = useState(false);
           </div>
         </>
       )}
-      {/* 🌟 付箋タブ ＆ サイドバー */}
-      {!showProfileMenu && (
-        <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[90]" />
-      )}
-      <button
-        onClick={() => setShowProfileMenu(true)}
-        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
-        className="fixed left-0 top-32 z-[90] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-transform duration-300 opacity-95 active:scale-95 border-y border-r border-indigo-400"
-      >
-        <Menu className="w-5 h-5" />
-        <ChevronRight className="w-4 h-4 -ml-1 opacity-60 animate-pulse-horizontal" />
-      </button>
-      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setShowProfileMenu(false)} />
+
+      {/* =========================================================
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
+      ========================================================= */}
+      
+      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
       <div
-        onTouchStart={handleSidebarMenuTouchStart} onTouchMove={handleSidebarMenuTouchMove} onTouchEnd={handleSidebarMenuTouchEnd}
-        style={{ transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`, transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
-        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        onTouchEnd={handleEdgeTouchEnd}
+        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
+      />
+
+      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
+      <button
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
+          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
+        } backdrop-blur-sm group`}
       >
-        {/* サイドバーの中身（カレンダーのコードと同じものを貼り付け） */}
-      </div>
+        <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
+      </button>
+
     </div>
-    
   );
 }

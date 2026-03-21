@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { User, Settings, Loader2, LogOut, CheckCircle2, Flame, Trophy, Clock, ChevronRight, Star, QrCode, Share2, X, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-// 🌟 先ほど作成したレベル計算ファイルをインポート
+// 🌟 レベル計算ファイルをインポート
 import { calculateLevel, getLevelStartMinutes, getNextLevelMinutes } from "../../lib/levels";
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -19,7 +19,7 @@ export default function MyPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   
-  // 🌟 ダークモード用のステートを追加
+  // 🌟 ダークモード用のステート
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   // プロフィール情報
@@ -29,43 +29,51 @@ export default function MyPage() {
 
   // 学習統計データ
   const [stats, setStats] = useState({ totalMinutes: 0, streak: 0 });
-  // 🌟 ここから追加：QRコードとシェア機能用
+  // QRコードとシェア機能用
   const [showQrModal, setShowQrModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-const [myUserId, setMyUserId] = useState(""); // 🌟 これを追加！ // シェアするURL
+  const [myUserId, setMyUserId] = useState("");
 
-const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [sidebarOffset, setSidebarOffset] = useState(0);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  // ==========================================
+  // 🌟 共通サイドバー呼び出し処理 (極限までシンプル化)
+  // ==========================================
   const sidebarStartX = useRef<number | null>(null);
 
-  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
-  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
-
-  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
-  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
-
-
-useEffect(() => {
-  const getUserId = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) setMyUserId(user.id);
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
+    sidebarStartX.current = e.touches[0].clientX; 
   };
-  getUserId();
-}, []);
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+    if (sidebarStartX.current === null) return;
+    const diffX = e.touches[0].clientX - sidebarStartX.current;
+    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 40) {
+      window.dispatchEvent(new Event('openSidebar'));
+      sidebarStartX.current = null; // 連続発火防止
+    }
+  };
+  const handleEdgeTouchEnd = () => { 
+    sidebarStartX.current = null; 
+  };
+  // ==========================================
 
-const profileUrl = typeof window !== 'undefined' && myUserId 
-  ? `${window.location.origin}/user/${myUserId}` 
-  : "";
+  useEffect(() => {
+    const getUserId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setMyUserId(user.id);
+    };
+    getUserId();
+  }, []);
+
+  const profileUrl = typeof window !== 'undefined' && myUserId 
+    ? `${window.location.origin}/user/${myUserId}` 
+    : "";
 
   const handleShareProfile = async () => {
     if (navigator.share) {
       try {
         await navigator.share({
           title: 'Study Tracker Profile',
-          text: '私のMercuryのプロフィールを見てね！',
+          text: '私のStudy Trackerのプロフィールを見てね！',
           url: profileUrl,
         });
       } catch (error) {
@@ -207,8 +215,17 @@ const profileUrl = typeof window !== 'undefined' && myUserId
       )}
 
       {/* ヘッダーエリア：プロフィール表示 */}
-      <div className={`px-6 pt-12 pb-10 rounded-b-[3rem] shadow-sm border-b mb-6 transition-colors duration-300 ${bgCard}`}>
-        <div className="max-w-md mx-auto flex items-center gap-6">
+      <div className={`relative px-6 pt-12 pb-10 rounded-b-[3rem] shadow-sm border-b mb-6 transition-colors duration-300 ${bgCard}`}>
+        
+        {/* 🌟 メニューボタン (左上) */}
+        <button 
+          onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+          className={`absolute top-6 left-6 p-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+
+        <div className="max-w-md mx-auto flex items-center gap-6 mt-4">
           <div className={`w-20 h-20 ${avatarColor} rounded-[2rem] flex items-center justify-center shadow-lg transform rotate-3 flex-shrink-0 border-2 ${isDarkMode ? 'border-[#2c2c2e]' : 'border-white'}`}>
             <span className="text-3xl font-black text-white">
               {nickname ? nickname.charAt(0).toUpperCase() : "?"}
@@ -305,7 +322,8 @@ const profileUrl = typeof window !== 'undefined' && myUserId
             </button>
           </div>
         </section>
-<button
+
+        <button
           onClick={() => setShowQrModal(true)}
           className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all active:scale-95 mb-2 ${bgCard}`}
         >
@@ -317,6 +335,7 @@ const profileUrl = typeof window !== 'undefined' && myUserId
           </div>
           <ChevronRight className={`w-5 h-5 ${textSub}`} />
         </button>
+
         {/* ログアウト */}
         <button
           onClick={async () => {
@@ -330,6 +349,8 @@ const profileUrl = typeof window !== 'undefined' && myUserId
         </button>
 
       </main>
+
+      {/* QRコードモーダル */}
       {showQrModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[300]" onClick={() => setShowQrModal(false)}></div>
@@ -339,24 +360,24 @@ const profileUrl = typeof window !== 'undefined' && myUserId
             
             <div className={`p-6 rounded-[2rem] shadow-sm border mb-6 flex flex-col items-center ${isDarkMode ? 'bg-white border-transparent' : 'bg-white border-slate-100'}`}>
               {profileUrl ? (
-  <QRCodeSVG 
-    value={profileUrl} 
-    size={200}
-    bgColor={"#ffffff"}
-    fgColor={"#4f46e5"}
-    level={"H"} 
-    imageSettings={{
-      src: "/logo.png", // 🌟 保存したペンと月のロゴ
-      height: 48,
-      width: 48,
-      excavate: true,
-    }}
-  />
-) : (
-  <div className="w-[200px] h-[200px] bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs font-bold text-slate-400">
-    生成中...
-  </div>
-)}
+                <QRCodeSVG 
+                  value={profileUrl} 
+                  size={200}
+                  bgColor={"#ffffff"}
+                  fgColor={"#4f46e5"}
+                  level={"H"} 
+                  imageSettings={{
+                    src: "/logo.png", // 🌟 保存したペンと月のロゴ
+                    height: 48,
+                    width: 48,
+                    excavate: true,
+                  }}
+                />
+              ) : (
+                <div className="w-[200px] h-[200px] bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs font-bold text-slate-400">
+                  生成中...
+                </div>
+              )}
               
               <p className="text-[10px] font-black text-indigo-400 mt-4 tracking-widest uppercase">SCAN TO CONNECT</p>
             </div>
@@ -375,26 +396,29 @@ const profileUrl = typeof window !== 'undefined' && myUserId
           {toastMessage}
         </div>
       )}
-      {/* 🌟 付箋タブ ＆ サイドバー */}
-      {!showProfileMenu && (
-        <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[90]" />
-      )}
-      <button
-        onClick={() => setShowProfileMenu(true)}
-        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
-        className="fixed left-0 top-32 z-[90] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-transform duration-300 opacity-95 active:scale-95 border-y border-r border-indigo-400"
-      >
-        <Menu className="w-5 h-5" />
-        <ChevronRight className="w-4 h-4 -ml-1 opacity-60 animate-pulse-horizontal" />
-      </button>
-      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setShowProfileMenu(false)} />
+
+      {/* =========================================================
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
+      ========================================================= */}
+      
+      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
       <div
-        onTouchStart={handleSidebarMenuTouchStart} onTouchMove={handleSidebarMenuTouchMove} onTouchEnd={handleSidebarMenuTouchEnd}
-        style={{ transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`, transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
-        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        onTouchEnd={handleEdgeTouchEnd}
+        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
+      />
+
+      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
+      <button
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
+          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
+        } backdrop-blur-sm group`}
       >
-        {/* サイドバーの中身（カレンダーのコードと同じものを貼り付け） */}
-      </div>
+        <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
+      </button>
+
     </div>
   );
 }
