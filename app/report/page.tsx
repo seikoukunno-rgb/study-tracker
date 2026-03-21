@@ -991,10 +991,27 @@ function ReportContent() {
               </div>
             </div>
 
-            <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
+<div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
               <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
               
-              {/* 🌟 追加：検索バーのUI */}
+              {/* 🌟 追加：RECORDタブにも「今日・昨日・すべて」のフィルターボタンを設置 */}
+              <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto mb-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                {[
+                  { id: "all", label: "すべて" },
+                  { id: "today", label: "今日" },
+                  { id: "yesterday", label: "昨日" }
+                ].map(f => (
+                  <button 
+                    key={f.id}
+                    onClick={() => setTimeFilter(f.id as any)} 
+                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${timeFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 検索バー */}
               <div className="relative mb-6">
                 <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
                   <Search className={`w-4 h-4 ${textSub}`} />
@@ -1011,15 +1028,29 @@ function ReportContent() {
               <div className="space-y-4 overflow-hidden">
                 {allSubjects
                   .filter(title => {
-                    // 🌟 追加：検索キーワードで絞り込み（大文字小文字を区別しない）
                     const matchesSearch = (title as string).toLowerCase().includes(materialSearchQuery.toLowerCase());
-                    // 履歴が1つ以上あるものだけを残す
                     const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
                     
-                    return matchesSearch && materialLogs.length > 0;
+                    // 🌟 1. 未学習（ログ0件）を除外 ＆ 検索キーワード一致
+                    if (!matchesSearch || materialLogs.length === 0) return false;
+
+                    // 🌟 2. 期間フィルターの判定（最終学習日ベース）
+                    const lastLog = materialLogs[0]; // ログは新しい順なので0番目が最新
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const yesterday = new Date(today);
+                    yesterday.setDate(yesterday.getDate() - 1);
+
+                    if (timeFilter === "today") {
+                      return new Date(lastLog.created_at) >= today;
+                    } else if (timeFilter === "yesterday") {
+                      const logDate = new Date(lastLog.created_at);
+                      return logDate >= yesterday && logDate < today;
+                    }
+                    
+                    return true; // timeFilter === "all"
                   })
-                  .map(title => {
-                  const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                  .map(title => {                  const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
                   const totalMinutes = materialLogs.reduce((sum, l) => sum + l.duration_minutes, 0);
                   const lastLog = materialLogs[0];
                   
