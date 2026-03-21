@@ -5,8 +5,9 @@ import { supabase } from "../../lib/supabase";
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
-  ChevronDown, ChevronUp, X, Minus, RefreshCcw, Calendar, AlertCircle
+  ChevronDown, ChevronUp, X, Minus, RefreshCcw, Calendar, AlertCircle, ChevronRight as ChevronRightIcon
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type Event = {
   id: string;
@@ -18,6 +19,7 @@ type Event = {
 };
 
 export default function CalendarPage() {
+  const router = useRouter(); // 🌟 ルーティング用に追加
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -26,7 +28,6 @@ export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 🌟 予定追加用のState
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventType, setNewEventType] = useState<"task" | "exam">("task");
@@ -36,25 +37,21 @@ export default function CalendarPage() {
   const [customHour, setCustomHour] = useState(12);
   const [customMinute, setCustomMinute] = useState(0);
 
-  // 🌟 スワイプ＆削除用のState
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const [swipedEventId, setSwipedEventId] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
 
-  // 🌟 Google連携用のState
   const [googleToken, setGoogleToken] = useState<string | null>(null);
 
-  // 🌟 新・リマインダーUI用のState
   const [selectedReminderTask, setSelectedReminderTask] = useState<any>(null);
   const [selectedTask, setSelectedTask] = useState<Event | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [reminders, setReminders] = useState<any[]>([]);
   
-  // 完全オリジナルUI用の設定値
-  const [remindOffset, setRemindOffset] = useState<number>(0); // 0=当日, 1=明日, -1=前日...
-  const [remindHour, setRemindHour] = useState<number>(9);     // デフォルト 9時
-  const [remindMinute, setRemindMinute] = useState<number>(0); // デフォルト 0分
+  const [remindOffset, setRemindOffset] = useState<number>(0); 
+  const [remindHour, setRemindHour] = useState<number>(9);     
+  const [remindMinute, setRemindMinute] = useState<number>(0); 
 
   const isMounted = useRef(true);
 
@@ -101,7 +98,7 @@ export default function CalendarPage() {
     if (user) {
       const { data: eventsData } = await supabase.from('calendar_events').select('*').eq('student_id', user.id);
       const { data: matsData } = await supabase.from('materials').select('*').eq('student_id', user.id).order('created_at', { ascending: false });
-      const { data: remindersData } = await supabase.from('reminders').select('*'); // リマインダー取得
+      const { data: remindersData } = await supabase.from('reminders').select('*'); 
       if (isMounted.current) {
         if (eventsData) setEvents(eventsData.map(d => ({ ...d, event_type: d.event_type as "task" | "exam" })));
         if (matsData) setMaterials(matsData);
@@ -259,21 +256,18 @@ export default function CalendarPage() {
     if (!error) fetchData();
   };
 
-const confirmDeleteEvent = async () => {
+  const confirmDeleteEvent = async () => {
     if (!eventToDelete) return;
     const evToDelete = events.find(e => e.id === eventToDelete);
     if (!evToDelete) return;
 
-    // 🌟 1. UIを即座に更新して体感速度を爆速にする（即時反映）
     const targetId = eventToDelete;
     setEventToDelete(null);
     setSwipedEventId(null);
     setEvents(prev => prev.filter(e => e.id !== targetId));
 
-    // 🌟 2. Supabaseから削除
     const { error } = await supabase.from('calendar_events').delete().eq('id', targetId);
     
-    // 🌟 3. セッションを取得し、Googleカレンダーから即時削除
     const { data: { session } } = await supabase.auth.getSession();
     const currentToken = session?.provider_token || googleToken;
     let googleDeleted = false;
@@ -281,7 +275,6 @@ const confirmDeleteEvent = async () => {
     if (!error && currentToken) {
       try {
         const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-        // 以前の確実に予定を捉える範囲（前後2ヶ月）に戻すことで検索漏れを防止
         const [y, m, d] = evToDelete.date.split('-').map(Number);
         const timeMin = new Date(y, m - 2, 1).toISOString(); 
         const timeMax = new Date(y, m + 1, 0).toISOString(); 
@@ -311,17 +304,15 @@ const confirmDeleteEvent = async () => {
       setTimeout(() => setToastMessage(null), 3000); 
     }
   };
-// 🌟 新オリジナルUI用のリマインダー保存処理（Googleの「実際の予定」の通知を変更する）
+
   const handleSaveReminder = async () => {
     if (!selectedReminderTask) return;
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
     if (!user) return;
 
-    // 🌟 モーダルを即座に閉じてサクサク感を出す
     setShowReminderModal(false);
 
-    // オリジナルUIの「日にちのズレ」と「時間」を合体させて正確な日時を作る
     const baseDate = selectedReminderTask.date ? new Date(selectedReminderTask.date) : new Date();
     baseDate.setDate(baseDate.getDate() + remindOffset);
     baseDate.setHours(remindHour, remindMinute, 0, 0);
@@ -341,17 +332,14 @@ const confirmDeleteEvent = async () => {
     if (error) {
       alert(`エラー: ${error.message}`);
     } else {
-      setReminders(prev => [...prev, newReminder]); // アプリ画面に紫バッジを即表示
+      setReminders(prev => [...prev, newReminder]); 
       
-      // 🌟 Googleカレンダーの「既存の予定」を探して、リマインダー（通知）を上書きする
       const currentToken = session?.provider_token || googleToken;
       let googleSynced = false;
 
       if (currentToken) {
         try {
           const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-          
-          // タイムゾーンのズレを吸収するため、前後2日の範囲で検索
           const [y, m, d] = selectedReminderTask.date.split('-').map(Number);
           const targetDate = new Date(y, m - 1, d);
           const timeMin = new Date(targetDate.getTime() - 86400000 * 2).toISOString(); 
@@ -363,26 +351,21 @@ const confirmDeleteEvent = async () => {
           
           if (res.ok) {
             const data = await res.json();
-            // タイトルで既存の予定を特定する
             const gEvent = data.items?.find((i: any) => 
               i.summary === (selectedReminderTask.title || selectedReminderTask.subject)
             );
 
             if (gEvent) {
-              // 予定の開始時間を取得
               let eventStartTimeMs = 0;
               if (gEvent.start?.dateTime) {
                 eventStartTimeMs = new Date(gEvent.start.dateTime).getTime();
               } else if (gEvent.start?.date) {
-                // 終日予定の場合は日本の深夜0時を基準とする
                 eventStartTimeMs = new Date(gEvent.start.date + 'T00:00:00+09:00').getTime();
               }
               
-              // リマインダー設定時間との差分（分）を計算
               let minutesBefore = Math.round((eventStartTimeMs - baseDate.getTime()) / 60000);
-              if (minutesBefore < 0) minutesBefore = 0; // 予定の開始時間を過ぎている場合は0分前にセット
+              if (minutesBefore < 0) minutesBefore = 0; 
 
-              // 🌟 既存の予定をPATCH（部分更新）して通知設定を上書きする
               const patchBody = {
                 reminders: {
                   useDefault: false,
@@ -410,6 +393,7 @@ const confirmDeleteEvent = async () => {
       setTimeout(() => setToastMessage(null), 3000);
     }
   };
+
   const handleTouchStart = (e: React.TouchEvent) => { setTouchEnd(null); setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }); };
   const handleTouchMove = (e: React.TouchEvent) => { setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }); };
   const handleTouchEnd = (id: string) => {
@@ -435,7 +419,6 @@ const confirmDeleteEvent = async () => {
   return (
     <div className={`min-h-screen pb-24 font-sans transition-colors duration-300 ${bgPage}`}>
       
-      {/* 🌟 トースト通知 */}
       {toastMessage && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] animate-in slide-in-from-bottom-4 fade-in duration-300 w-[90%] max-w-sm">
           <div className="bg-indigo-600 text-white px-6 py-4 rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-3">
@@ -444,7 +427,6 @@ const confirmDeleteEvent = async () => {
         </div>
       )}
 
-      {/* 🌟 ヘッダー */}
       <header className={`px-6 py-6 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300 border-b ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
         <div className="flex items-center gap-3">
           <CalendarIcon className="w-6 h-6 text-indigo-500" />
@@ -461,10 +443,8 @@ const confirmDeleteEvent = async () => {
         )}
       </header>
 
-      {/* 🌟 メインコンテンツ */}
       <main className="max-w-md mx-auto p-5 space-y-6">
         
-        {/* カレンダー表示 */}
         <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors ${bgCard}`}>
           <div className="flex justify-between items-center mb-6">
             <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronLeft className="w-5 h-5" /></button>
@@ -495,7 +475,6 @@ const confirmDeleteEvent = async () => {
           </div>
         </div>
 
-        {/* 予定一覧リスト */}
         <div className="pt-2">
           <div className="flex justify-between items-end mb-4 px-2">
             <h3 className={`text-base font-black flex items-center gap-2 ${textMain}`}>
@@ -512,7 +491,18 @@ const confirmDeleteEvent = async () => {
               </div>
             ) : (
               selectedEvents.map(event => {
-                const matImageUrl = materials.find(m => m.title === event.title)?.image_url;
+                const mat = materials.find(m => m.title === event.title);
+                const matImageUrl = mat?.image_url;
+
+                // 🌟 通知の具体的な時間をフォーマット
+                let notifyTimeDisplay = "通知設定済み";
+                if (event.notify_time) {
+                  const nDate = new Date(event.notify_time);
+                  if (!isNaN(nDate.getTime())) {
+                    notifyTimeDisplay = `${nDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} に通知`;
+                  }
+                }
+
                 return (
                   <div key={event.id} className={`relative rounded-2xl overflow-hidden mb-3 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`}>
                     
@@ -530,7 +520,7 @@ const confirmDeleteEvent = async () => {
                           setSelectedTask(event);
                           setSelectedReminderTask(event);
                           setShowReminderModal(true);
-                          setSwipedEventId(null); // モーダルを開いたらスワイプをリセット
+                          setSwipedEventId(null); 
                         }}
                         className="flex-1 bg-indigo-600 flex flex-col items-center justify-center text-white active:bg-indigo-700 transition-colors"
                       >
@@ -539,33 +529,49 @@ const confirmDeleteEvent = async () => {
                       </button>
                     </div>
 
-                    {/* 前面のカード */}
+                    {/* 前面のカード（🌟 押しやすさとルーティングの追加） */}
                     <div 
                       onTouchStart={handleTouchStart} 
                       onTouchMove={handleTouchMove} 
                       onTouchEnd={() => handleTouchEnd(event.id)} 
-                      onClick={() => { if (swipedEventId === event.id) setSwipedEventId(null); }}
-                      className={`relative flex items-center justify-between p-4 border transition-transform duration-300 ease-out ${swipedEventId === event.id ? '-translate-x-[160px]' : 'translate-x-0'} ${event.is_completed ? (isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-slate-50 border-slate-200') : bgCard}`}
+                      onClick={() => { 
+                        if (swipedEventId === event.id) {
+                          setSwipedEventId(null);
+                          return;
+                        }
+                        // 🌟 クリック時に、関連する教材があればホーム画面のモーダルへジャンプ
+                        if (mat) {
+                          router.push(`/?record=${mat.id}`);
+                        }
+                      }}
+                      className={`relative flex items-center justify-between p-4 border transition-all duration-300 ease-out 
+                        ${swipedEventId === event.id ? '-translate-x-[160px]' : 'translate-x-0'} 
+                        ${event.is_completed ? (isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-slate-50 border-slate-200') : bgCard}
+                        ${mat ? 'cursor-pointer active:scale-[0.98]' : ''} 
+                      `}
                     >
                       <div className="flex items-center gap-4 flex-1 pointer-events-none">
                         {event.event_type === "task" ? (
                           <div className="flex items-center gap-3">
-                            <button onClick={(e) => { e.stopPropagation(); toggleComplete(event); }} className="pointer-events-auto shrink-0 active:scale-90 transition-transform">
-                              {event.is_completed ? <CheckCircle2 className={`w-6 h-6 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} /> : <Circle className={`w-6 h-6 ${textSub}`} />}
+                            {/* 🌟 チェック丸ボタンを大きく、押しやすくする */}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); toggleComplete(event); }} 
+                              className="pointer-events-auto shrink-0 p-2 -ml-2 active:scale-90 transition-transform"
+                            >
+                              {event.is_completed ? <CheckCircle2 className={`w-8 h-8 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} /> : <Circle className={`w-8 h-8 ${textSub}`} />}
                             </button>
                             <div className={`w-8 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden border ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-slate-50 border-slate-200'}`}>
                               {matImageUrl ? <img src={matImageUrl} alt={event.title} className="w-full h-full object-cover" /> : <Book className={`w-4 h-4 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />}
                             </div>
                           </div>
                         ) : (
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${event.is_completed ? 'bg-slate-200' : 'bg-rose-500/20'}`}>
-                            <Target className={`w-4 h-4 ${event.is_completed ? 'text-slate-400' : 'text-rose-500'}`} />
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${event.is_completed ? 'bg-slate-200' : 'bg-rose-500/20'}`}>
+                            <Target className={`w-5 h-5 ${event.is_completed ? 'text-slate-400' : 'text-rose-500'}`} />
                           </div>
                         )}
                         <div>
                           <p className={`text-sm font-black line-clamp-1 ${event.is_completed ? `line-through ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}` : (event.event_type === 'exam' ? 'text-rose-500' : textMain)}`}>{event.title}</p>
                           
-                          {/* 🌟 リマインダーバッジ表示エリア */}
                           <div className="flex flex-wrap gap-2 mt-2">
                             {reminders
                               .filter(rem => rem.task_id === event.id) 
@@ -578,10 +584,20 @@ const confirmDeleteEvent = async () => {
                           </div>
 
                           <div className="flex items-center gap-2 mt-1 pointer-events-auto">
-                            {event.notify_time && <p className={`text-[10px] font-bold flex items-center gap-1 ${event.is_completed ? 'text-slate-400' : 'text-indigo-400'}`}><Bell className="w-3 h-3" />通知設定済み</p>}
+                            {/* 🌟 「通知設定済み」を具体的な時間表記に変更 */}
+                            {event.notify_time && (
+                              <p className={`text-[10px] font-bold flex items-center gap-1 ${event.is_completed ? 'text-slate-400' : 'text-indigo-400'}`}>
+                                <Bell className="w-3 h-3" /> {notifyTimeDisplay}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
+                      
+                      {/* 🌟 押せる感を示す矢印アイコン */}
+                      {mat && (
+                        <ChevronRightIcon className="w-5 h-5 text-slate-300 shrink-0 pointer-events-none" />
+                      )}
                     </div>
                   </div>
                 );
@@ -596,10 +612,9 @@ const confirmDeleteEvent = async () => {
       </main>
 
       {/* ========================================== */}
-      {/* 🌟 画面全体に被せるモーダル群（ここから下） */}
+      {/* 🌟 画面全体に被せるモーダル群 */}
       {/* ========================================== */}
 
-      {/* 削除確認モーダル */}
       {eventToDelete && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400]" onClick={() => setEventToDelete(null)}></div>
@@ -615,7 +630,6 @@ const confirmDeleteEvent = async () => {
         </>
       )}
 
-      {/* 予定追加モーダル */}
       {showAddModal && (
         <>
           <div className="fixed inset-0 bg-black/60 z-[200]" onClick={() => setShowAddModal(false)}></div>
@@ -694,7 +708,6 @@ const confirmDeleteEvent = async () => {
         </>
       )}
 
-      {/* ===== 🌟 新・オリジナルUI搭載 リマインダー設定モーダル ===== */}
       {showReminderModal && selectedReminderTask && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowReminderModal(false)} />
@@ -714,7 +727,6 @@ const confirmDeleteEvent = async () => {
               </div>
             </div>
 
-            {/* ===== 🌟 1. 日にちを直感的に選ぶタブ ===== */}
             <p className="text-xs font-black text-slate-500 mb-3 mt-4">いつ通知しますか？</p>
             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {[
@@ -734,21 +746,17 @@ const confirmDeleteEvent = async () => {
               ))}
             </div>
 
-            {/* ===== 🌟 2. 時間を合わせるオリジナルピッカー ===== */}
             <p className="text-xs font-black text-slate-500 mb-3 mt-2">何時に通知しますか？</p>
             <div className={`rounded-3xl p-6 mb-8 flex items-center justify-center gap-6 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
                
-               {/* 🔽 時（Hour）のコントローラー */}
                <div className="flex flex-col items-center gap-4">
                  <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-6 h-6"/></button>
                  <span className={`text-6xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
                  <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-6 h-6"/></button>
                </div>
 
-               {/* 点滅するコロン */}
                <span className="text-5xl font-black text-indigo-500 pb-2 animate-pulse">:</span>
 
-               {/* 🔽 分（Minute）のコントローラー（5分刻み） */}
                <div className="flex flex-col items-center gap-4">
                  <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-6 h-6"/></button>
                  <span className={`text-6xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
@@ -756,7 +764,6 @@ const confirmDeleteEvent = async () => {
                </div>
             </div>
 
-            {/* 🌟 保存ボタン */}
             <button 
               onClick={handleSaveReminder}
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
@@ -769,4 +776,4 @@ const confirmDeleteEvent = async () => {
 
     </div>
   );
-} 
+}
