@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { User, Settings, Loader2, LogOut, CheckCircle2, Flame, Trophy, Clock, ChevronRight, Star, QrCode, Share2, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { User, Settings, Loader2, LogOut, CheckCircle2, Flame, Trophy, Clock, ChevronRight, Star, QrCode, Share2, X, Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 // 🌟 先ほど作成したレベル計算ファイルをインポート
@@ -33,6 +33,20 @@ export default function MyPage() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 const [myUserId, setMyUserId] = useState(""); // 🌟 これを追加！ // シェアするURL
+
+const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [sidebarOffset, setSidebarOffset] = useState(0);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const sidebarStartX = useRef<number | null>(null);
+
+  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
+  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
+
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
+  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
+
 
 useEffect(() => {
   const getUserId = async () => {
@@ -361,6 +375,26 @@ const profileUrl = typeof window !== 'undefined' && myUserId
           {toastMessage}
         </div>
       )}
+      {/* 🌟 付箋タブ ＆ サイドバー */}
+      {!showProfileMenu && (
+        <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[90]" />
+      )}
+      <button
+        onClick={() => setShowProfileMenu(true)}
+        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
+        className="fixed left-0 top-32 z-[90] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-transform duration-300 opacity-95 active:scale-95 border-y border-r border-indigo-400"
+      >
+        <Menu className="w-5 h-5" />
+        <ChevronRight className="w-4 h-4 -ml-1 opacity-60 animate-pulse-horizontal" />
+      </button>
+      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setShowProfileMenu(false)} />
+      <div
+        onTouchStart={handleSidebarMenuTouchStart} onTouchMove={handleSidebarMenuTouchMove} onTouchEnd={handleSidebarMenuTouchEnd}
+        style={{ transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`, transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+      >
+        {/* サイドバーの中身（カレンダーのコードと同じものを貼り付け） */}
+      </div>
     </div>
   );
 }
