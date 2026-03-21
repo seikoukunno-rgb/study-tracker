@@ -62,8 +62,17 @@ export default function Home() {
   const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
   const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
 
-  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
+  const handleEdgeTouchStart = (e: React.TouchEvent) => {  sidebarStartX.current = e.touches[0].clientX; 
+  };
+ const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+    if (sidebarStartX.current === null) return;
+    const diffX = e.touches[0].clientX - sidebarStartX.current;
+    // 左端から50px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 50) {
+      window.dispatchEvent(new Event('openSidebar'));
+      sidebarStartX.current = null; // 連続発火防止
+    }
+  };
   const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
   // ==========================================
 
@@ -338,7 +347,21 @@ export default function Home() {
 
   return (
     <div className={`min-h-screen pb-24 font-sans transition-colors duration-300 ${bgPage}`}>
-      
+      {/* 🌟 1. スワイプ検知用の透明エリア (画面左端) */}
+      <div
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
+      />
+
+      {/* 🌟 2. 付箋風のタブボタン (元々のサイドバーを呼び出す) */}
+      <button
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className="fixed left-0 top-32 z-[110] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-all opacity-95 active:scale-90 border-y border-r border-indigo-400"
+      >
+        <Menu className="w-5 h-5" />
+        <ChevronRight className="w-4 h-4 -mt-1 opacity-60 animate-pulse-horizontal" />
+      </button>
       {showSuccess && (
         <div className="fixed bottom-24 left-4 right-4 z-[100] bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between animate-in fade-in slide-in-from-bottom duration-500">
           <div className="flex items-center gap-3">
