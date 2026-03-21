@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   MoreHorizontal, User, Book, SmilePlus, ChevronDown, 
   Edit2, Trash2, X, Share2, Award, Bell, Settings, 
-  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search, ChevronLeft,Menu
+  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search, ChevronLeft, Menu
 } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 import { useRouter } from "next/navigation";
@@ -21,7 +21,6 @@ function ReportContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<"record" | "timeline">("timeline");
   
-  // 🌟 修正：期間フィルターを「RECORD用」と「TIMELINE用」に完全分離！
   const [recordFilter, setRecordFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
   const [timelineFilter, setTimelineFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
   
@@ -34,7 +33,6 @@ function ReportContent() {
   
   const [activeReactionMenu, setActiveReactionMenu] = useState<string | null>(null);
   const [activeEditMenu, setActiveEditMenu] = useState<string | null>(null);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [editingLog, setEditingLog] = useState<any | null>(null);
   const [showQrModal, setShowQrModal] = useState(false); 
   
@@ -67,53 +65,36 @@ function ReportContent() {
   const [pieData, setPieData] = useState<any[]>([]);
   const [maxChartVal, setMaxChartVal] = useState(60);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [sidebarOffset, setSidebarOffset] = useState(0);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
-  const sidebarStartX = useRef<number | null>(null);
+  
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [swipingLogId, setSwipingLogId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  // 🌟 RECORD用とTIMELINE用のフィルターを分ける
-
-  // 🌟 追加：画面全体のスワイプタブ切り替え用
   const [mainTouchStart, setMainTouchStart] = useState<{ x: number, y: number } | null>(null);
 
-  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => {
-    sidebarStartX.current = e.touches[0].clientX;
-    setIsDraggingSidebar(true);
-  };
-  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => {
-    if (!isDraggingSidebar || sidebarStartX.current === null) return;
-    const diffX = e.touches[0].clientX - sidebarStartX.current;
-    if (diffX < 0) setSidebarOffset(diffX); 
-  };
-  const handleSidebarMenuTouchEnd = () => {
-    setIsDraggingSidebar(false);
-    if (sidebarOffset < -100) setShowProfileMenu(false); 
-    setSidebarOffset(0);
-    sidebarStartX.current = null;
-  };
+  // ==========================================
+  // 🌟 共通サイドバー呼び出し処理 (極限までシンプル化)
+  // ==========================================
+  const sidebarStartX = useRef<number | null>(null);
 
-  const handleEdgeTouchStart = (e: React.TouchEvent) => {
-    sidebarStartX.current = e.touches[0].clientX;
-    setIsDraggingSidebar(true);
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
+    sidebarStartX.current = e.touches[0].clientX; 
   };
-  const handleEdgeTouchMove = (e: React.TouchEvent) => {
-    if (!isDraggingSidebar || sidebarStartX.current === null) return;
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+    if (sidebarStartX.current === null) return;
     const diffX = e.touches[0].clientX - sidebarStartX.current;
-    if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); 
+    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 40) {
+      window.dispatchEvent(new Event('openSidebar'));
+      sidebarStartX.current = null; // 連続発火防止
+    }
   };
-  const handleEdgeTouchEnd = () => {
-    setIsDraggingSidebar(false);
-    if (sidebarOffset > 80) setShowProfileMenu(true); 
-    setSidebarOffset(0);
-    sidebarStartX.current = null;
+  const handleEdgeTouchEnd = () => { 
+    sidebarStartX.current = null; 
   };
+  // ==========================================
 
-  // 🌟 追加：メイン画面のスワイプ処理（タブ切り替え）
   const handleMainTouchStart = (e: React.TouchEvent) => {
-    // グラフや横スクロール要素など、特定の中身を触っている時はスワイプ判定しない
     const target = e.target as HTMLElement;
     if (target.closest('.no-scrollbar') || target.closest('button')) return;
     setMainTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
@@ -126,10 +107,9 @@ function ReportContent() {
     const diffX = mainTouchStart.x - touchEndX;
     const diffY = mainTouchStart.y - touchEndY;
 
-    // 縦の動きより横の動きが大きく、かつ一定距離スワイプした場合のみタブを切り替える
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-      if (diffX > 0 && activeTab === "record") setActiveTab("timeline"); // 左スワイプ -> タイムライン
-      else if (diffX < 0 && activeTab === "timeline") setActiveTab("record"); // 右スワイプ -> レコード
+      if (diffX > 0 && activeTab === "record") setActiveTab("timeline"); 
+      else if (diffX < 0 && activeTab === "timeline") setActiveTab("record"); 
     }
     setMainTouchStart(null);
   };
@@ -381,22 +361,6 @@ function ReportContent() {
     }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
-  const handleTouchEnd = (title: string) => {
-    if (!touchStart || !touchEnd) return;
-    const xDiff = touchStart.x - touchEnd.x;
-    const yDiff = Math.abs(touchStart.y - touchEnd.y);
-    if (yDiff > Math.abs(xDiff)) return; 
-    if (xDiff > 40) setSwipedSubject(title); 
-    if (xDiff < -40 && swipedSubject === title) setSwipedSubject(null); 
-  };
-
   const calculateTargetDate = (val: string) => {
     const d = new Date();
     if (val === '15分後') d.setMinutes(d.getMinutes() + 15);
@@ -491,7 +455,6 @@ function ReportContent() {
     ...logs.map(log => log.materials?.title || log.subject || "名称未設定")
   ]));
 
-// 🌟 ① TIMELINEタブ用の絞り込み関数（timelineFilterを使用）
   const getFilteredTimelineLogs = () => {
     let filtered = logs;
     if (filterSubject !== "all") {
@@ -516,15 +479,6 @@ function ReportContent() {
     return filtered;
   };
 
-  // 🌟 ② RECORDタブ（教材リスト）用の検索・絞り込み関数
-  const getFilteredMaterialSummary = () => {
-    return allSubjects.filter(title => {
-      const matchesSearch = title.toLowerCase().includes(materialSearchQuery.toLowerCase());
-      // 学習履歴が1件以上あるものだけを残す（未学習を隠す）
-      const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "その他") === title);
-      return materialLogs.length > 0 && matchesSearch;
-    });
-  };
   const formatTimeForChart = (minutes: number) => {
     if (!minutes || minutes === 0) return "0分";
     if (minutes < 60) return `${minutes}分`;
@@ -564,7 +518,6 @@ function ReportContent() {
 
   return (
     <div className={`min-h-screen pb-20 font-sans overflow-x-hidden transition-colors duration-300 ${bgPage}`}
-         // 🌟 追加：メイン画面でのスワイプ判定
          onTouchStart={handleMainTouchStart}
          onTouchEnd={handleMainTouchEnd}
     >
@@ -646,115 +599,6 @@ function ReportContent() {
         </>
       )}
 
-      <>
-        <div 
-          className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[100] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
-          onClick={() => setShowProfileMenu(false)}
-        ></div>
-          
-        <div 
-          onTouchStart={handleSidebarMenuTouchStart}
-          onTouchMove={handleSidebarMenuTouchMove}
-          onTouchEnd={handleSidebarMenuTouchEnd}
-          style={{ 
-            transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`,
-            transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
-          }}
-          className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[101] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
-        >
-          <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
-            <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-4 h-4" /></button>
-            
-            <button 
-              onClick={() => router.push('/mypage')}
-              className={`w-16 h-16 ${userColor?.startsWith('bg-') ? userColor : ''} hover:opacity-80 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-indigo-900/40 overflow-hidden shrink-0 transition-all active:scale-95`}
-              style={!userColor?.startsWith('bg-') ? { backgroundColor: userColor || '#3b82f6' } : {}}
-            >
-              {userAvatar && userAvatar.trim() !== "" ? (
-                <img 
-                  src={userAvatar} 
-                  alt="Profile" 
-                  className="w-full h-full object-cover" 
-                  onError={(e) => { 
-                    e.currentTarget.style.display = 'none'; 
-                    setUserAvatar(null); 
-                  }} 
-                />
-              ) : (
-                <span className="text-3xl font-black text-white">
-                  {userName ? userName.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
-                </span>
-              )}
-            </button>
-            
-            <h2 className="text-xl font-black leading-tight line-clamp-1">{userName}</h2>
-            
-            <div className="mt-4 px-1">
-              <p className="text-[10px] font-black text-white/50 mb-2 tracking-[0.2em] uppercase">Current Goal</p>
-              <div className="relative group">
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-white/100 transition-colors pointer-events-none">
-                  <PenLine className="w-3.5 h-3.5" />
-                </div>
-                <input
-                  type="text"
-                  value={userGoal}
-                  onChange={(e) => {
-                    const newGoal = e.target.value;
-                    setUserGoal(newGoal);
-                    localStorage.setItem('user_goal', newGoal);
-                  }}
-                  placeholder="目標を入力..."
-                  className={`w-full py-3 px-4 pr-10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none transition-all ${isDarkMode ? 'bg-black/20 border border-white/10 focus:bg-black/40 focus:border-indigo-500/50 text-white' : 'bg-white/10 border border-white/20 focus:bg-white/20 focus:border-white/50 text-white'} placeholder:text-white/30`}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-6 mt-5 pt-5 border-t border-white/20">
-               <div><span className="font-black text-white text-lg">128</span> <span className="text-[10px] text-indigo-200">フォロワー</span></div>
-               <div><span className="font-black text-white text-lg">45</span> <span className="text-[10px] text-indigo-200">フォロー中</span></div>
-            </div>
-          </div> 
-          
-          <div className="flex-grow p-6 overflow-y-auto"> 
-            <div className="space-y-1">
-              <div className="text-[10px] font-black text-slate-400 mb-4 tracking-[0.2em] uppercase px-2">Essential Tools</div>
-              
-              <button onClick={toggleDarkMode} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">
-                    {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
-                  </div>
-                  <span className={`text-sm font-black ${textMain}`}>ダークモード</span>
-                </div>
-              </button>
-
-              <button onClick={() => { setShowQrModal(true); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400"><QrCode className="w-5 h-5" /></div>
-                  <span className={`text-sm font-black ${textMain}`}>マイQRコード</span>
-                </div>
-              </button>
-
-              <button onClick={() => { setShowGlobalReminders(true); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400"><Bell className="w-5 h-5" /></div>
-                  <span className={`text-sm font-black ${textMain}`}>リマインダー確認</span>
-                </div>
-              </button>
-            </div>
-          </div> 
-        </div> 
-
-        {!showProfileMenu && (
-          <div 
-            onTouchStart={handleEdgeTouchStart}
-            onTouchMove={handleEdgeTouchMove}
-            onTouchEnd={handleEdgeTouchEnd}
-            className="fixed top-0 left-0 bottom-0 w-5 z-[90]" 
-          />
-        )}
-      </>
-
       {showQrModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[300]" onClick={() => setShowQrModal(false)}></div>
@@ -764,18 +608,18 @@ function ReportContent() {
             
             <div className={`p-6 rounded-[2rem] shadow-sm border mb-6 flex flex-col items-center ${isDarkMode ? 'bg-white border-transparent' : 'bg-white border-slate-100'}`}>
               <QRCodeSVG 
-  value={profileUrl} 
-  size={200}
-  bgColor={"#ffffff"}
-  fgColor={"#4f46e5"}
-  level={"H"} 
-  imageSettings={{
-    src: "/logo.png", 
-    height: 48,
-    width: 48,
-    excavate: true,
-  }}
-/>
+                value={profileUrl} 
+                size={200}
+                bgColor={"#ffffff"}
+                fgColor={"#4f46e5"}
+                level={"H"} 
+                imageSettings={{
+                  src: "/logo.png", 
+                  height: 48,
+                  width: 48,
+                  excavate: true,
+                }}
+              />
               <p className="text-[10px] font-black text-indigo-400 mt-4 tracking-widest uppercase">SCAN TO CONNECT</p>
             </div>
 
@@ -825,12 +669,12 @@ function ReportContent() {
           
           {showImageActionSheet && (
              <div className="fixed inset-0 bg-black/60 z-[400] flex flex-col justify-end animate-in fade-in duration-200" onClick={() => setShowImageActionSheet(false)}>
-                <div className={`p-6 pb-12 rounded-t-[2.5rem] animate-in slide-in-from-bottom duration-300 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`} onClick={e => e.stopPropagation()}>
-                   <h3 className={`font-black mb-6 text-center ${textMain}`}>教材画像の設定</h3>
-                   <button className={`w-full py-4 rounded-2xl mb-3 font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-[#2c2c2e] text-white' : 'bg-white text-slate-900 shadow-sm'}`}>写真を撮る</button>
-                   <button className={`w-full py-4 rounded-2xl mb-3 font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-[#2c2c2e] text-white' : 'bg-white text-slate-900 shadow-sm'}`}>画像を選択</button>
-                   <button onClick={() => setShowImageActionSheet(false)} className={`w-full py-4 rounded-2xl font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-900 shadow-sm'}`}>キャンセル</button>
-                </div>
+               <div className={`p-6 pb-12 rounded-t-[2.5rem] animate-in slide-in-from-bottom duration-300 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`} onClick={e => e.stopPropagation()}>
+                  <h3 className={`font-black mb-6 text-center ${textMain}`}>教材画像の設定</h3>
+                  <button className={`w-full py-4 rounded-2xl mb-3 font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-[#2c2c2e] text-white' : 'bg-white text-slate-900 shadow-sm'}`}>写真を撮る</button>
+                  <button className={`w-full py-4 rounded-2xl mb-3 font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-[#2c2c2e] text-white' : 'bg-white text-slate-900 shadow-sm'}`}>画像を選択</button>
+                  <button onClick={() => setShowImageActionSheet(false)} className={`w-full py-4 rounded-2xl font-black active:scale-95 transition-transform ${isDarkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-900 shadow-sm'}`}>キャンセル</button>
+               </div>
              </div>
           )}
         </>
@@ -917,9 +761,8 @@ function ReportContent() {
 
       <header className={`${bgHeader} pt-6 sticky top-0 z-50 shadow-sm transition-colors duration-300`}>
         <div className="flex justify-between items-center px-6 mb-4">
-          {/* 🌟 修正：Menuアイコンに変更し、Stateを操作するように変更 */}
           <button 
-            onClick={() => setShowProfileMenu(true)} 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
             className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
           >
             <Menu className="w-5 h-5 text-slate-500" />
@@ -937,7 +780,7 @@ function ReportContent() {
         </div>
       </header>
 
-<main className="w-full overflow-x-hidden pb-10 pt-4">
+      <main className="w-full overflow-x-hidden pb-10 pt-4">
         {isLoading ? (
           <div className={`text-center py-20 font-black tracking-[0.3em] ${textSub}`}>FETCHING...</div>
         ) : (
@@ -1178,13 +1021,6 @@ function ReportContent() {
                       }}
                       className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
                     >
-                      {/* 🌟 スライドを促すアニメーション付き矢印 */}
-                      {swipingLogId !== log.id && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 animate-pulse-horizontal pointer-events-none opacity-50">
-                          <ChevronLeft className="w-4 h-4 text-slate-300" />
-                        </div>
-                      )}
-
                       <div className="flex justify-between items-center mb-5">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
@@ -1247,70 +1083,33 @@ function ReportContent() {
           </div>
         )}
       </main>
-      
-{/* =========================================================
-          🌟 レポート画面用：付箋風メニュータブ ＆ サイドバー本体
+
+      {/* =========================================================
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
       ========================================================= */}
       
-      {/* 1. スワイプ検知エリア */}
-      {!showProfileMenu && (
-        <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[90]" />
-      )}
+      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
+      <div
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        onTouchEnd={handleEdgeTouchEnd}
+        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
+      />
 
-      {/* 2. 付箋ボタン */}
+      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
       <button
-        onClick={() => setShowProfileMenu(true)}
-        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
-        className="fixed left-0 top-32 z-[90] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-transform duration-300 opacity-95 active:scale-95 border-y border-r border-indigo-400"
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
+          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
+        } backdrop-blur-sm group`}
       >
-        <Menu className="w-5 h-5" />
-        <ChevronRight className="w-4 h-4 -mt-1 opacity-60 animate-pulse-horizontal" />
+        <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
       </button>
 
-      {/* 3. サイドバー本体 */}
-      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setShowProfileMenu(false)} />
-      <div
-        onTouchStart={handleSidebarMenuTouchStart} onTouchMove={handleSidebarMenuTouchMove} onTouchEnd={handleSidebarMenuTouchEnd}
-        style={{ transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`, transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
-        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
-      >
-        <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
-          <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full"><X className="w-4 h-4" /></button>
-          <h2 className="text-xl font-black mt-4">Study Menu</h2>
-        </div>
-        <div className="flex-grow p-6 overflow-y-auto">
-          <div className="space-y-2">
-            <button onClick={() => { const newMode = !isDarkMode; setIsDarkMode(newMode); localStorage.setItem('dark_mode', newMode.toString()); document.body.style.backgroundColor = newMode ? '#0a0a0a' : '#f8fafc'; window.dispatchEvent(new Event('darkModeChanged')); }} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
-              {isDarkMode ? <Sun className="text-amber-400 w-5 h-5"/> : <Moon className="w-5 h-5 text-slate-500"/>}
-              <span className={`text-sm font-black ${textMain}`}>ダークモード</span>
-            </button>
-            <button onClick={() => router.push('/')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
-              <BookOpen className="w-5 h-5 text-indigo-500" />
-              <span className={`text-sm font-black ${textMain}`}>マイ本棚</span>
-            </button>
-            <button onClick={() => router.push('/calendar')} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
-              <Calendar className="w-5 h-5 text-emerald-500" />
-              <span className={`text-sm font-black ${textMain}`}>カレンダー</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 🌟 魔法のアニメーションCSS */}
       <style jsx global>{`
         @keyframes floatUp { 0%{opacity:0; transform:translateY(0)} 50%{opacity:1} 100%{opacity:0; transform:translateY(-100px)} }
         .animate-float-up { animation: floatUp 1.5s ease-out forwards; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        
-        /* 矢印のアニメーション */
-        @keyframes pulse-horizontal {
-          0% { transform: translateX(0); opacity: 0.3; }
-          50% { transform: translateX(-8px); opacity: 1; }
-          100% { transform: translateX(0); opacity: 0.3; }
-        }
-        .animate-pulse-horizontal {
-          animation: pulse-horizontal 1.5s ease-in-out infinite;
-        }
       `}</style>
     </div>
   );
