@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
-
 export default function Home() {
   const router = useRouter();
   const [materials, setMaterials] = useState<any[]>([]);
@@ -41,6 +40,7 @@ export default function Home() {
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
   
   // 削除モーダル用のState
   const [deleteTarget, setDeleteTarget] = useState<{id: string, title: string} | null>(null);
@@ -355,12 +355,30 @@ export default function Home() {
       />
 
       {/* 🌟 2. 付箋風のタブボタン (元々のサイドバーを呼び出す) */}
+     {!showSidebar && (
+        <div
+          onTouchStart={handleEdgeTouchStart}
+          onTouchMove={handleEdgeTouchMove}
+          onTouchEnd={handleEdgeTouchEnd}
+          className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
+        />
+      )}
+
+      {/* 🌟 2. 洗練されたスライドインジケータ兼Menuボタン (邪魔にならないマーク) */}
       <button
-        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
-        className="fixed left-0 top-32 z-[110] bg-indigo-600 text-white py-4 pl-1 pr-2 rounded-r-2xl shadow-xl flex flex-col items-center justify-center transition-all opacity-95 active:scale-90 border-y border-r border-indigo-400"
+        onClick={() => { window.dispatchEvent(new Event('openSidebar')); setShowSidebar(true); }}
+        style={{ transform: showSidebar ? 'translateX(-100%)' : 'translateX(0)' }}
+        className="fixed left-0 top-32 z-[110] group transition-transform duration-300 ease-in-out active:scale-95"
       >
-        <Menu className="w-5 h-5" />
-        <ChevronRight className="w-4 h-4 -mt-1 opacity-60 animate-pulse-horizontal" />
+        {/* インジケータバー */}
+        <div className="bg-indigo-600 text-white h-24 w-12 pl-2 pr-1 rounded-r-3xl shadow-xl flex items-center justify-between border-y border-r border-indigo-400 group-hover:pl-4 transition-all">
+          <Menu className="w-5 h-5" />
+          {/* スライドマーク（アニメーションする矢印） */}
+          <div className="flex flex-col items-center gap-0.5 animate-swipe-indicator">
+            <ChevronRight className="w-4 h-4 opacity-70" />
+            <ChevronRight className="w-3 h-3 opacity-40 -mt-2" />
+          </div>
+        </div>
       </button>
       {showSuccess && (
         <div className="fixed bottom-24 left-4 right-4 z-[100] bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between animate-in fade-in slide-in-from-bottom duration-500">
@@ -487,16 +505,11 @@ export default function Home() {
       )}
 
       {/* --- HEADER --- */}
-      <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors duration-300`}>
+      {/* --- HEADER --- */}
+      <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors`}>
         <div className="flex items-center gap-3">
-          {/* 🌟 ハンバーガーメニュー */}
-          <button 
-            onClick={() => setShowProfileMenu(true)} 
-            className={`p-2 -ml-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-          <h1 className={`text-xl font-black italic tracking-tighter flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+          {/* 🌟 【削除】ヘッダー内の元のMenuボタンを削除 */}
+          <h1 className={`text-xl font-black italic tracking-tighter ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
             STUDY TRACKER
           </h1>
         </div>
@@ -804,6 +817,8 @@ export default function Home() {
           animation: pulse-horizontal 1.5s ease-in-out infinite;
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        @keyframes swipe-indicator { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(3px); opacity: 1; } }
+.animate-swipe-indicator { animation: swipe-indicator 1.2s ease-in-out infinite; }
       `}</style>
     </div>
   );
