@@ -36,22 +36,22 @@ export default function Home() {
   ];
   const [selectedIconUrl, setSelectedIconUrl] = useState(PRESET_ICONS[0]);
 
-  // --- 教材（マイ本棚）のスワイプ削除用State ---
+  // 教材（マイ本棚）のスワイプ削除用State
   const [swipingMaterialId, setSwipingMaterialId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
   
-  // --- 削除モーダル用のState ---
+  // 削除モーダル用のState
   const [deleteTarget, setDeleteTarget] = useState<{id: string, title: string} | null>(null);
 
-  // --- 学習記録モーダルの下スワイプクローズ用State ---
+  // 学習記録モーダルの下スワイプクローズ用State
   const [modalTouchStartY, setModalTouchStartY] = useState(0);
   const [modalSwipeY, setModalSwipeY] = useState(0);
   const [isModalClosing, setIsModalClosing] = useState(false);
 
   // ==========================================
-  // 🌟 共通サイドバー呼び出し用の処理（これだけでOK）
+  // 🌟 共通サイドバー呼び出し用の処理
   // ==========================================
   const sidebarStartX = useRef<number | null>(null);
 
@@ -61,8 +61,8 @@ export default function Home() {
   const handleEdgeTouchMove = (e: React.TouchEvent) => { 
     if (sidebarStartX.current === null) return;
     const diffX = e.touches[0].clientX - sidebarStartX.current;
-    // 左端から50px以上右へスワイプされたら共通サイドバーを開く命令を送る
-    if (diffX > 50) {
+    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 40) {
       window.dispatchEvent(new Event('openSidebar'));
       sidebarStartX.current = null; // 連続発火防止
     }
@@ -128,8 +128,10 @@ export default function Home() {
 
   const handleModalTouchMove = (e: React.TouchEvent) => {
     if (modalTouchStartY === 0) return;
+    
     const currentY = e.touches[0].clientY;
     const diff = currentY - modalTouchStartY;
+
     if (diff > 5) {
       if (e.cancelable) e.preventDefault();
       setModalSwipeY(diff * 0.8);
@@ -469,6 +471,12 @@ export default function Home() {
       {/* --- HEADER --- */}
       <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors`}>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            className={`p-2 -ml-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
           <h1 className={`text-xl font-black italic tracking-tighter ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
             STUDY TRACKER
           </h1>
@@ -706,27 +714,25 @@ export default function Home() {
       )}
 
       {/* =========================================================
-          🌟 共通サイドバー呼び出しエリア（スワイプ＆ボタン）
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
       ========================================================= */}
       
-      {/* 1. スワイプ検知用の透明エリア (画面左端) */}
+      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
       <div
         onTouchStart={handleEdgeTouchStart}
         onTouchMove={handleEdgeTouchMove}
         onTouchEnd={handleEdgeTouchEnd}
-        className="fixed top-0 left-0 bottom-0 w-8 z-[50]"
+        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
       />
 
-      {/* 2. 邪魔にならないスライドインジケータ兼Menuボタン */}
+      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
       <button
         onClick={() => window.dispatchEvent(new Event('openSidebar'))}
-        className="fixed left-0 top-32 z-[40] bg-indigo-600/90 text-white h-20 w-8 rounded-r-2xl shadow-lg flex flex-col items-center justify-center transition-all active:scale-90 border-y border-r border-indigo-400 group"
+        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
+          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
+        } backdrop-blur-sm group`}
       >
-        <Menu className="w-4 h-4 mb-1" />
-        <div className="flex flex-col items-center -space-y-2 animate-pulse-horizontal">
-          <ChevronRight className="w-4 h-4 opacity-80" />
-          <ChevronRight className="w-3 h-3 opacity-40" />
-        </div>
+        <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
       </button>
 
       {/* 🌟 魔法のアニメーションCSS（マイ本棚用） */}
