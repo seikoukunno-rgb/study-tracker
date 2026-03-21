@@ -5,7 +5,8 @@ import { supabase } from "../../lib/supabase";
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
-  ChevronDown, ChevronUp, X, Minus, RefreshCcw, ChevronRight as ChevronRightIcon
+  ChevronDown, ChevronUp, X, Minus, RefreshCcw, ChevronRight as ChevronRightIcon,
+  Menu // 🌟 アイコン追加
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -56,6 +57,28 @@ export default function CalendarPage() {
   const [showGlobalReminders, setShowGlobalReminders] = useState(false);
 
   const isMounted = useRef(true);
+
+  // ==========================================
+  // 🌟 共通サイドバー呼び出し処理
+  // ==========================================
+  const sidebarStartX = useRef<number | null>(null);
+
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
+    sidebarStartX.current = e.touches[0].clientX; 
+  };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+    if (sidebarStartX.current === null) return;
+    const diffX = e.touches[0].clientX - sidebarStartX.current;
+    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
+    if (diffX > 40) {
+      window.dispatchEvent(new Event('openSidebar'));
+      sidebarStartX.current = null; // 連続発火防止
+    }
+  };
+  const handleEdgeTouchEnd = () => { 
+    sidebarStartX.current = null; 
+  };
+  // ==========================================
 
   const notifyOptionsList = [
     { id: "none", label: "通知しない" },
@@ -484,10 +507,16 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 🌟 修正：サイドバー起動ボタンを削除し、鈴ボタンを配置 */}
+      {/* 🌟 修正：ヘッダーの左端にMENUボタンを追加 */}
       <header className={`px-6 py-6 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300 border-b ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
         <div className="flex items-center gap-3">
-          <CalendarIcon className="w-6 h-6 text-indigo-500" />
+          <button 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
+          >
+            <Menu className="w-5 h-5 text-slate-500" />
+          </button>
+          <CalendarIcon className="w-6 h-6 text-indigo-500 hidden md:block" />
           <h1 className="text-xl font-black italic tracking-tighter text-indigo-500 uppercase">Calendar</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -719,7 +748,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* 削除確認モーダル */}
       {eventToDelete && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400]" onClick={() => setEventToDelete(null)}></div>
@@ -814,7 +842,7 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ===== 🌟 新・オリジナルUI搭載 リマインダー設定モーダル ===== */}
+      {/* リマインダー設定モーダル */}
       {showReminderModal && selectedReminderTask && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowReminderModal(false)} />
@@ -825,7 +853,6 @@ export default function CalendarPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <div className={`p-4 rounded-2xl mb-6 border flex items-start gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-indigo-50 border-indigo-100'}`}>
               <Book className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
               <div>
@@ -833,53 +860,56 @@ export default function CalendarPage() {
                 <p className={`text-sm font-bold line-clamp-2 ${isDarkMode ? 'text-indigo-100' : 'text-indigo-900'}`}>{selectedReminderTask.title || selectedReminderTask.subject}</p>
               </div>
             </div>
-
             <p className="text-xs font-black text-slate-500 mb-3 mt-4">いつ通知しますか？</p>
             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-              {[
-                { label: "1週間前", value: -7 },
-                { label: "前日", value: -1 },
-                { label: "当日", value: 0 },
-                { label: "明日", value: 1 },
-                { label: "2日後", value: 2 },
-              ].map(day => (
-                <button 
-                  key={day.label}
-                  onClick={() => setRemindOffset(day.value)}
-                  className={`whitespace-nowrap px-6 py-3 rounded-2xl text-sm font-bold transition-all ${remindOffset === day.value ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : isDarkMode ? 'bg-[#2c2c2e] text-slate-400 hover:text-slate-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}
-                >
+              {[ { label: "1週間前", value: -7 }, { label: "前日", value: -1 }, { label: "当日", value: 0 }, { label: "明日", value: 1 }, { label: "2日後", value: 2 } ].map(day => (
+                <button key={day.label} onClick={() => setRemindOffset(day.value)} className={`whitespace-nowrap px-6 py-3 rounded-2xl text-sm font-bold transition-all ${remindOffset === day.value ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : isDarkMode ? 'bg-[#2c2c2e] text-slate-400 hover:text-slate-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>
                   {day.label}
                 </button>
               ))}
             </div>
-
             <p className="text-xs font-black text-slate-500 mb-3 mt-2">何時に通知しますか？</p>
             <div className={`rounded-3xl p-6 mb-8 flex items-center justify-center gap-6 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
-               
                <div className="flex flex-col items-center gap-4">
                  <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-6 h-6"/></button>
                  <span className={`text-6xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
                  <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-6 h-6"/></button>
                </div>
-
                <span className="text-5xl font-black text-indigo-500 pb-2 animate-pulse">:</span>
-
                <div className="flex flex-col items-center gap-4">
                  <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-6 h-6"/></button>
                  <span className={`text-6xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
                  <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-3 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-6 h-6"/></button>
                </div>
             </div>
-
-            <button 
-              onClick={handleSaveReminder}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95"
-            >
+            <button onClick={handleSaveReminder} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95">
               <Bell className="w-5 h-5" /> 通知をセットする
             </button>
           </div>
         </>
       )}
+
+      {/* =========================================================
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
+      ========================================================= */}
+      
+      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
+      <div
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        onTouchEnd={handleEdgeTouchEnd}
+        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
+      />
+
+      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
+      <button
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
+          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
+        } backdrop-blur-sm group`}
+      >
+        <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
+      </button>
 
     </div>
   );
