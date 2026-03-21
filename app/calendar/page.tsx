@@ -109,36 +109,47 @@ export default function CalendarPage() {
       Notification.requestPermission();
     }
     
-    const checkReminders = async () => {
+   const checkReminders = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const now = new Date();
       
+      // 🌟 remindersテーブルとcalendar_eventsテーブルの両方から通知を取得して合体させる
       const { data: activeReminders } = await supabase.from('reminders').select('*').eq('student_id', user.id);
-      if (!activeReminders || activeReminders.length === 0) return;
+      const { data: activeEvents } = await supabase.from('calendar_events').select('*').eq('student_id', user.id).not('notify_time', 'is', null).eq('is_completed', false);
 
-      activeReminders.forEach(async (reminder) => {
-        const remindTime = new Date(reminder.remind_at);
+      const allNotifications = [
+        ...(activeReminders || []).map(r => ({ id: `rem_${r.id}`, rawId: r.id, title: r.title, time: r.remind_at, type: 'reminder' })),
+        ...(activeEvents || []).map(e => ({ id: `ev_${e.id}`, rawId: e.id, title: e.title, time: e.notify_time, type: 'event' }))
+      ];
+
+      if (allNotifications.length === 0) return;
+
+      allNotifications.forEach(async (notify) => {
+        const remindTime = new Date(notify.time);
         const diffMinutes = (now.getTime() - remindTime.getTime()) / (1000 * 60);
 
-        const notifiedKey = `notified_${reminder.id}`;
+        const notifiedKey = `notified_${notify.id}`;
         
-        // 🌟 時間ぴったり〜1分過ぎの間で、まだ通知していなければスマホに通知を送る
         if (diffMinutes >= 0 && diffMinutes < 1 && !localStorage.getItem(notifiedKey)) {
           if (Notification.permission === "granted") {
             new Notification("STUDY TRACKER", { 
-              body: `📚 ${reminder.title} の時間です！学習を始めましょう！`, 
+              body: `📚 ${notify.title} の時間です！学習を始めましょう！`, 
               icon: "/favicon.ico" 
             });
             localStorage.setItem(notifiedKey, "true");
           }
         }
         
-        // 🌟 通知から30分経過したら、自動的にデータベースから削除して掃除する
         if (diffMinutes >= 30) {
-          await supabase.from('reminders').delete().eq('id', reminder.id);
+          if (notify.type === 'reminder') {
+            await supabase.from('reminders').delete().eq('id', notify.rawId);
+            setReminders(prev => prev.filter(r => r.id !== notify.rawId));
+          } else {
+            await supabase.from('calendar_events').update({ notify_time: null }).eq('id', notify.rawId);
+            setEvents(prev => prev.map(e => e.id === notify.rawId ? { ...e, notify_time: null } : e));
+          }
           localStorage.removeItem(notifiedKey);
-          setReminders(prev => prev.filter(r => r.id !== reminder.id));
         }
       });
     };
@@ -755,28 +766,42 @@ export default function CalendarPage() {
               <h3 className={`text-sm font-black flex items-center gap-2 ${textMain}`}><Bell className="w-4 h-4 text-indigo-500"/> 設定中の通知</h3>
               <button onClick={() => setShowGlobalReminders(false)} className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
             </div>
-            {reminders.length === 0 ? (
-              <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されている通知はありません</p>
-            ) : (
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                {reminders.map((rem) => (
-                  <div key={rem.id} className={`flex items-center justify-between p-3 rounded-2xl border mb-2 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-slate-50 border-slate-100'}`}>
-                     <div className="flex-1 pr-2">
-                       <p className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{rem.title}</p>
-                       <p className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 inline-block px-2 py-0.5 rounded-md">
-                         {new Date(rem.remind_at).toLocaleTimeString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                       </p>
-                     </div>
-                     <button onClick={async () => {
-                       await supabase.from('reminders').delete().eq('id', rem.id);
-                       setReminders(prev => prev.filter(r => r.id !== rem.id));
-                     }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
-                       <Trash2 className="w-4 h-4" />
-                     </button>
-                  </div>
-                ))}
-              </div>
-            )}
+           {(() => {
+              // 🌟 2つのテーブルの通知データを合体させ、時間が近い順に並び替える
+              const allDisplayReminders = [
+                ...reminders.map(r => ({ id: `rem_${r.id}`, rawId: r.id, title: r.title, time: r.remind_at, type: 'reminder' })),
+                ...events.filter(e => e.notify_time && !e.is_completed).map(e => ({ id: `ev_${e.id}`, rawId: e.id, title: e.title, time: e.notify_time as string, type: 'event' }))
+              ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+              return allDisplayReminders.length === 0 ? (
+                <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されている通知はありません</p>
+              ) : (
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {allDisplayReminders.map((rem) => (
+                    <div key={rem.id} className={`flex items-center justify-between p-3 rounded-2xl border mb-2 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-slate-50 border-slate-100'}`}>
+                       <div className="flex-1 pr-2">
+                         <p className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{rem.title}</p>
+                         <p className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 inline-block px-2 py-0.5 rounded-md">
+                           {new Date(rem.time).toLocaleTimeString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                         </p>
+                       </div>
+                       <button onClick={async () => {
+                         // 🌟 削除ボタンを押した時、元のテーブルに合わせて正しく削除する
+                         if (rem.type === 'reminder') {
+                           await supabase.from('reminders').delete().eq('id', rem.rawId);
+                           setReminders(prev => prev.filter(r => r.id !== rem.rawId));
+                         } else {
+                           await supabase.from('calendar_events').update({ notify_time: null }).eq('id', rem.rawId);
+                           setEvents(prev => prev.map(e => e.id === rem.rawId ? { ...e, notify_time: null } : e));
+                         }
+                       }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
+                         <Trash2 className="w-4 h-4" />
+                       </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </>
       )}
