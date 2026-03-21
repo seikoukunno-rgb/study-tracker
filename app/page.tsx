@@ -520,7 +520,7 @@ const handleAddCustomMaterial = async () => {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 {materials.map((material) => {
-              // 🌟 追加：PDFがあるかどうかをここで判定
+              // PDFがあるかどうかをここで判定（変更なし）
               const hasPdf = material.pdf_url && material.pdf_url !== '[]' && material.pdf_url !== '';
 
               return (
@@ -545,20 +545,31 @@ const handleAddCustomMaterial = async () => {
                       transform: swipingMaterialId === material.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
                       transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
                     }}
-                    // 🌟 修正：hasPdf のときだけ border-rose-500（赤枠）と太さを適用！
-                    className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl shadow-sm border-2 transition-all
-                      ${hasPdf 
-                        ? 'border-rose-500 shadow-rose-100' 
-                        : isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'
-                      } ${swipingMaterialId === material.id ? 'shadow-2xl' : ''}`}
+                    // 🌟 修正：背景色を固定し、PDF教材かつスワイプ中でない場合のみ縁（ボーダー）を赤にするロジック
+                    className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2
+                      ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} // 背景色は固定して透けないようにする
+                      ${hasPdf && swipingMaterialId !== material.id // 🌟 条件：PDF教材 かつ スワイプ中でない
+                        ? 'border-rose-500 shadow-rose-100' // 📕 PDF教材（通常時）：赤枠
+                        : swipingMaterialId === material.id // スワイプ中
+                          ? isDarkMode ? 'border-[#38383a]' : 'border-slate-100' // スワイプ中は通常枠に戻す
+                          : isDarkMode ? 'border-[#38383a]' : 'border-slate-100' // 通常教材
+                      } ${swipingMaterialId === material.id ? 'shadow-2xl' : 'shadow-sm'}`}
                   >
-                    {/* 🌟 修正：PDF教材のときは、画像の枠も少し赤っぽくすると統一感が出ます */}
-                    <div className={`w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none ${hasPdf ? 'border-rose-100' : bgSubCard}`}>
+                    {/* 🌟 修正：教材アイコン部分にPDFマークを追加（divをrelativeにする） */}
+                    <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none
+                      ${hasPdf ? 'border-rose-100' : bgSubCard}`}>
                       {material.image_url ? (
                         <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
                       ) : (
-                        // PDFがあるのに画像がない場合は、アイコンも赤っぽく
+                        // PDFがあるのに画像がない場合は、アイコンも赤っぽく（お好みで）
                         <Book className={`w-8 h-8 transition-colors ${hasPdf ? 'text-rose-300' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                      )}
+                      
+                      {/* 🌟 PDFマークを追加（絶対配置） */}
+                      {hasPdf && (
+                        <div className="absolute top-1.5 right-1.5 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow z-20">
+                          PDF
+                        </div>
                       )}
                     </div>
 
@@ -566,14 +577,14 @@ const handleAddCustomMaterial = async () => {
                       {material.title}
                     </h3>
 
-                    <div className={`mt-3 text-[10px] font-black px-4 py-1.5 rounded-full transition-colors ${hasPdf ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'}`}>
+                    {/* 下の「記録する」ボタンの色は、カードの縁（ボーダー）の赤を際立たせるため、PDFかどうかで変えず、元のインディゴ（またはダークモード対応色）に統一します */}
+                    <div className={`mt-3 text-[10px] font-black px-4 py-1.5 rounded-full ${isDarkMode ? 'bg-indigo-700 text-indigo-100' : 'bg-indigo-600 text-white'}`}>
                       記録する
                     </div>
                   </button>
                 </div>
               );
-            })}  
-          </div>
+            })}          </div>
         )}
       </main>
 
