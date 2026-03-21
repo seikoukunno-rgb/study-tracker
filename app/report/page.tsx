@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   MoreHorizontal, User, Book, SmilePlus, ChevronDown, 
   Edit2, Trash2, X, Share2, Award, Bell, Settings, 
-  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search
+  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search, ChevronLeft
 } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 import { useRouter } from "next/navigation";
@@ -921,10 +921,7 @@ function ReportContent() {
             <User className="w-6 h-6 text-slate-400" />
           </button>
           <h1 className="text-lg font-black italic tracking-tighter text-indigo-500">STUDY REPORT</h1>
-          <button onClick={() => setShowGlobalReminders(true)} className="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform relative">
-            <Bell className="w-6 h-6 text-slate-400" />
-            {Object.keys(reminders).length > 0 && <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 rounded-full ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`}></span>}
-          </button>
+          <div className="w-10 h-10"></div>
         </div>
         <div className="flex px-4 relative">
           <button onClick={() => setActiveTab("record")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "record" ? "text-indigo-500" : textSub}`}>RECORD</button>
@@ -1009,7 +1006,6 @@ function ReportContent() {
               <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
                 <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
                 
-                {/* 🌟 修正：RECORD用の独立フィルター */}
                 <div className={`flex p-1 rounded-2xl w-full max-w-sm mx-auto mb-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                   {[
                     { id: "all", label: "すべて" },
@@ -1081,7 +1077,7 @@ function ReportContent() {
                       else if (diffDays === 1) { daysAgoText = "昨日"; badgeClass = isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"; }
                       else { daysAgoText = `${diffDays}日前`; }
                     }
-// 🌟 修正：スワイプ機能や隠しボタンを削り、シンプルなリストに変更
+
                     return (
                       <div key={title as string} className={`flex items-center justify-between p-4 rounded-2xl border ${bgSubCard}`}>
                         <div className="flex items-center gap-4">
@@ -1118,7 +1114,6 @@ function ReportContent() {
             <div className={`w-1/2 px-4 space-y-4 transition-all duration-300 ${activeTab === "timeline" ? "opacity-100 h-auto" : "opacity-0 h-0 overflow-hidden pointer-events-none"}`}>
               
               <div className="relative mb-6 z-40 flex flex-col gap-3">
-                {/* 🌟 修正：TIMELINE用の独立フィルター */}
                 <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
                   {[
                     { id: "all", label: "すべて" },
@@ -1152,17 +1147,19 @@ function ReportContent() {
                 )}
               </div>
 
-              {/* 🌟 変数ではなく、直接関数を呼び出し、(log: any) と指定する */}
-{getFilteredTimelineLogs().length === 0 ? (
-  <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
-) : (
-  getFilteredTimelineLogs().map((log: any) => (
+              {getFilteredTimelineLogs().length === 0 ? (
+                 <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
+              ) : (
+                getFilteredTimelineLogs().map((log: any) => (
                   <div key={log.id} className="relative mb-6">
                     
-                    <div className="absolute inset-0 bg-rose-500 rounded-[2.5rem] flex items-center justify-end pr-8 overflow-hidden">
-                      <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingLogId === log.id && swipeOffset < -50 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
-                        <Trash2 className="w-8 h-8 text-white mb-1" />
-                        <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+                    {/* 🌟 背景の「削除エリア」 */}
+                    <div className={`absolute inset-0 rounded-[2.5rem] flex items-center justify-end pr-10 overflow-hidden transition-colors duration-300 ${swipingLogId === log.id && swipeOffset < -100 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
+                      <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingLogId === log.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -100 ? 'scale-125' : 'scale-100'}`}>
+                        <Trash2 className={`w-8 h-8 text-white mb-1 ${swipeOffset < -100 ? 'animate-bounce' : ''}`} />
+                        <span className="text-white text-[12px] font-black tracking-widest">
+                          {swipeOffset < -100 ? '離して削除' : '削除'}
+                        </span>
                       </div>
                     </div>
 
@@ -1170,9 +1167,20 @@ function ReportContent() {
                       onTouchStart={(e) => handleLogTouchStart(e, log.id)}
                       onTouchMove={handleLogTouchMove}
                       onTouchEnd={() => handleLogTouchEnd(log.id)}
-                      style={{ transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+                      style={{ 
+                        transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
+                        opacity: swipingLogId === log.id ? Math.max(1 + swipeOffset / 300, 0.3) : 1,
+                        transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s' 
+                      }}
                       className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
                     >
+                      {/* 🌟 スライドを促すアニメーション付き矢印 */}
+                      {swipingLogId !== log.id && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 animate-pulse-horizontal pointer-events-none opacity-50">
+                          <ChevronLeft className="w-4 h-4 text-slate-300" />
+                        </div>
+                      )}
+
                       <div className="flex justify-between items-center mb-5">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
@@ -1186,27 +1194,14 @@ function ReportContent() {
                             <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
                               {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
                             </span>
-                            {log.student_id !== currentUser?.id && (
-                              <span className="text-[9px] font-black text-indigo-400">フォロワー</span>
-                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
                           {log.student_id === currentUser?.id && (
-                            <>
-                              <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
-                                <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
-                              </button>
-                              
-                              {activeEditMenu === log.id && (
-                                <div className={`absolute right-6 top-16 w-28 rounded-2xl shadow-2xl border z-50 overflow-hidden ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-50'}`}>
-                                  <button onClick={() => { setEditingLog(log); setEditDate(new Date(log.created_at).toISOString().slice(0,16)); setEditMinutes(log.duration_minutes); setEditMemo(log.thoughts||""); setActiveEditMenu(null); }} className={`w-full flex items-center justify-center gap-3 px-4 py-4 text-sm font-black ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-50'}`}>
-                                    <Edit2 className="w-4 h-4" /> 編集
-                                  </button>
-                                </div>
-                              )}
-                            </>
+                            <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                              <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1224,44 +1219,18 @@ function ReportContent() {
                       {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
 
                       <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
-                        
-                        {floatingEmojis.map(fe => (
-                          <div 
-                            key={fe.id} 
-                            className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]"
-                            style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}
-                            onAnimationEnd={() => {
-                              setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id));
-                            }}
-                          >
+                        {floatingEmojis.filter(fe => fe.id > Date.now() - 2000).map(fe => (
+                          <div key={fe.id} className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]" style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}>
                             {fe.emoji}
                           </div>
                         ))}
-
                         <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
                           <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
                         </button>
-
-                        {log.userReaction && <div className={`px-3 py-2 rounded-full font-black text-sm ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>{log.userReaction} 1</div>}
-
                         {activeReactionMenu === log.id && (
                           <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
                             {EMOJIS.map(emoji => (
-                              <button 
-                                key={emoji} 
-                                onClick={() => {
-                                  handleReaction(log.id, emoji); 
-                                  const newFloatingEmoji = {
-                                    id: Date.now(), 
-                                    emoji: emoji,
-                                    offset: (Math.random() - 0.5) * 60, 
-                                  };
-                                  setFloatingEmojis(prev => [...prev, newFloatingEmoji]);
-                                }} 
-                                className="text-2xl hover:scale-125 transition-transform px-1"
-                              >
-                                {emoji}
-                              </button>
+                              <button key={emoji} onClick={() => { handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); setActiveReactionMenu(null); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
                             ))}
                           </div>
                         )}
@@ -1271,19 +1240,24 @@ function ReportContent() {
                 ))
               )}
             </div>
-
           </div>
         )}
       </main>
+
+      {/* 🌟 魔法のアニメーションCSS */}
       <style jsx global>{`
-        @keyframes floatUpAndFade {
-          0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
-          10% { opacity: 1; transform: translate(calc(-50% + var(--x-offset) / 5), -20px) scale(1.2); }
-          100% { opacity: 0; transform: translate(calc(-50% + var(--x-offset)), -100px) scale(1.5); }
+        @keyframes floatUp { 0%{opacity:0; transform:translateY(0)} 50%{opacity:1} 100%{opacity:0; transform:translateY(-100px)} }
+        .animate-float-up { animation: floatUp 1.5s ease-out forwards; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 矢印のアニメーション */
+        @keyframes pulse-horizontal {
+          0% { transform: translateX(0); opacity: 0.3; }
+          50% { transform: translateX(-8px); opacity: 1; }
+          100% { transform: translateX(0); opacity: 0.3; }
         }
-        .animate-float-up {
-          animation: floatUpAndFade 1.5s ease-out forwards;
-          pointer-events: none;
+        .animate-pulse-horizontal {
+          animation: pulse-horizontal 1.5s ease-in-out infinite;
         }
       `}</style>
     </div>

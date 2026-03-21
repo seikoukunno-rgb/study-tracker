@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText } from "lucide-react";
+// 🌟 修正：ChevronLeft を追加インポートしています
+import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
 
@@ -10,7 +11,7 @@ export default function Home() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalTime, setTotalTime] = useState(0);
-const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedPdfs, setSelectedPdfs] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
@@ -27,8 +28,8 @@ const [searchQuery, setSearchQuery] = useState("");
 
   const PRESET_ICONS = [
     "/icons/blue.png", "icons/black.png", "icons/gold.png", "icons/green.png", 
-    "icons/light-blue.png", "icons/orange.png", "icons/purple.png", "icons/red.png", 
-    "icons/silver.png", "icons/yellow.png", "icons/vocabulary-book.png"
+    "/icons/light-blue.png", "icons/orange.png", "icons/purple.png", "icons/red.png", 
+    "/icons/silver.png", "icons/yellow.png", "icons/vocabulary-book.png"
   ];
   const [selectedIconUrl, setSelectedIconUrl] = useState(PRESET_ICONS[0]);
 
@@ -73,7 +74,8 @@ const [searchQuery, setSearchQuery] = useState("");
     if (!isSwiping) return;
     setIsSwiping(false);
     
-    if (swipeOffset < -80) {
+    // 🌟 修正：狭いカードに合わせて、-60px の移動で削除モードになるよう調整
+    if (swipeOffset < -60) {
       setSwipeOffset(-window.innerWidth); 
       setTimeout(() => {
         setDeleteTarget({ id: materialId, title: title });
@@ -109,7 +111,6 @@ const [searchQuery, setSearchQuery] = useState("");
 
     if (diff > 5) {
       if (e.cancelable) e.preventDefault();
-      // 🌟 少し重みをつけて、ネイティブアプリのような吸い付き感にする
       setModalSwipeY(diff * 0.8);
     }
   };
@@ -130,7 +131,7 @@ const [searchQuery, setSearchQuery] = useState("");
       setSelectedMaterial(null);
       setMemoInput("");
       setLastStudiedDate(null);
-      setLastMemo(null); // 🌟 ここが重要！次の教材を開く時に前のメモがチラつくのを防ぐ
+      setLastMemo(null);
       setModalSwipeY(0);
       setModalTouchStartY(0);
       setIsModalClosing(false);
@@ -456,7 +457,6 @@ const [searchQuery, setSearchQuery] = useState("");
       </header>
 
       {/* --- MAIN MATERIAL LIST --- */}
-      {/* --- MAIN MATERIAL LIST --- */}
       <main className="max-w-4xl mx-auto p-5">
         <div className="flex justify-between items-center mb-4 px-1">
           <h2 className={`text-sm font-black tracking-[0.2em] uppercase ${textSub}`}>マイ本棚</h2>
@@ -465,7 +465,6 @@ const [searchQuery, setSearchQuery] = useState("");
           </button>
         </div>
 
-        {/* 🌟 追加：マイ本棚の検索バー */}
         <div className="relative mb-6 px-1">
           <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
             <Search className={`w-4 h-4 ${textSub}`} />
@@ -489,7 +488,6 @@ const [searchQuery, setSearchQuery] = useState("");
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* 🌟 修正：materials ではなく、検索で絞り込んだ結果を .map する */}
             {materials
               .filter(material => material.title.toLowerCase().includes(searchQuery.toLowerCase()))
               .map((material) => {
@@ -497,10 +495,14 @@ const [searchQuery, setSearchQuery] = useState("");
 
               return (
                 <div key={material.id} className="relative h-full">
-                  <div className="absolute inset-0 bg-rose-500 rounded-3xl flex items-center justify-end pr-6">
-                    <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingMaterialId === material.id && swipeOffset < -40 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
-                      <Trash2 className="w-6 h-6 text-white mb-1" />
-                      <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+                  
+                  {/* 🌟 修正：削除エリアの背景色を強調 */}
+                  <div className={`absolute inset-0 rounded-3xl flex items-center justify-end pr-6 overflow-hidden transition-colors duration-300 ${swipingMaterialId === material.id && swipeOffset < -60 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
+                    <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingMaterialId === material.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -60 ? 'scale-125' : 'scale-100'}`}>
+                      <Trash2 className={`w-6 h-6 text-white mb-1 ${swipeOffset < -60 ? 'animate-bounce' : ''}`} />
+                      <span className="text-white text-[10px] font-black tracking-widest">
+                        {swipeOffset < -60 ? '離して削除' : '削除'}
+                      </span>
                     </div>
                   </div>
 
@@ -513,7 +515,8 @@ const [searchQuery, setSearchQuery] = useState("");
                     }}
                     style={{ 
                       transform: swipingMaterialId === material.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', 
-                      transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
+                      opacity: swipingMaterialId === material.id ? Math.max(1 + swipeOffset / 150, 0.3) : 1, // 🌟 引くほど透ける
+                      transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s' 
                     }}
                     className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2
                       ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} 
@@ -524,6 +527,14 @@ const [searchQuery, setSearchQuery] = useState("");
                         : isDarkMode ? 'border-[#38383a]' : 'border-slate-100' 
                       } ${swipingMaterialId === material.id ? 'shadow-2xl' : 'shadow-sm'}`}
                   >
+                    
+                    {/* 🌟 修正：スライドを促すアニメーション付き矢印（スワイプしていない時だけ表示） */}
+                    {swipingMaterialId !== material.id && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 animate-pulse-horizontal pointer-events-none opacity-40">
+                        <ChevronLeft className="w-5 h-5 text-slate-300" />
+                      </div>
+                    )}
+
                     <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none
                       ${hasPdf ? 'border-rose-100' : bgSubCard}`}>
                       {material.image_url ? (
@@ -704,6 +715,18 @@ const [searchQuery, setSearchQuery] = useState("");
         </>
       )}
 
+      {/* 🌟 魔法のアニメーションCSS（マイ本棚用） */}
+      <style jsx global>{`
+        @keyframes pulse-horizontal {
+          0% { transform: translateX(0); opacity: 0.3; }
+          50% { transform: translateX(-5px); opacity: 1; }
+          100% { transform: translateX(0); opacity: 0.3; }
+        }
+        .animate-pulse-horizontal {
+          animation: pulse-horizontal 1.5s ease-in-out infinite;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
     </div>
   );
 }

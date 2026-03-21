@@ -505,7 +505,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 🌟 修正：ヘッダーにユーザーアイコン（サイドバー起動ボタン）を追加 */}
+      {/* 🌟 修正：ヘッダーに鈴ボタン（リマインダー確認）を移植 */}
       <header className={`px-6 py-6 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300 border-b ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
         <div className="flex items-center gap-3">
           <button 
@@ -517,15 +517,25 @@ export default function CalendarPage() {
           <CalendarIcon className="w-6 h-6 text-indigo-500" />
           <h1 className="text-xl font-black italic tracking-tighter text-indigo-500 uppercase">Calendar</h1>
         </div>
-        {googleToken ? (
-          <button onClick={syncAllToGoogle} className="p-2.5 rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all flex items-center gap-2 shadow-sm">
-            <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Googleへ反映</span>
+        <div className="flex items-center gap-2">
+          {/* 🌟 ここに鈴ボタンを追加！ */}
+          <button onClick={() => setShowGlobalReminders(true)} className="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform relative">
+            <Bell className="w-6 h-6 text-slate-400" />
+            {(reminders.length > 0 || events.some(e => e.notify_time && !e.is_completed)) && (
+              <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 rounded-full ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`}></span>
+            )}
           </button>
-        ) : (
-          <button onClick={linkGoogleCalendar} className="p-2.5 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all flex items-center gap-2 shadow-sm">
-            <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Google連携</span>
-          </button>
-        )}
+
+          {googleToken ? (
+            <button onClick={syncAllToGoogle} className="p-2.5 rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all flex items-center gap-2 shadow-sm">
+              <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Googleへ反映</span>
+            </button>
+          ) : (
+            <button onClick={linkGoogleCalendar} className="p-2.5 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all flex items-center gap-2 shadow-sm">
+              <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Google連携</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="max-w-md mx-auto p-5 space-y-6">
