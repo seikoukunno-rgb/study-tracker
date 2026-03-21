@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { 
   Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, 
   History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft,
-  Menu, ChevronRight, Sun, Moon // 🌟 追加インポート
+  Menu, ChevronRight, Sun, Moon
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
+
 export default function Home() {
   const router = useRouter();
   const [materials, setMaterials] = useState<any[]>([]);
@@ -35,30 +36,29 @@ export default function Home() {
   ];
   const [selectedIconUrl, setSelectedIconUrl] = useState(PRESET_ICONS[0]);
 
-  // 教材（マイ本棚）のスワイプ削除用State
+  // --- 教材（マイ本棚）のスワイプ削除用State ---
   const [swipingMaterialId, setSwipingMaterialId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
-  const [showSidebar, setShowSidebar] = useState(false);
   
-  // 削除モーダル用のState
+  // --- 削除モーダル用のState ---
   const [deleteTarget, setDeleteTarget] = useState<{id: string, title: string} | null>(null);
 
-  // 学習記録モーダルの下スワイプクローズ用State
+  // --- 学習記録モーダルの下スワイプクローズ用State ---
   const [modalTouchStartY, setModalTouchStartY] = useState(0);
   const [modalSwipeY, setModalSwipeY] = useState(0);
   const [isModalClosing, setIsModalClosing] = useState(false);
 
   // ==========================================
-  // 🌟 ステップ A：サイドバー用のStateとタッチ処理
+  // 🌟 共通サイドバー呼び出し用の処理（これだけでOK）
   // ==========================================
-
   const sidebarStartX = useRef<number | null>(null);
 
-  const handleEdgeTouchStart = (e: React.TouchEvent) => {  sidebarStartX.current = e.touches[0].clientX; 
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
+    sidebarStartX.current = e.touches[0].clientX; 
   };
- const handleEdgeTouchMove = (e: React.TouchEvent) => { 
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { 
     if (sidebarStartX.current === null) return;
     const diffX = e.touches[0].clientX - sidebarStartX.current;
     // 左端から50px以上右へスワイプされたら共通サイドバーを開く命令を送る
@@ -67,7 +67,9 @@ export default function Home() {
       sidebarStartX.current = null; // 連続発火防止
     }
   };
-  const handleEdgeTouchEnd = () => { sidebarStartX.current = null; };
+  const handleEdgeTouchEnd = () => { 
+    sidebarStartX.current = null; 
+  };
   // ==========================================
 
   const handleMaterialTouchStart = (e: React.TouchEvent, materialId: string) => {
@@ -126,10 +128,8 @@ export default function Home() {
 
   const handleModalTouchMove = (e: React.TouchEvent) => {
     if (modalTouchStartY === 0) return;
-    
     const currentY = e.touches[0].clientY;
     const diff = currentY - modalTouchStartY;
-
     if (diff > 5) {
       if (e.cancelable) e.preventDefault();
       setModalSwipeY(diff * 0.8);
@@ -341,39 +341,7 @@ export default function Home() {
 
   return (
     <div className={`min-h-screen pb-24 font-sans transition-colors duration-300 ${bgPage}`}>
-      {/* 🌟 1. スワイプ検知用の透明エリア (画面左端) */}
-      <div
-        onTouchStart={handleEdgeTouchStart}
-        onTouchMove={handleEdgeTouchMove}
-        className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
-      />
-
-      {/* 🌟 2. 付箋風のタブボタン (元々のサイドバーを呼び出す) */}
-     {!showSidebar && (
-        <div
-          onTouchStart={handleEdgeTouchStart}
-          onTouchMove={handleEdgeTouchMove}
-          onTouchEnd={handleEdgeTouchEnd}
-          className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
-        />
-      )}
-
-      {/* 🌟 2. 洗練されたスライドインジケータ兼Menuボタン (邪魔にならないマーク) */}
-      <button
-        onClick={() => { window.dispatchEvent(new Event('openSidebar')); setShowSidebar(true); }}
-        style={{ transform: showSidebar ? 'translateX(-100%)' : 'translateX(0)' }}
-        className="fixed left-0 top-32 z-[110] group transition-transform duration-300 ease-in-out active:scale-95"
-      >
-        {/* インジケータバー */}
-        <div className="bg-indigo-600 text-white h-24 w-12 pl-2 pr-1 rounded-r-3xl shadow-xl flex items-center justify-between border-y border-r border-indigo-400 group-hover:pl-4 transition-all">
-          <Menu className="w-5 h-5" />
-          {/* スライドマーク（アニメーションする矢印） */}
-          <div className="flex flex-col items-center gap-0.5 animate-swipe-indicator">
-            <ChevronRight className="w-4 h-4 opacity-70" />
-            <ChevronRight className="w-3 h-3 opacity-40 -mt-2" />
-          </div>
-        </div>
-      </button>
+      
       {showSuccess && (
         <div className="fixed bottom-24 left-4 right-4 z-[100] bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between animate-in fade-in slide-in-from-bottom duration-500">
           <div className="flex items-center gap-3">
@@ -499,10 +467,8 @@ export default function Home() {
       )}
 
       {/* --- HEADER --- */}
-      {/* --- HEADER --- */}
       <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors`}>
         <div className="flex items-center gap-3">
-          {/* 🌟 【削除】ヘッダー内の元のMenuボタンを削除 */}
           <h1 className={`text-xl font-black italic tracking-tighter ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
             STUDY TRACKER
           </h1>
@@ -740,29 +706,28 @@ export default function Home() {
       )}
 
       {/* =========================================================
-          🌟 画面左端の「付箋風」メニュータブ ＆ サイドバー本体
+          🌟 共通サイドバー呼び出しエリア（スワイプ＆ボタン）
       ========================================================= */}
       
-{/* 🌟 1. スワイプ検知用の透明エリア (画面左端) */}
+      {/* 1. スワイプ検知用の透明エリア (画面左端) */}
       <div
         onTouchStart={handleEdgeTouchStart}
         onTouchMove={handleEdgeTouchMove}
-        className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
+        onTouchEnd={handleEdgeTouchEnd}
+        className="fixed top-0 left-0 bottom-0 w-8 z-[50]"
       />
 
-      {/* 🌟 2. スライドできることがわかるインジケータ (邪魔にならないマーク) */}
+      {/* 2. 邪魔にならないスライドインジケータ兼Menuボタン */}
       <button
         onClick={() => window.dispatchEvent(new Event('openSidebar'))}
-        className="fixed left-0 top-32 z-[110] bg-indigo-600/90 text-white h-20 w-8 rounded-r-2xl shadow-lg flex flex-col items-center justify-center transition-all active:scale-90 border-y border-r border-indigo-400 group"
+        className="fixed left-0 top-32 z-[40] bg-indigo-600/90 text-white h-20 w-8 rounded-r-2xl shadow-lg flex flex-col items-center justify-center transition-all active:scale-90 border-y border-r border-indigo-400 group"
       >
         <Menu className="w-4 h-4 mb-1" />
-        {/* 手招きするように動く矢印マーク */}
         <div className="flex flex-col items-center -space-y-2 animate-pulse-horizontal">
           <ChevronRight className="w-4 h-4 opacity-80" />
           <ChevronRight className="w-3 h-3 opacity-40" />
         </div>
       </button>
-
 
       {/* 🌟 魔法のアニメーションCSS（マイ本棚用） */}
       <style jsx global>{`
@@ -775,8 +740,6 @@ export default function Home() {
           animation: pulse-horizontal 1.5s ease-in-out infinite;
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes swipe-indicator { 0%, 100% { transform: translateX(0); opacity: 0.6; } 50% { transform: translateX(3px); opacity: 1; } }
-.animate-swipe-indicator { animation: swipe-indicator 1.2s ease-in-out infinite; }
       `}</style>
     </div>
   );
