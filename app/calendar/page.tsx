@@ -5,7 +5,8 @@ import { supabase } from "../../lib/supabase";
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
-  ChevronDown, ChevronUp, X, Minus, RefreshCcw, Calendar, AlertCircle, ChevronRight as ChevronRightIcon
+  ChevronDown, ChevronUp, X, Minus, RefreshCcw, ChevronRight as ChevronRightIcon,
+  User, Sun, Moon // 🌟 サイドバー用にアイコンを追加
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -19,7 +20,7 @@ type Event = {
 };
 
 export default function CalendarPage() {
-  const router = useRouter(); // 🌟 ルーティング用に追加
+  const router = useRouter(); 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -53,6 +54,14 @@ export default function CalendarPage() {
   const [remindHour, setRemindHour] = useState<number>(9);     
   const [remindMinute, setRemindMinute] = useState<number>(0); 
 
+  // 🌟 追加：サイドバー＆リマインダー確認用State
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showGlobalReminders, setShowGlobalReminders] = useState(false);
+  const [sidebarOffset, setSidebarOffset] = useState(0);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const sidebarStartX = useRef<number | null>(null);
+  const [userName, setUserName] = useState("ユーザー");
+
   const isMounted = useRef(true);
 
   const notifyOptionsList = [
@@ -72,6 +81,7 @@ export default function CalendarPage() {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.provider_token) setGoogleToken(session.provider_token);
+      if (session?.user?.user_metadata?.name) setUserName(session.user.user_metadata.name);
     };
     getSession();
 
@@ -92,13 +102,61 @@ export default function CalendarPage() {
     };
   }, []);
 
+  // 🌟 追加：スマホへのプッシュ通知（Notification API）処理
+  useEffect(() => {
+    // 通知の許可を求める
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    
+    const checkReminders = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const now = new Date();
+      
+      const { data: activeReminders } = await supabase.from('reminders').select('*').eq('student_id', user.id);
+      if (!activeReminders || activeReminders.length === 0) return;
+
+      activeReminders.forEach(async (reminder) => {
+        const remindTime = new Date(reminder.remind_at);
+        const diffMinutes = (now.getTime() - remindTime.getTime()) / (1000 * 60);
+
+        const notifiedKey = `notified_${reminder.id}`;
+        
+        // 🌟 時間ぴったり〜1分過ぎの間で、まだ通知していなければスマホに通知を送る
+        if (diffMinutes >= 0 && diffMinutes < 1 && !localStorage.getItem(notifiedKey)) {
+          if (Notification.permission === "granted") {
+            new Notification("STUDY TRACKER", { 
+              body: `📚 ${reminder.title} の時間です！学習を始めましょう！`, 
+              icon: "/favicon.ico" 
+            });
+            localStorage.setItem(notifiedKey, "true");
+          }
+        }
+        
+        // 🌟 通知から30分経過したら、自動的にデータベースから削除して掃除する
+        if (diffMinutes >= 30) {
+          await supabase.from('reminders').delete().eq('id', reminder.id);
+          localStorage.removeItem(notifiedKey);
+          setReminders(prev => prev.filter(r => r.id !== reminder.id));
+        }
+      });
+    };
+
+    // 1分ごとに通知時間をチェックする
+    const intervalId = setInterval(checkReminders, 60000);
+    checkReminders(); // 初回起動時にも1回チェック
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
   const fetchData = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: eventsData } = await supabase.from('calendar_events').select('*').eq('student_id', user.id);
       const { data: matsData } = await supabase.from('materials').select('*').eq('student_id', user.id).order('created_at', { ascending: false });
-      const { data: remindersData } = await supabase.from('reminders').select('*'); 
+      const { data: remindersData } = await supabase.from('reminders').select('*').eq('student_id', user.id); 
       if (isMounted.current) {
         if (eventsData) setEvents(eventsData.map(d => ({ ...d, event_type: d.event_type as "task" | "exam" })));
         if (matsData) setMaterials(matsData);
@@ -394,6 +452,15 @@ export default function CalendarPage() {
     }
   };
 
+  // --- 🌟 サイドバーのスワイプ処理 ---
+  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
+  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
+  const handleEdgeTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX > 0 && diffX < 300) setSidebarOffset(diffX); };
+  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
+
+  // --- カレンダーのスワイプ処理 ---
   const handleTouchStart = (e: React.TouchEvent) => { setTouchEnd(null); setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }); };
   const handleTouchMove = (e: React.TouchEvent) => { setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY }); };
   const handleTouchEnd = (id: string) => {
@@ -427,8 +494,15 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* 🌟 修正：ヘッダーにユーザーアイコン（サイドバー起動ボタン）を追加 */}
       <header className={`px-6 py-6 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300 border-b ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowProfileMenu(true)} 
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center active:scale-90 transition-all border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}
+          >
+            <User className="w-6 h-6 text-slate-400" />
+          </button>
           <CalendarIcon className="w-6 h-6 text-indigo-500" />
           <h1 className="text-xl font-black italic tracking-tighter text-indigo-500 uppercase">Calendar</h1>
         </div>
@@ -494,7 +568,6 @@ export default function CalendarPage() {
                 const mat = materials.find(m => m.title === event.title);
                 const matImageUrl = mat?.image_url;
 
-                // 🌟 通知の具体的な時間をフォーマット
                 let notifyTimeDisplay = "通知設定済み";
                 if (event.notify_time) {
                   const nDate = new Date(event.notify_time);
@@ -506,7 +579,6 @@ export default function CalendarPage() {
                 return (
                   <div key={event.id} className={`relative rounded-2xl overflow-hidden mb-3 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`}>
                     
-                    {/* 裏側のメニュー */}
                     <div className="absolute right-0 top-0 bottom-0 w-[160px] flex">
                       <button 
                         onClick={() => setEventToDelete(event.id)} 
@@ -529,7 +601,6 @@ export default function CalendarPage() {
                       </button>
                     </div>
 
-                    {/* 前面のカード（🌟 押しやすさとルーティングの追加） */}
                     <div 
                       onTouchStart={handleTouchStart} 
                       onTouchMove={handleTouchMove} 
@@ -539,7 +610,6 @@ export default function CalendarPage() {
                           setSwipedEventId(null);
                           return;
                         }
-                        // 🌟 クリック時に、関連する教材があればホーム画面のモーダルへジャンプ
                         if (mat) {
                           router.push(`/?record=${mat.id}`);
                         }
@@ -553,7 +623,6 @@ export default function CalendarPage() {
                       <div className="flex items-center gap-4 flex-1 pointer-events-none">
                         {event.event_type === "task" ? (
                           <div className="flex items-center gap-3">
-                            {/* 🌟 チェック丸ボタンを大きく、押しやすくする */}
                             <button 
                               onClick={(e) => { e.stopPropagation(); toggleComplete(event); }} 
                               className="pointer-events-auto shrink-0 p-2 -ml-2 active:scale-90 transition-transform"
@@ -584,7 +653,6 @@ export default function CalendarPage() {
                           </div>
 
                           <div className="flex items-center gap-2 mt-1 pointer-events-auto">
-                            {/* 🌟 「通知設定済み」を具体的な時間表記に変更 */}
                             {event.notify_time && (
                               <p className={`text-[10px] font-bold flex items-center gap-1 ${event.is_completed ? 'text-slate-400' : 'text-indigo-400'}`}>
                                 <Bell className="w-3 h-3" /> {notifyTimeDisplay}
@@ -594,7 +662,6 @@ export default function CalendarPage() {
                         </div>
                       </div>
                       
-                      {/* 🌟 押せる感を示す矢印アイコン */}
                       {mat && (
                         <ChevronRightIcon className="w-5 h-5 text-slate-300 shrink-0 pointer-events-none" />
                       )}
@@ -612,9 +679,109 @@ export default function CalendarPage() {
       </main>
 
       {/* ========================================== */}
-      {/* 🌟 画面全体に被せるモーダル群 */}
+      {/* 🌟 画面全体に被せるモーダル・メニュー群 */}
       {/* ========================================== */}
 
+      {/* 🌟 追加：サイドバー（プロフィールメニュー） */}
+      <>
+        <div 
+          className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
+          onClick={() => setShowProfileMenu(false)}
+        ></div>
+          
+        <div 
+          onTouchStart={handleSidebarMenuTouchStart}
+          onTouchMove={handleSidebarMenuTouchMove}
+          onTouchEnd={handleSidebarMenuTouchEnd}
+          style={{ 
+            transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`,
+            transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
+          }}
+          className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+        >
+          <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
+            <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-4 h-4" /></button>
+            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-indigo-900/40 overflow-hidden shrink-0">
+              <User className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black leading-tight line-clamp-1">{userName}</h2>
+          </div> 
+          
+          <div className="flex-grow p-6 overflow-y-auto"> 
+            <div className="space-y-1">
+              <div className="text-[10px] font-black text-slate-400 mb-4 tracking-[0.2em] uppercase px-2">Essential Tools</div>
+              
+              <button onClick={() => {
+                const newMode = !isDarkMode;
+                setIsDarkMode(newMode);
+                localStorage.setItem('dark_mode', newMode.toString());
+                document.body.style.backgroundColor = newMode ? '#0a0a0a' : '#f8fafc';
+                window.dispatchEvent(new Event('darkModeChanged'));
+              }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">
+                    {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
+                  </div>
+                  <span className={`text-sm font-black ${textMain}`}>ダークモード</span>
+                </div>
+              </button>
+
+              <button onClick={() => { setShowGlobalReminders(true); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400"><Bell className="w-5 h-5" /></div>
+                  <span className={`text-sm font-black ${textMain}`}>リマインダー確認</span>
+                </div>
+              </button>
+            </div>
+          </div> 
+        </div> 
+
+        {!showProfileMenu && (
+          <div 
+            onTouchStart={handleEdgeTouchStart}
+            onTouchMove={handleEdgeTouchMove}
+            onTouchEnd={handleEdgeTouchEnd}
+            className="fixed top-0 left-0 bottom-0 w-5 z-[90]" 
+          />
+        )}
+      </>
+
+      {/* 🌟 追加：リマインダー確認モーダル */}
+      {showGlobalReminders && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] animate-in fade-in duration-200" onClick={() => setShowGlobalReminders(false)}></div>
+          <div className={`fixed top-24 right-4 w-[85%] max-w-xs ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[501] rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300`}>
+            <div className={`flex justify-between items-center mb-4 border-b pb-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
+              <h3 className={`text-sm font-black flex items-center gap-2 ${textMain}`}><Bell className="w-4 h-4 text-indigo-500"/> 設定中の通知</h3>
+              <button onClick={() => setShowGlobalReminders(false)} className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
+            </div>
+            {reminders.length === 0 ? (
+              <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されている通知はありません</p>
+            ) : (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {reminders.map((rem) => (
+                  <div key={rem.id} className={`flex items-center justify-between p-3 rounded-2xl border mb-2 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-slate-50 border-slate-100'}`}>
+                     <div className="flex-1 pr-2">
+                       <p className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{rem.title}</p>
+                       <p className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 inline-block px-2 py-0.5 rounded-md">
+                         {new Date(rem.remind_at).toLocaleTimeString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                       </p>
+                     </div>
+                     <button onClick={async () => {
+                       await supabase.from('reminders').delete().eq('id', rem.id);
+                       setReminders(prev => prev.filter(r => r.id !== rem.id));
+                     }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
+                       <Trash2 className="w-4 h-4" />
+                     </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 削除確認モーダル */}
       {eventToDelete && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400]" onClick={() => setEventToDelete(null)}></div>
@@ -630,6 +797,7 @@ export default function CalendarPage() {
         </>
       )}
 
+      {/* 予定追加モーダル */}
       {showAddModal && (
         <>
           <div className="fixed inset-0 bg-black/60 z-[200]" onClick={() => setShowAddModal(false)}></div>
@@ -708,6 +876,7 @@ export default function CalendarPage() {
         </>
       )}
 
+      {/* ===== 🌟 新・オリジナルUI搭載 リマインダー設定モーダル ===== */}
       {showReminderModal && selectedReminderTask && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowReminderModal(false)} />
