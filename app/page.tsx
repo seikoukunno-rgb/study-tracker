@@ -53,14 +53,8 @@ export default function Home() {
   // ==========================================
   // 🌟 ステップ A：サイドバー用のStateとタッチ処理
   // ==========================================
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [sidebarOffset, setSidebarOffset] = useState(0);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
-  const sidebarStartX = useRef<number | null>(null);
 
-  const handleSidebarMenuTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; setIsDraggingSidebar(true); };
-  const handleSidebarMenuTouchMove = (e: React.TouchEvent) => { if (!isDraggingSidebar || sidebarStartX.current === null) return; const diffX = e.touches[0].clientX - sidebarStartX.current; if (diffX < 0) setSidebarOffset(diffX); };
-  const handleSidebarMenuTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset < -100) setShowProfileMenu(false); setSidebarOffset(0); sidebarStartX.current = null; };
+  const sidebarStartX = useRef<number | null>(null);
 
   const handleEdgeTouchStart = (e: React.TouchEvent) => {  sidebarStartX.current = e.touches[0].clientX; 
   };
@@ -73,7 +67,7 @@ export default function Home() {
       sidebarStartX.current = null; // 連続発火防止
     }
   };
-  const handleEdgeTouchEnd = () => { setIsDraggingSidebar(false); if (sidebarOffset > 80) setShowProfileMenu(true); setSidebarOffset(0); sidebarStartX.current = null; };
+  const handleEdgeTouchEnd = () => { sidebarStartX.current = null; };
   // ==========================================
 
   const handleMaterialTouchStart = (e: React.TouchEvent, materialId: string) => {
@@ -749,62 +743,26 @@ export default function Home() {
           🌟 画面左端の「付箋風」メニュータブ ＆ サイドバー本体
       ========================================================= */}
       
-      {/* 1. スワイプ検知用の透明エリア */}
-      {!showProfileMenu && (
-        <div
-          onTouchStart={handleEdgeTouchStart}
-          onTouchMove={handleEdgeTouchMove}
-          onTouchEnd={handleEdgeTouchEnd}
-          className="fixed top-0 left-0 bottom-0 w-6 z-[90]"
-        />
-      )}
+{/* 🌟 1. スワイプ検知用の透明エリア (画面左端) */}
+      <div
+        onTouchStart={handleEdgeTouchStart}
+        onTouchMove={handleEdgeTouchMove}
+        className="fixed top-0 left-0 bottom-0 w-8 z-[100]"
+      />
 
-      {/* 2. 付箋風のタブボタン */}
+      {/* 🌟 2. スライドできることがわかるインジケータ (邪魔にならないマーク) */}
       <button
-        onClick={() => setShowProfileMenu(true)}
-        style={{ transform: showProfileMenu ? 'translateX(-100%)' : 'translateX(0)' }}
-        className="fixed left-0 top-24 z-[90] bg-indigo-600 text-white py-3 pl-1 pr-2 rounded-r-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center transition-transform duration-300 opacity-90 hover:opacity-100 hover:pr-3 active:scale-95"
+        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        className="fixed left-0 top-32 z-[110] bg-indigo-600/90 text-white h-20 w-8 rounded-r-2xl shadow-lg flex flex-col items-center justify-center transition-all active:scale-90 border-y border-r border-indigo-400 group"
       >
-        <Menu className="w-5 h-5" />
-        <ChevronRight className="w-4 h-4 -ml-1 opacity-70" />
+        <Menu className="w-4 h-4 mb-1" />
+        {/* 手招きするように動く矢印マーク */}
+        <div className="flex flex-col items-center -space-y-2 animate-pulse-horizontal">
+          <ChevronRight className="w-4 h-4 opacity-80" />
+          <ChevronRight className="w-3 h-3 opacity-40" />
+        </div>
       </button>
 
-      {/* 3. サイドバー本体 */}
-      <div 
-        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
-        onClick={() => setShowProfileMenu(false)} 
-      />
-      <div
-        onTouchStart={handleSidebarMenuTouchStart}
-        onTouchMove={handleSidebarMenuTouchMove}
-        onTouchEnd={handleSidebarMenuTouchEnd}
-        style={{
-          transform: showProfileMenu ? `translateX(${sidebarOffset}px)` : `translateX(calc(-100% + ${sidebarOffset}px))`,
-          transition: isDraggingSidebar ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
-        }}
-        className={`fixed top-0 left-0 bottom-0 w-[80%] max-w-[300px] z-[401] shadow-2xl flex flex-col rounded-r-[2.5rem] overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
-      >
-        <div className="p-8 bg-gradient-to-br from-indigo-600 to-blue-800 text-white relative shrink-0">
-          <button onClick={() => setShowProfileMenu(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X className="w-4 h-4" /></button>
-          <h2 className="text-xl font-black mt-4">MENU</h2>
-        </div>
-        <div className="flex-grow p-6 overflow-y-auto">
-          {/* ダークモード切り替えボタン */}
-          <button 
-            onClick={() => {
-              const newMode = !isDarkMode;
-              setIsDarkMode(newMode);
-              localStorage.setItem('dark_mode', newMode.toString());
-              document.body.style.backgroundColor = newMode ? '#0a0a0a' : '#f8fafc';
-              window.dispatchEvent(new Event('darkModeChanged'));
-            }} 
-            className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            {isDarkMode ? <Sun className="text-amber-400 w-5 h-5"/> : <Moon className="w-5 h-5 text-slate-500"/>}
-            <span className={`text-sm font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ダークモード</span>
-          </button>
-        </div>
-      </div>
 
       {/* 🌟 魔法のアニメーションCSS（マイ本棚用） */}
       <style jsx global>{`
