@@ -21,10 +21,10 @@ function ReportContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<"record" | "timeline">("timeline");
   
-  // 🌟 追加：期間フィルター用のState
-  // 🌟 追加：期間フィルター用のState（olderを追加）
-  const [timeFilter, setTimeFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
-  // 🌟 追加：教材検索用のState
+  // 🌟 修正：期間フィルターを「RECORD用」と「TIMELINE用」に完全分離！
+  const [recordFilter, setRecordFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "today" | "yesterday" | "older">("all");
+  
   const [materialSearchQuery, setMaterialSearchQuery] = useState("");
 
   const [filterSubject, setFilterSubject] = useState<string>("all");
@@ -74,6 +74,7 @@ function ReportContent() {
   const [swipingLogId, setSwipingLogId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  // 🌟 RECORD用とTIMELINE用のフィルターを分ける
 
   // 🌟 追加：画面全体のスワイプタブ切り替え用
   const [mainTouchStart, setMainTouchStart] = useState<{ x: number, y: number } | null>(null);
@@ -490,39 +491,40 @@ function ReportContent() {
     ...logs.map(log => log.materials?.title || log.subject || "名称未設定")
   ]));
 
-  // 🌟 追加：期間フィルターのロジック
-  const getFilteredLogs = () => {
+// 🌟 ① TIMELINEタブ用の絞り込み関数（timelineFilterを使用）
+  const getFilteredTimelineLogs = () => {
     let filtered = logs;
-    
-    // 教材フィルター
     if (filterSubject !== "all") {
-      filtered = filtered.filter(log => (log.materials?.title || log.subject || "名称未設定") === filterSubject);
+      filtered = filtered.filter(l => (l.materials?.title || l.subject || "その他") === filterSubject);
     }
     
-    // 期間フィルター
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-if (timeFilter === "today") {
-      filtered = filtered.filter(log => new Date(log.created_at) >= today);
-    } else if (timeFilter === "yesterday") {
-      filtered = filtered.filter(log => {
-        const logDate = new Date(log.created_at);
-        return logDate >= yesterday && logDate < today;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (timelineFilter === "today") {
+      filtered = filtered.filter(l => new Date(l.created_at) >= today);
+    } else if (timelineFilter === "yesterday") {
+      filtered = filtered.filter(l => {
+        const d = new Date(l.created_at);
+        return d >= yesterday && d < today;
       });
-    } else if (timeFilter === "older") {
-      // 🌟 追加：「3日以上前」の判定（一昨日の0:00より前のデータ）
+    } else if (timelineFilter === "older") {
       const boundary = new Date(today);
-      boundary.setDate(boundary.getDate() - 2); 
-      filtered = filtered.filter(log => new Date(log.created_at) < boundary);
+      boundary.setDate(boundary.getDate() - 2);
+      filtered = filtered.filter(l => new Date(l.created_at) < boundary);
     }
-    
     return filtered;
   };
-  const filteredLogs = getFilteredLogs();
 
+  // 🌟 ② RECORDタブ（教材リスト）用の検索・絞り込み関数
+  const getFilteredMaterialSummary = () => {
+    return allSubjects.filter(title => {
+      const matchesSearch = title.toLowerCase().includes(materialSearchQuery.toLowerCase());
+      // 学習履歴が1件以上あるものだけを残す（未学習を隠す）
+      const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "その他") === title);
+      return materialLogs.length > 0 && matchesSearch;
+    });
+  };
   const formatTimeForChart = (minutes: number) => {
     if (!minutes || minutes === 0) return "0分";
     if (minutes < 60) return `${minutes}分`;
@@ -934,361 +936,369 @@ if (timeFilter === "today") {
         </div>
       </header>
 
-      <main className="p-4 space-y-6">
+<main className="w-full overflow-x-hidden pb-10 pt-4">
         {isLoading ? (
           <div className={`text-center py-20 font-black tracking-[0.3em] ${textSub}`}>FETCHING...</div>
-        ) : activeTab === "record" ? (
-          <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+        ) : (
+          <div 
+            className="flex w-[200%] transition-transform duration-500 ease-out items-start"
+            style={{ transform: activeTab === "record" ? "translateX(0)" : "translateX(-50%)" }}
+          >
             
-            <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className={`text-[10px] font-black tracking-[0.2em] uppercase ${textSub}`}>Study Trend</h3>
-                <div className={`flex p-1 rounded-xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                  <button onClick={() => setChartRange("week")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "week" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>週</button>
-                  <button onClick={() => setChartRange("month")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "month" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>月</button>
-                </div>
-              </div>
-
-              <div className="relative h-48 flex">
-                <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
-                  {[maxChartVal, Math.round(maxChartVal * 0.75), Math.round(maxChartVal * 0.5), Math.round(maxChartVal * 0.25), 0].map((val, idx) => (
-                    <div key={idx} className="flex items-center w-full">
-                      <span className="w-12 text-right pr-2 shrink-0">{formatTimeForChart(val)}</span>
-                      <div className={`flex-grow border-t border-dashed h-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}></div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex-1 flex items-end justify-between gap-2 ml-14 pb-6 relative z-10 h-full">
-                  {chartData.map((data, i) => (
-                    <div key={i} className="flex flex-col items-center flex-1 h-full justify-end relative">
-                      <div className={`w-full ${chartRange === "month" ? "max-w-[32px]" : "max-w-[20px]"} flex flex-col-reverse justify-start items-center h-full ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50/50'}`}>
-                        {data.segments.map((seg: any, idx: number) => (
-                          <div key={idx} className="w-full transition-all" style={{ height: `${seg.heightPercent}%`, backgroundColor: seg.color }}></div>
-                        ))}
-                      </div>
-                      <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${textSub}`}>{data.date}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-              <h3 className={`text-[10px] font-black mb-8 tracking-[0.2em] uppercase ${textSub}`}>Distribution</h3>
-              <div className="flex flex-col items-center gap-8">
-                <div className={`w-44 h-44 rounded-full relative flex items-center justify-center border-4 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-slate-50'}`} style={{ background: `conic-gradient(${pieData.map((d, i) => {
-                  const start = pieData.slice(0, i).reduce((s, x) => s + x.percentage * 3.6, 0);
-                  const end = start + d.percentage * 3.6;
-                  return `${d.color} ${start}deg ${end}deg`;
-                }).join(", ")})` }}>
-                  <div className={`w-28 h-28 rounded-full flex items-center justify-center shadow-inner ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
-                    <BookOpen className={`w-8 h-8 ${isDarkMode ? 'text-slate-800' : 'text-slate-100'}`} />
+            {/* =================================================================
+                左側：RECORD（レポート）タブ
+            ================================================================= */}
+            <div className={`w-1/2 px-4 space-y-6 transition-opacity duration-300 ${activeTab === "record" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+              
+              <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className={`text-[10px] font-black tracking-[0.2em] uppercase ${textSub}`}>Study Trend</h3>
+                  <div className={`flex p-1 rounded-xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                    <button onClick={() => setChartRange("week")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "week" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>週</button>
+                    <button onClick={() => setChartRange("month")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "month" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>月</button>
                   </div>
                 </div>
-                <div className="w-full space-y-3">
-                  {pieData.map((d, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs font-black">
-                      <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></span><span className={`line-clamp-1 ${textMain}`}>{d.title}</span></div>
-                      <span className={textSub}>{Math.round(d.percentage)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
 
-<div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-              <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
-              
-              {/* 🌟 追加：RECORDタブにも「今日・昨日・すべて」のフィルターボタンを設置 */}
-              <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto mb-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                {[
-                  { id: "all", label: "すべて" },
-                  { id: "today", label: "今日" },
-                  { id: "yesterday", label: "昨日" }
-                ].map(f => (
-                  <button 
-                    key={f.id}
-                    onClick={() => setTimeFilter(f.id as any)} 
-                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${timeFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* 検索バー */}
-              <div className="relative mb-6">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                  <Search className={`w-4 h-4 ${textSub}`} />
-                </div>
-                <input
-                  type="text"
-                  value={materialSearchQuery}
-                  onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                  placeholder="教材を検索..."
-                  className={`w-full pl-10 pr-4 py-3 rounded-2xl text-sm font-bold outline-none transition-all border ${isDarkMode ? 'bg-black/20 border-[#38383a] focus:border-indigo-500 text-white' : 'bg-slate-50 border-slate-200 focus:border-indigo-400 text-slate-800'}`}
-                />
-              </div>
-
-              <div className="space-y-4 overflow-hidden">
-                {allSubjects
-                  .filter(title => {
-                    const matchesSearch = (title as string).toLowerCase().includes(materialSearchQuery.toLowerCase());
-                    const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
-                    
-                    // 🌟 1. 未学習（ログ0件）を除外 ＆ 検索キーワード一致
-                    if (!matchesSearch || materialLogs.length === 0) return false;
-
-                    // 🌟 2. 期間フィルターの判定（最終学習日ベース）
-                    const lastLog = materialLogs[0]; // ログは新しい順なので0番目が最新
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const yesterday = new Date(today);
-                    yesterday.setDate(yesterday.getDate() - 1);
-
-                    if (timeFilter === "today") {
-                      return new Date(lastLog.created_at) >= today;
-                    } else if (timeFilter === "yesterday") {
-                      const logDate = new Date(lastLog.created_at);
-                      return logDate >= yesterday && logDate < today;
-                    }
-                    
-                    return true; // timeFilter === "all"
-                  })
-                  .map(title => {                  const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
-                  const totalMinutes = materialLogs.reduce((sum, l) => sum + l.duration_minutes, 0);
-                  const lastLog = materialLogs[0];
-                  
-                  let imageUrl = rawMats.find(m => m.title === title)?.image_url;
-                  if (!imageUrl) imageUrl = materialLogs.find(l => l.materials?.image_url)?.materials?.image_url;
-                  
-                  const activeReminders = reminders[title as string] || [];
-                  
-                  let daysAgoText = "未学習";
-                  let badgeClass = isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500";
-                  if (lastLog) {
-                    const diffTime = Math.abs(new Date().getTime() - new Date(lastLog.created_at).getTime());
-                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    if (diffDays === 0) { daysAgoText = "今日"; badgeClass = isDarkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"; }
-                    else if (diffDays === 1) { daysAgoText = "昨日"; badgeClass = isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"; }
-                    else { daysAgoText = `${diffDays}日前`; }
-                  }
-
-                  return (
-                    <div key={title as string} className={`relative rounded-2xl overflow-hidden bg-indigo-500`}>
-                      
-                      <div className="absolute inset-0 flex items-center justify-end pr-5">
-                        <button 
-                           onClick={() => {
-                             setSwipedSubject(null);
-                             setReminderSubject(title as string);
-                             setReminderDateTime("");
-                             setShowReminderSetup(true);
-                           }}
-                           className="flex flex-col items-center justify-center p-3 bg-white/20 hover:bg-white/30 rounded-2xl text-white transition-colors"
-                        >
-                          <Bell className="w-5 h-5 mb-1" />
-                          <span className="text-[8px] font-black tracking-widest">リマインド</span>
-                        </button>
+                <div className="relative h-48 flex">
+                  <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                    {[maxChartVal, Math.round(maxChartVal * 0.75), Math.round(maxChartVal * 0.5), Math.round(maxChartVal * 0.25), 0].map((val, idx) => (
+                      <div key={idx} className="flex items-center w-full">
+                        <span className="w-12 text-right pr-2 shrink-0">{formatTimeForChart(val)}</span>
+                        <div className={`flex-grow border-t border-dashed h-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}></div>
                       </div>
-
-                      <div 
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={() => handleTouchEnd(title as string)}
-                        onClick={() => { if (swipedSubject === title) setSwipedSubject(null); }}
-                        className={`relative flex items-center justify-between p-4 border transition-transform duration-300 ease-out ${swipedSubject === title ? '-translate-x-24' : 'translate-x-0'} ${bgSubCard}`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-16 rounded-lg border flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-200'}`}>
-                            {imageUrl ? <img src={imageUrl} alt={title as string} className="w-full h-full object-cover pointer-events-none" /> : <Book className={`w-6 h-6 pointer-events-none ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />}
-                          </div>
-                          <div className="pointer-events-none">
-                            <h4 className={`text-sm font-black line-clamp-1 mb-1 ${textMain}`}>{title as string}</h4>
-                            <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
-                              <span className={`px-2 py-0.5 rounded-md ${badgeClass}`}>{daysAgoText}</span>
-                              <span className={`flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> 累計</span>
-                              <FormatDurationJSX minutes={totalMinutes} />
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
-                          {activeReminders.map((timeIso, idx) => (
-                            <span key={idx} className={`text-[9px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 pointer-events-none ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'text-indigo-600 bg-indigo-50 border-indigo-100'}`}>
-                              <Bell className="w-2.5 h-2.5" /> {getCountdownDisplay(timeIso)}
-                            </span>
+                    ))}
+                  </div>
+                  <div className="flex-1 flex items-end justify-between gap-2 ml-14 pb-6 relative z-10 h-full">
+                    {chartData.map((data, i) => (
+                      <div key={i} className="flex flex-col items-center flex-1 h-full justify-end relative">
+                        <div className={`w-full ${chartRange === "month" ? "max-w-[32px]" : "max-w-[20px]"} flex flex-col-reverse justify-start items-center h-full ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50/50'}`}>
+                          {data.segments.map((seg: any, idx: number) => (
+                            <div key={idx} className="w-full transition-all" style={{ height: `${seg.heightPercent}%`, backgroundColor: seg.color }}></div>
                           ))}
                         </div>
+                        <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${textSub}`}>{data.date}</span>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
+                <h3 className={`text-[10px] font-black mb-8 tracking-[0.2em] uppercase ${textSub}`}>Distribution</h3>
+                <div className="flex flex-col items-center gap-8">
+                  <div className={`w-44 h-44 rounded-full relative flex items-center justify-center border-4 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-slate-50'}`} style={{ background: `conic-gradient(${pieData.map((d, i) => {
+                    const start = pieData.slice(0, i).reduce((s, x) => s + x.percentage * 3.6, 0);
+                    const end = start + d.percentage * 3.6;
+                    return `${d.color} ${start}deg ${end}deg`;
+                  }).join(", ")})` }}>
+                    <div className={`w-28 h-28 rounded-full flex items-center justify-center shadow-inner ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
+                      <BookOpen className={`w-8 h-8 ${isDarkMode ? 'text-slate-800' : 'text-slate-100'}`} />
                     </div>
-                  );
-                })}
+                  </div>
+                  <div className="w-full space-y-3">
+                    {pieData.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs font-black">
+                        <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></span><span className={`line-clamp-1 ${textMain}`}>{d.title}</span></div>
+                        <span className={textSub}>{Math.round(d.percentage)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
+                <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
                 
-              </div>
-            </div>
-            
-          </div>
-        ) : (
-          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            
-            {/* 🌟 期間フィルター ＆ 教材フィルター */}
-            <div className="relative mb-6 z-40 flex flex-col gap-3">
-              {/* 期間フィルター（今日・昨日・すべて） */}
-              <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                {[
-                  { id: "all", label: "すべて" },
-                  { id: "today", label: "今日" },
-                  { id: "yesterday", label: "昨日" }
-                ].map(f => (
-                  <button 
-                    key={f.id}
-                    onClick={() => setTimeFilter(f.id as any)} 
-                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${timeFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+                {/* 🌟 修正：RECORD用の独立フィルター */}
+                <div className={`flex p-1 rounded-2xl w-full max-w-sm mx-auto mb-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  {[
+                    { id: "all", label: "すべて" },
+                    { id: "today", label: "今日" },
+                    { id: "yesterday", label: "昨日" },
+                    { id: "older", label: "3日以上前" }
+                  ].map(f => (
+                    <button 
+                      key={f.id}
+                      onClick={() => setRecordFilter(f.id as any)} 
+                      className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${recordFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
 
-              {/* 教材フィルター */}
-              <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`w-full border font-black py-4 px-6 rounded-[2rem] shadow-sm flex items-center justify-between text-sm transition-all focus:ring-4 ring-indigo-500/20 ${bgCard}`}>
-                <span>{filterSubject === "all" ? "すべての教材を一覧" : filterSubject}</span>
-                <ChevronDown className={`w-5 h-5 transition-transform ${isFilterOpen ? 'rotate-180' : ''} ${textSub}`} />
-              </button>
-
-              {isFilterOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setIsFilterOpen(false)}></div>
-                  <div className={`absolute top-full left-0 right-0 mt-2 border rounded-3xl shadow-xl z-40 overflow-hidden py-2 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
-                    <button onClick={() => { setFilterSubject("all"); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors ${filterSubject === "all" ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>すべての教材を一覧</button>
-                    {Array.from(new Set(allSubjects)).map((sub: any) => <button key={sub} onClick={() => { setFilterSubject(sub); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors border-t ${isDarkMode ? 'border-slate-800/50' : 'border-slate-50'} ${filterSubject === sub ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>{sub}</button>)}
+                <div className="relative mb-6">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <Search className={`w-4 h-4 ${textSub}`} />
                   </div>
-                </>
-              )}
-            </div>
+                  <input
+                    type="text"
+                    value={materialSearchQuery}
+                    onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                    placeholder="教材を検索..."
+                    className={`w-full pl-10 pr-4 py-3 rounded-2xl text-sm font-bold outline-none transition-all border ${isDarkMode ? 'bg-black/20 border-[#38383a] focus:border-indigo-500 text-white' : 'bg-slate-50 border-slate-200 focus:border-indigo-400 text-slate-800'}`}
+                  />
+                </div>
 
-            {filteredLogs.length === 0 ? (
-               <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
-            ) : (
-              filteredLogs.map((log) => (
-                <div key={log.id} className="relative mb-6">
-                  
-                  <div className="absolute inset-0 bg-rose-500 rounded-[2.5rem] flex items-center justify-end pr-8 overflow-hidden">
-                    <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingLogId === log.id && swipeOffset < -50 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
-                      <Trash2 className="w-8 h-8 text-white mb-1" />
-                      <span className="text-white text-[10px] font-black tracking-widest">削除</span>
-                    </div>
-                  </div>
+                <div className="space-y-4 overflow-hidden">
+                  {allSubjects
+                    .filter(title => {
+                      const matchesSearch = (title as string).toLowerCase().includes(materialSearchQuery.toLowerCase());
+                      const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                      
+                      if (!matchesSearch || materialLogs.length === 0) return false;
 
-                  <div 
-                    onTouchStart={(e) => handleLogTouchStart(e, log.id)}
-                    onTouchMove={handleLogTouchMove}
-                    onTouchEnd={() => handleLogTouchEnd(log.id)}
-                    style={{ transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
-                    className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
-                  >
-                    <div className="flex justify-between items-center mb-5">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
-                          {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
-                            <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                          ) : (
-                            <User className="w-5 h-5 text-indigo-400" />
-                          )}
+                      const lastLog = materialLogs[0];
+                      const today = new Date(); today.setHours(0, 0, 0, 0);
+                      const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+                      const boundary = new Date(today); boundary.setDate(boundary.getDate() - 2);
+
+                      if (recordFilter === "today") return new Date(lastLog.created_at) >= today;
+                      if (recordFilter === "yesterday") {
+                        const logDate = new Date(lastLog.created_at);
+                        return logDate >= yesterday && logDate < today;
+                      }
+                      if (recordFilter === "older") return new Date(lastLog.created_at) < boundary;
+                      
+                      return true;
+                    })
+                    .map(title => {
+                    const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                    const totalMinutes = materialLogs.reduce((sum, l) => sum + l.duration_minutes, 0);
+                    const lastLog = materialLogs[0];
+                    
+                    let imageUrl = rawMats.find(m => m.title === title)?.image_url;
+                    if (!imageUrl) imageUrl = materialLogs.find(l => l.materials?.image_url)?.materials?.image_url;
+                    
+                    const activeReminders = reminders[title as string] || [];
+                    
+                    let daysAgoText = "未学習";
+                    let badgeClass = isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500";
+                    if (lastLog) {
+                      const diffTime = Math.abs(new Date().getTime() - new Date(lastLog.created_at).getTime());
+                      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                      if (diffDays === 0) { daysAgoText = "今日"; badgeClass = isDarkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"; }
+                      else if (diffDays === 1) { daysAgoText = "昨日"; badgeClass = isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"; }
+                      else { daysAgoText = `${diffDays}日前`; }
+                    }
+
+                    return (
+                      <div key={title as string} className={`relative rounded-2xl overflow-hidden bg-indigo-500`}>
+                        
+                        <div className="absolute inset-0 flex items-center justify-end pr-5">
+                          <button 
+                             onClick={() => {
+                               setSwipedSubject(null);
+                               setReminderSubject(title as string);
+                               setReminderDateTime("");
+                               setShowReminderSetup(true);
+                             }}
+                             className="flex flex-col items-center justify-center p-3 bg-white/20 hover:bg-white/30 rounded-2xl text-white transition-colors"
+                          >
+                            <Bell className="w-5 h-5 mb-1" />
+                            <span className="text-[8px] font-black tracking-widest">リマインド</span>
+                          </button>
                         </div>
-                        <div className="flex flex-col">
-                          <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
-                            {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
-                          </span>
-                          {log.student_id !== currentUser?.id && (
-                            <span className="text-[9px] font-black text-indigo-400">フォロワー</span>
+
+                        <div 
+                          onTouchStart={handleTouchStart}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={() => handleTouchEnd(title as string)}
+                          onClick={() => { if (swipedSubject === title) setSwipedSubject(null); }}
+                          className={`relative flex items-center justify-between p-4 border transition-transform duration-300 ease-out ${swipedSubject === title ? '-translate-x-24' : 'translate-x-0'} ${bgSubCard}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-16 rounded-lg border flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-200'}`}>
+                              {imageUrl ? <img src={imageUrl} alt={title as string} className="w-full h-full object-cover pointer-events-none" /> : <Book className={`w-6 h-6 pointer-events-none ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />}
+                            </div>
+                            <div className="pointer-events-none">
+                              <h4 className={`text-sm font-black line-clamp-1 mb-1 ${textMain}`}>{title as string}</h4>
+                              <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
+                                <span className={`px-2 py-0.5 rounded-md ${badgeClass}`}>{daysAgoText}</span>
+                                <span className={`flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> 累計</span>
+                                <FormatDurationJSX minutes={totalMinutes} />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
+                            {activeReminders.map((timeIso, idx) => (
+                              <span key={idx} className={`text-[9px] font-black px-2 py-1 rounded-lg border flex items-center gap-1 pointer-events-none ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'text-indigo-600 bg-indigo-50 border-indigo-100'}`}>
+                                <Bell className="w-2.5 h-2.5" /> {getCountdownDisplay(timeIso)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* =================================================================
+                右側：TIMELINE タブ
+            ================================================================= */}
+            <div className={`w-1/2 px-4 space-y-4 transition-opacity duration-300 ${activeTab === "timeline" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+              
+              <div className="relative mb-6 z-40 flex flex-col gap-3">
+                {/* 🌟 修正：TIMELINE用の独立フィルター */}
+                <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  {[
+                    { id: "all", label: "すべて" },
+                    { id: "today", label: "今日" },
+                    { id: "yesterday", label: "昨日" },
+                    { id: "older", label: "3日以上前" }
+                  ].map(f => (
+                    <button 
+                      key={f.id}
+                      onClick={() => setTimelineFilter(f.id as any)} 
+                      className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-xl transition-all ${timelineFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`w-full border font-black py-4 px-6 rounded-[2rem] shadow-sm flex items-center justify-between text-sm transition-all focus:ring-4 ring-indigo-500/20 ${bgCard}`}>
+                  <span>{filterSubject === "all" ? "すべての教材を一覧" : filterSubject}</span>
+                  <ChevronDown className={`w-5 h-5 transition-transform ${isFilterOpen ? 'rotate-180' : ''} ${textSub}`} />
+                </button>
+
+                {isFilterOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setIsFilterOpen(false)}></div>
+                    <div className={`absolute top-full left-0 right-0 mt-2 border rounded-3xl shadow-xl z-40 overflow-hidden py-2 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
+                      <button onClick={() => { setFilterSubject("all"); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors ${filterSubject === "all" ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>すべての教材を一覧</button>
+                      {Array.from(new Set(allSubjects)).map((sub: any) => <button key={sub} onClick={() => { setFilterSubject(sub); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors border-t ${isDarkMode ? 'border-slate-800/50' : 'border-slate-50'} ${filterSubject === sub ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>{sub}</button>)}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 🌟 変数ではなく、直接関数を呼び出し、(log: any) と指定する */}
+{getFilteredTimelineLogs().length === 0 ? (
+  <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
+) : (
+  getFilteredTimelineLogs().map((log: any) => (
+                  <div key={log.id} className="relative mb-6">
+                    
+                    <div className="absolute inset-0 bg-rose-500 rounded-[2.5rem] flex items-center justify-end pr-8 overflow-hidden">
+                      <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingLogId === log.id && swipeOffset < -50 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
+                        <Trash2 className="w-8 h-8 text-white mb-1" />
+                        <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+                      </div>
+                    </div>
+
+                    <div 
+                      onTouchStart={(e) => handleLogTouchStart(e, log.id)}
+                      onTouchMove={handleLogTouchMove}
+                      onTouchEnd={() => handleLogTouchEnd(log.id)}
+                      style={{ transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+                      className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
+                    >
+                      <div className="flex justify-between items-center mb-5">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                            {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
+                              <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-5 h-5 text-indigo-400" />
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
+                              {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
+                            </span>
+                            {log.student_id !== currentUser?.id && (
+                              <span className="text-[9px] font-black text-indigo-400">フォロワー</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
+                          {log.student_id === currentUser?.id && (
+                            <>
+                              <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                                <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
+                              </button>
+                              
+                              {activeEditMenu === log.id && (
+                                <div className={`absolute right-6 top-16 w-28 rounded-2xl shadow-2xl border z-50 overflow-hidden ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-50'}`}>
+                                  <button onClick={() => { setEditingLog(log); setEditDate(new Date(log.created_at).toISOString().slice(0,16)); setEditMinutes(log.duration_minutes); setEditMemo(log.thoughts||""); setActiveEditMenu(null); }} className={`w-full flex items-center justify-center gap-3 px-4 py-4 text-sm font-black ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                                    <Edit2 className="w-4 h-4" /> 編集
+                                  </button>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
-                        {log.student_id === currentUser?.id && (
-                          <>
-                            <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
-                              <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
-                            </button>
-                            
-                            {activeEditMenu === log.id && (
-                              <div className={`absolute right-6 top-16 w-28 rounded-2xl shadow-2xl border z-50 overflow-hidden ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-50'}`}>
-                                <button onClick={() => { setEditingLog(log); setEditDate(new Date(log.created_at).toISOString().slice(0,16)); setEditMinutes(log.duration_minutes); setEditMemo(log.thoughts||""); setActiveEditMenu(null); }} className={`w-full flex items-center justify-center gap-3 px-4 py-4 text-sm font-black ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-50'}`}>
-                                  <Edit2 className="w-4 h-4" /> 編集
-                                </button>
-                              </div>
-                            )}
-                          </>
+                      
+                      <div className={`rounded-3xl p-5 mb-5 flex items-center gap-5 border ${bgSubCard}`}>
+                        <div className={`w-14 h-18 rounded-xl shadow-sm border overflow-hidden flex-shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                          {log.materials?.image_url ? <img src={log.materials.image_url} className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
+                        </div>
+                        <div className="flex-grow">
+                          <h3 className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{log.materials?.title || log.subject}</h3>
+                          <FormatDurationJSX minutes={log.duration_minutes} />
+                        </div>
+                      </div>
+                      
+                      {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
+
+                      <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
+                        
+                        {floatingEmojis.map(fe => (
+                          <div 
+                            key={fe.id} 
+                            className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]"
+                            style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}
+                            onAnimationEnd={() => {
+                              setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id));
+                            }}
+                          >
+                            {fe.emoji}
+                          </div>
+                        ))}
+
+                        <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
+                          <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
+                        </button>
+
+                        {log.userReaction && <div className={`px-3 py-2 rounded-full font-black text-sm ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>{log.userReaction} 1</div>}
+
+                        {activeReactionMenu === log.id && (
+                          <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                            {EMOJIS.map(emoji => (
+                              <button 
+                                key={emoji} 
+                                onClick={() => {
+                                  handleReaction(log.id, emoji); 
+                                  const newFloatingEmoji = {
+                                    id: Date.now(), 
+                                    emoji: emoji,
+                                    offset: (Math.random() - 0.5) * 60, 
+                                  };
+                                  setFloatingEmojis(prev => [...prev, newFloatingEmoji]);
+                                }} 
+                                className="text-2xl hover:scale-125 transition-transform px-1"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
-                    
-                    <div className={`rounded-3xl p-5 mb-5 flex items-center gap-5 border ${bgSubCard}`}>
-                      <div className={`w-14 h-18 rounded-xl shadow-sm border overflow-hidden flex-shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
-                        {log.materials?.image_url ? <img src={log.materials.image_url} className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
-                      </div>
-                      <div className="flex-grow">
-                        <h3 className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{log.materials?.title || log.subject}</h3>
-                        <FormatDurationJSX minutes={log.duration_minutes} />
-                      </div>
-                    </div>
-                    
-                    {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
-
-                    <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
-                      
-                      {floatingEmojis.map(fe => (
-                        <div 
-                          key={fe.id} 
-                          className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]"
-                          style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}
-                          onAnimationEnd={() => {
-                            setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id));
-                          }}
-                        >
-                          {fe.emoji}
-                        </div>
-                      ))}
-
-                      <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
-                        <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
-                      </button>
-
-                      {log.userReaction && <div className={`px-3 py-2 rounded-full font-black text-sm ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>{log.userReaction} 1</div>}
-
-                      {activeReactionMenu === log.id && (
-                        <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
-                          {EMOJIS.map(emoji => (
-                            <button 
-                              key={emoji} 
-                              onClick={() => {
-                                handleReaction(log.id, emoji); 
-                                const newFloatingEmoji = {
-                                  id: Date.now(), 
-                                  emoji: emoji,
-                                  offset: (Math.random() - 0.5) * 60, 
-                                };
-                                setFloatingEmojis(prev => [...prev, newFloatingEmoji]);
-                              }} 
-                              className="text-2xl hover:scale-125 transition-transform px-1"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
+
           </div>
         )}
       </main>
-
       <style jsx global>{`
         @keyframes floatUpAndFade {
           0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
