@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   MoreHorizontal, User, Book, SmilePlus, ChevronDown, 
   Edit2, Trash2, X, Share2, Award, Bell, Settings, 
-  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine
+  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search
 } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 import { useRouter } from "next/navigation";
@@ -20,8 +20,15 @@ function ReportContent() {
   const [userColor, setUserColor] = useState("bg-blue-500");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<"record" | "timeline">("timeline");
+  
+  // 🌟 追加：期間フィルター用のState
+  const [timeFilter, setTimeFilter] = useState<"all" | "today" | "yesterday">("all");
+  // 🌟 追加：教材検索用のState
+  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
+
   const [filterSubject, setFilterSubject] = useState<string>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  
   const [chartRange, setChartRange] = useState<"week" | "month">("week");
   
   const [activeReactionMenu, setActiveReactionMenu] = useState<string | null>(null);
@@ -58,7 +65,7 @@ function ReportContent() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [pieData, setPieData] = useState<any[]>([]);
   const [maxChartVal, setMaxChartVal] = useState(60);
-const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [sidebarOffset, setSidebarOffset] = useState(0);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const sidebarStartX = useRef<number | null>(null);
@@ -66,6 +73,9 @@ const [currentUser, setCurrentUser] = useState<any>(null);
   const [swipingLogId, setSwipingLogId] = useState<string | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
+
+  // 🌟 追加：画面全体のスワイプタブ切り替え用
+  const [mainTouchStart, setMainTouchStart] = useState<{ x: number, y: number } | null>(null);
 
   const handleSidebarMenuTouchStart = (e: React.TouchEvent) => {
     sidebarStartX.current = e.touches[0].clientX;
@@ -97,6 +107,29 @@ const [currentUser, setCurrentUser] = useState<any>(null);
     if (sidebarOffset > 80) setShowProfileMenu(true); 
     setSidebarOffset(0);
     sidebarStartX.current = null;
+  };
+
+  // 🌟 追加：メイン画面のスワイプ処理（タブ切り替え）
+  const handleMainTouchStart = (e: React.TouchEvent) => {
+    // グラフや横スクロール要素など、特定の中身を触っている時はスワイプ判定しない
+    const target = e.target as HTMLElement;
+    if (target.closest('.no-scrollbar') || target.closest('button')) return;
+    setMainTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  };
+
+  const handleMainTouchEnd = (e: React.TouchEvent) => {
+    if (!mainTouchStart) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const diffX = mainTouchStart.x - touchEndX;
+    const diffY = mainTouchStart.y - touchEndY;
+
+    // 縦の動きより横の動きが大きく、かつ一定距離スワイプした場合のみタブを切り替える
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      if (diffX > 0 && activeTab === "record") setActiveTab("timeline"); // 左スワイプ -> タイムライン
+      else if (diffX < 0 && activeTab === "timeline") setActiveTab("record"); // 右スワイプ -> レコード
+    }
+    setMainTouchStart(null);
   };
 
   const profileUrl = typeof window !== 'undefined' && myUserId 
@@ -151,14 +184,13 @@ const [currentUser, setCurrentUser] = useState<any>(null);
     localStorage.setItem('study_reminders_v2', JSON.stringify(newReminders));
   };
 
-const fetchLogs = async () => {
+  const fetchLogs = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     
     if (user && isMounted.current) {
       setCurrentUser(user);
 
-      // 🌟 修正：存在しないテーブル（profiles等）への連携を外し、純粋に「自分の記録だけ」を取る！
       const { data: logsData } = await supabase
         .from('study_logs')
         .select('*')
@@ -185,6 +217,7 @@ const fetchLogs = async () => {
     }
     if (isMounted.current) setIsLoading(false);
   };
+
   const processChartData = (logsData: any[], matData: any[], range: "week" | "month") => {
     const colors = ["#60a5fa", "#4ade80", "#fbbf24", "#f43f5e", "#a78bfa", "#2dd4bf"];
     const subjectColors: Record<string, string> = {};
@@ -456,13 +489,35 @@ const fetchLogs = async () => {
     ...logs.map(log => log.materials?.title || log.subject || "名称未設定")
   ]));
 
-  const filteredLogs = filterSubject === "all" ? logs : logs.filter(log => (log.materials?.title || log.subject || "名称未設定") === filterSubject);
+  // 🌟 追加：期間フィルターのロジック
+  const getFilteredLogs = () => {
+    let filtered = logs;
+    
+    // 教材フィルター
+    if (filterSubject !== "all") {
+      filtered = filtered.filter(log => (log.materials?.title || log.subject || "名称未設定") === filterSubject);
+    }
+    
+    // 期間フィルター
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
 
-  // ==========================================
-  // 🌟 ここに追加した2つのフォーマット関数！
-  // ==========================================
-  
-  // 📊 ① グラフ用：純粋な文字だけを返す
+    if (timeFilter === "today") {
+      filtered = filtered.filter(log => new Date(log.created_at) >= today);
+    } else if (timeFilter === "yesterday") {
+      filtered = filtered.filter(log => {
+        const logDate = new Date(log.created_at);
+        return logDate >= yesterday && logDate < today;
+      });
+    }
+    
+    return filtered;
+  };
+
+  const filteredLogs = getFilteredLogs();
+
   const formatTimeForChart = (minutes: number) => {
     if (!minutes || minutes === 0) return "0分";
     if (minutes < 60) return `${minutes}分`;
@@ -471,7 +526,6 @@ const fetchLogs = async () => {
     return m > 0 ? `${h}時間${m}分` : `${h}時間`;
   };
 
-  // 📝 ② レコード用：大きくてカッコいいJSXを返す
   const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
     if (!minutes || minutes === 0) {
       return <span className={`text-lg font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>0分</span>;
@@ -492,7 +546,6 @@ const fetchLogs = async () => {
       </div>
     );
   };
-  // ==========================================
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
   const bgCard = isDarkMode ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-slate-100";
@@ -503,7 +556,11 @@ const fetchLogs = async () => {
   const bgInput = isDarkMode ? "bg-[#2c2c2e] border-[#38383a] text-white" : "bg-slate-50 border-slate-200 text-slate-700";
 
   return (
-    <div className={`min-h-screen pb-20 font-sans overflow-x-hidden transition-colors duration-300 ${bgPage}`}>
+    <div className={`min-h-screen pb-20 font-sans overflow-x-hidden transition-colors duration-300 ${bgPage}`}
+         // 🌟 追加：メイン画面でのスワイプ判定
+         onTouchStart={handleMainTouchStart}
+         onTouchEnd={handleMainTouchEnd}
+    >
       
       {toastMessage && (
         <>
@@ -706,7 +763,6 @@ const fetchLogs = async () => {
   fgColor={"#4f46e5"}
   level={"H"} 
   imageSettings={{
-    // 🌟 修正：base64の長い文字列を消して、保存したロゴのパスを指定する
     src: "/logo.png", 
     height: 48,
     width: 48,
@@ -854,7 +910,6 @@ const fetchLogs = async () => {
 
       <header className={`${bgHeader} pt-6 sticky top-0 z-50 shadow-sm transition-colors duration-300`}>
         <div className="flex justify-between items-center px-6 mb-4">
-          {/* 👇 onClick の中身を「魔法の呪文」に書き換えます */}
           <button onClick={() => window.dispatchEvent(new Event('openSidebar'))} className={`w-10 h-10 rounded-2xl flex items-center justify-center active:scale-90 transition-all border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
             <User className="w-6 h-6 text-slate-400" />
           </button>
@@ -864,9 +919,13 @@ const fetchLogs = async () => {
             {Object.keys(reminders).length > 0 && <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 rounded-full ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`}></span>}
           </button>
         </div>
-        <div className="flex px-4">
-          <button onClick={() => setActiveTab("record")} className={`flex-1 pb-3 text-xs font-black text-center border-b-4 transition-all ${activeTab === "record" ? "border-indigo-500 text-indigo-500" : `border-transparent ${textSub}`}`}>RECORD</button>
-          <button onClick={() => setActiveTab("timeline")} className={`flex-1 pb-3 text-xs font-black text-center border-b-4 transition-all ${activeTab === "timeline" ? "border-indigo-500 text-indigo-500" : `border-transparent ${textSub}`}`}>TIMELINE</button>
+        <div className="flex px-4 relative">
+          <button onClick={() => setActiveTab("record")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "record" ? "text-indigo-500" : textSub}`}>RECORD</button>
+          <button onClick={() => setActiveTab("timeline")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "timeline" ? "text-indigo-500" : textSub}`}>TIMELINE</button>
+          {/* タブの下線アニメーション */}
+          <div className="absolute bottom-0 left-4 right-4 h-1 bg-slate-100 dark:bg-slate-800 rounded-full">
+            <div className={`absolute top-0 bottom-0 w-1/2 bg-indigo-500 rounded-full transition-transform duration-300 ${activeTab === "timeline" ? "translate-x-full" : "translate-x-0"}`}></div>
+          </div>
         </div>
       </header>
 
@@ -874,7 +933,7 @@ const fetchLogs = async () => {
         {isLoading ? (
           <div className={`text-center py-20 font-black tracking-[0.3em] ${textSub}`}>FETCHING...</div>
         ) : activeTab === "record" ? (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
             
             <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
               <div className="flex justify-between items-center mb-6">
@@ -886,11 +945,9 @@ const fetchLogs = async () => {
               </div>
 
               <div className="relative h-48 flex">
-                {/* 🌟 グラフの縦軸（カスタムの目盛り表示）にフォーマット関数を使用 */}
                 <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
                   {[maxChartVal, Math.round(maxChartVal * 0.75), Math.round(maxChartVal * 0.5), Math.round(maxChartVal * 0.25), 0].map((val, idx) => (
                     <div key={idx} className="flex items-center w-full">
-                      {/* 🌟 ここで関数を呼び出して「時間・分」表示にする！ */}
                       <span className="w-12 text-right pr-2 shrink-0">{formatTimeForChart(val)}</span>
                       <div className={`flex-grow border-t border-dashed h-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}></div>
                     </div>
@@ -935,9 +992,33 @@ const fetchLogs = async () => {
             </div>
 
             <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-              <h3 className={`text-sm font-black mb-6 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
+              <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
+              
+              {/* 🌟 追加：検索バーのUI */}
+              <div className="relative mb-6">
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                  <Search className={`w-4 h-4 ${textSub}`} />
+                </div>
+                <input
+                  type="text"
+                  value={materialSearchQuery}
+                  onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                  placeholder="教材を検索..."
+                  className={`w-full pl-10 pr-4 py-3 rounded-2xl text-sm font-bold outline-none transition-all border ${isDarkMode ? 'bg-black/20 border-[#38383a] focus:border-indigo-500 text-white' : 'bg-slate-50 border-slate-200 focus:border-indigo-400 text-slate-800'}`}
+                />
+              </div>
+
               <div className="space-y-4 overflow-hidden">
-                {allSubjects.map(title => {
+                {allSubjects
+                  .filter(title => {
+                    // 🌟 追加：検索キーワードで絞り込み（大文字小文字を区別しない）
+                    const matchesSearch = (title as string).toLowerCase().includes(materialSearchQuery.toLowerCase());
+                    // 履歴が1つ以上あるものだけを残す
+                    const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                    
+                    return matchesSearch && materialLogs.length > 0;
+                  })
+                  .map(title => {
                   const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
                   const totalMinutes = materialLogs.reduce((sum, l) => sum + l.duration_minutes, 0);
                   const lastLog = materialLogs[0];
@@ -990,7 +1071,6 @@ const fetchLogs = async () => {
                             <h4 className={`text-sm font-black line-clamp-1 mb-1 ${textMain}`}>{title as string}</h4>
                             <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
                               <span className={`px-2 py-0.5 rounded-md ${badgeClass}`}>{daysAgoText}</span>
-                              {/* 🌟 ここもJSXを使ってオシャレな時間表記にする */}
                               <span className={`flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> 累計</span>
                               <FormatDurationJSX minutes={totalMinutes} />
                             </div>
@@ -1014,12 +1094,33 @@ const fetchLogs = async () => {
             
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="relative mb-4 z-40">
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+            
+            {/* 🌟 期間フィルター ＆ 教材フィルター */}
+            <div className="relative mb-6 z-40 flex flex-col gap-3">
+              {/* 期間フィルター（今日・昨日・すべて） */}
+              <div className={`flex p-1 rounded-2xl w-full max-w-[300px] mx-auto ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                {[
+                  { id: "all", label: "すべて" },
+                  { id: "today", label: "今日" },
+                  { id: "yesterday", label: "昨日" }
+                ].map(f => (
+                  <button 
+                    key={f.id}
+                    onClick={() => setTimeFilter(f.id as any)} 
+                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${timeFilter === f.id ? (isDarkMode ? 'bg-slate-700 text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : textSub}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 教材フィルター */}
               <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`w-full border font-black py-4 px-6 rounded-[2rem] shadow-sm flex items-center justify-between text-sm transition-all focus:ring-4 ring-indigo-500/20 ${bgCard}`}>
                 <span>{filterSubject === "all" ? "すべての教材を一覧" : filterSubject}</span>
                 <ChevronDown className={`w-5 h-5 transition-transform ${isFilterOpen ? 'rotate-180' : ''} ${textSub}`} />
               </button>
+
               {isFilterOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setIsFilterOpen(false)}></div>
@@ -1031,126 +1132,123 @@ const fetchLogs = async () => {
               )}
             </div>
 
-            {filteredLogs.map((log) => (
-              <div key={log.id} className="relative mb-6">
-                
-                <div className="absolute inset-0 bg-rose-500 rounded-[2.5rem] flex items-center justify-end pr-8 overflow-hidden">
-                  <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingLogId === log.id && swipeOffset < -50 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
-                    <Trash2 className="w-8 h-8 text-white mb-1" />
-                    <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+            {filteredLogs.length === 0 ? (
+               <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
+            ) : (
+              filteredLogs.map((log) => (
+                <div key={log.id} className="relative mb-6">
+                  
+                  <div className="absolute inset-0 bg-rose-500 rounded-[2.5rem] flex items-center justify-end pr-8 overflow-hidden">
+                    <div className={`flex flex-col items-center justify-center transition-opacity duration-300 ${swipingLogId === log.id && swipeOffset < -50 ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`}>
+                      <Trash2 className="w-8 h-8 text-white mb-1" />
+                      <span className="text-white text-[10px] font-black tracking-widest">削除</span>
+                    </div>
                   </div>
-                </div>
 
-                <div 
-                  onTouchStart={(e) => handleLogTouchStart(e, log.id)}
-                  onTouchMove={handleLogTouchMove}
-                  onTouchEnd={() => handleLogTouchEnd(log.id)}
-                  style={{ transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
-                  className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
-                >
-                  <div className="flex justify-between items-center mb-5">
-                    <div className="flex items-center gap-3">
-  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
-    {/* 🌟 投稿者のアイコンがあれば画像、なければデフォルトのUserアイコン */}
-    {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
-      <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-    ) : (
-      <User className="w-5 h-5 text-indigo-400" />
-    )}
-  </div>
-  <div className="flex flex-col">
-    {/* 🌟 投稿者の名前（自分なら「あなた」にする） */}
-    <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
-      {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
-    </span>
-    {/* 🌟 他の人の投稿の時は、ちょっとしたバッジをつけると分かりやすいです */}
-    {log.student_id !== currentUser?.id && (
-      <span className="text-[9px] font-black text-indigo-400">フォロワー</span>
-    )}
-  </div>
-</div>
-                    <div className="flex items-center gap-1">
-                      <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
-{log.student_id === currentUser?.id && (
-    <>
-      <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
-        <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
-      </button>
-      
-    </>
-  )}
+                  <div 
+                    onTouchStart={(e) => handleLogTouchStart(e, log.id)}
+                    onTouchMove={handleLogTouchMove}
+                    onTouchEnd={() => handleLogTouchEnd(log.id)}
+                    style={{ transform: swipingLogId === log.id ? `translateX(${swipeOffset}px)` : 'translateX(0)', transition: isSwiping && swipingLogId === log.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+                    className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
+                  >
+                    <div className="flex justify-between items-center mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                          {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
+                            <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-5 h-5 text-indigo-400" />
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
+                            {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
+                          </span>
+                          {log.student_id !== currentUser?.id && (
+                            <span className="text-[9px] font-black text-indigo-400">フォロワー</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
+                        {log.student_id === currentUser?.id && (
+                          <>
+                            <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                              <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
+                            </button>
+                            
+                            {activeEditMenu === log.id && (
+                              <div className={`absolute right-6 top-16 w-28 rounded-2xl shadow-2xl border z-50 overflow-hidden ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-50'}`}>
+                                <button onClick={() => { setEditingLog(log); setEditDate(new Date(log.created_at).toISOString().slice(0,16)); setEditMinutes(log.duration_minutes); setEditMemo(log.thoughts||""); setActiveEditMenu(null); }} className={`w-full flex items-center justify-center gap-3 px-4 py-4 text-sm font-black ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                                  <Edit2 className="w-4 h-4" /> 編集
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className={`rounded-3xl p-5 mb-5 flex items-center gap-5 border ${bgSubCard}`}>
+                      <div className={`w-14 h-18 rounded-xl shadow-sm border overflow-hidden flex-shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                        {log.materials?.image_url ? <img src={log.materials.image_url} className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
+                      </div>
+                      <div className="flex-grow">
+                        <h3 className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{log.materials?.title || log.subject}</h3>
+                        <FormatDurationJSX minutes={log.duration_minutes} />
+                      </div>
+                    </div>
+                    
+                    {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
 
-                      <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}><MoreHorizontal className={`w-5 h-5 ${textSub}`} /></button>
+                    <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
                       
-                      {activeEditMenu === log.id && (
-                        <div className={`absolute right-6 top-16 w-28 rounded-2xl shadow-2xl border z-50 overflow-hidden ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-50'}`}>
-                          <button onClick={() => { setEditingLog(log); setEditDate(new Date(log.created_at).toISOString().slice(0,16)); setEditMinutes(log.duration_minutes); setEditMemo(log.thoughts||""); setActiveEditMenu(null); }} className={`w-full flex items-center justify-center gap-3 px-4 py-4 text-sm font-black ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-50'}`}>
-                            <Edit2 className="w-4 h-4" /> 編集
-                          </button>
+                      {floatingEmojis.map(fe => (
+                        <div 
+                          key={fe.id} 
+                          className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]"
+                          style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}
+                          onAnimationEnd={() => {
+                            setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id));
+                          }}
+                        >
+                          {fe.emoji}
+                        </div>
+                      ))}
+
+                      <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
+                        <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
+                      </button>
+
+                      {log.userReaction && <div className={`px-3 py-2 rounded-full font-black text-sm ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>{log.userReaction} 1</div>}
+
+                      {activeReactionMenu === log.id && (
+                        <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                          {EMOJIS.map(emoji => (
+                            <button 
+                              key={emoji} 
+                              onClick={() => {
+                                handleReaction(log.id, emoji); 
+                                const newFloatingEmoji = {
+                                  id: Date.now(), 
+                                  emoji: emoji,
+                                  offset: (Math.random() - 0.5) * 60, 
+                                };
+                                setFloatingEmojis(prev => [...prev, newFloatingEmoji]);
+                              }} 
+                              className="text-2xl hover:scale-125 transition-transform px-1"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
-                  
-                  <div className={`rounded-3xl p-5 mb-5 flex items-center gap-5 border ${bgSubCard}`}>
-                    <div className={`w-14 h-18 rounded-xl shadow-sm border overflow-hidden flex-shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
-                      {log.materials?.image_url ? <img src={log.materials.image_url} className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
-                    </div>
-                    <div className="flex-grow">
-                      <h3 className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{log.materials?.title || log.subject}</h3>
-                      {/* 🌟 タイムラインの各レコードもJSXでオシャレに！ */}
-                      <FormatDurationJSX minutes={log.duration_minutes} />
-                    </div>
-                  </div>
-                  
-                  {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
-
-                  <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
-                    
-                    {floatingEmojis.map(fe => (
-                      <div 
-                        key={fe.id} 
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]"
-                        style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}
-                        onAnimationEnd={() => {
-                          setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id));
-                        }}
-                      >
-                        {fe.emoji}
-                      </div>
-                    ))}
-
-                    <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
-                      <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
-                    </button>
-
-                    {log.userReaction && <div className={`px-3 py-2 rounded-full font-black text-sm ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>{log.userReaction} 1</div>}
-
-                    {activeReactionMenu === log.id && (
-                      <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
-                        {EMOJIS.map(emoji => (
-                          <button 
-                            key={emoji} 
-                            onClick={() => {
-                              handleReaction(log.id, emoji); 
-                              const newFloatingEmoji = {
-                                id: Date.now(), 
-                                emoji: emoji,
-                                offset: (Math.random() - 0.5) * 60, 
-                              };
-                              setFloatingEmojis(prev => [...prev, newFloatingEmoji]);
-                            }} 
-                            className="text-2xl hover:scale-125 transition-transform px-1"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
       </main>
@@ -1173,4 +1271,3 @@ const fetchLogs = async () => {
 export default function ReportPage() {
   return <Suspense fallback={null}><ReportContent /></Suspense>;
 }
-

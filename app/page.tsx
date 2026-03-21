@@ -1,8 +1,7 @@
-// app/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit } from "lucide-react";
+import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
 
@@ -19,6 +18,7 @@ export default function Home() {
   const [memoInput, setMemoInput] = useState("");
   const [showSuccess, setShowSuccess] = useState(false); 
   const [lastStudiedDate, setLastStudiedDate] = useState<string | null>(null);
+  const [lastMemo, setLastMemo] = useState<string | null>(null);
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -41,7 +41,7 @@ export default function Home() {
   // 削除モーダル用のState
   const [deleteTarget, setDeleteTarget] = useState<{id: string, title: string} | null>(null);
 
-  // 🌟 新規追加：学習記録モーダルの下スワイプクローズ用State
+  // 学習記録モーダルの下スワイプクローズ用State
   const [modalTouchStartY, setModalTouchStartY] = useState(0);
   const [modalSwipeY, setModalSwipeY] = useState(0);
   const [isModalClosing, setIsModalClosing] = useState(false);
@@ -89,14 +89,12 @@ export default function Home() {
     setTouchStart(null);
   };
 
-  // 🌟 新規追加：モーダルを下スワイプで閉じる処理
+  // モーダルを下スワイプで閉じる処理
   const handleModalTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    // テキストエリアや入力欄を触っている時はスワイプ判定しない
     if (target.tagName.toLowerCase() === 'textarea' || target.tagName.toLowerCase() === 'input') return;
     
     const scrollableDiv = e.currentTarget as HTMLDivElement;
-    // モーダル内で下にスクロールしている途中はスワイプで閉じない
     if (scrollableDiv.scrollTop > 0) return;
 
     setModalTouchStartY(e.touches[0].clientY);
@@ -109,23 +107,18 @@ export default function Home() {
     const currentY = e.touches[0].clientY;
     const diff = currentY - modalTouchStartY;
 
-    // 🌟 5px以上の動きで反応開始（遊びを作って誤作動防止）
     if (diff > 5) {
-      // 画面上部での「引っ張ってリロード」を確実に殺す
       if (e.cancelable) e.preventDefault();
-      
-      // 指の動きをそのまま反映（1.0倍）させて、スルスル感を出す
-      setModalSwipeY(diff);
+      // 🌟 少し重みをつけて、ネイティブアプリのような吸い付き感にする
+      setModalSwipeY(diff * 0.8);
     }
   };
 
   const handleModalTouchEnd = () => {
     if (modalTouchStartY === 0) return;
-    // 100px以上下にスワイプしたら閉じる
     if (modalSwipeY > 100) {
       closeModal();
     } else {
-      // 足りなければ元に戻す
       setModalSwipeY(0);
       setModalTouchStartY(0);
     }
@@ -137,10 +130,11 @@ export default function Home() {
       setSelectedMaterial(null);
       setMemoInput("");
       setLastStudiedDate(null);
+      setLastMemo(null); // 🌟 ここが重要！次の教材を開く時に前のメモがチラつくのを防ぐ
       setModalSwipeY(0);
       setModalTouchStartY(0);
       setIsModalClosing(false);
-    }, 300); // アニメーションが終わってからStateを消す
+    }, 300);
   };
 
   useEffect(() => {
@@ -163,7 +157,7 @@ export default function Home() {
       const fetchLastStudied = async () => {
         const { data } = await supabase
           .from('study_logs')
-          .select('created_at')
+          .select('created_at, thoughts') 
           .eq('material_id', selectedMaterial.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -172,13 +166,16 @@ export default function Home() {
         if (data) {
           const date = new Date(data.created_at);
           setLastStudiedDate(`${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`);
+          setLastMemo(data.thoughts); 
         } else {
           setLastStudiedDate("まだ記録がありません");
+          setLastMemo(null);
         }
       };
       fetchLastStudied();
     } else {
       setLastStudiedDate(null);
+      setLastMemo(null);
     }
   }, [selectedMaterial]);
 
@@ -261,7 +258,7 @@ export default function Home() {
     }]);
 
     if (!error) {
-      closeModal(); // 保存後もアニメーションで閉じる
+      closeModal();
       setTimeInput("");
       setMemoInput("");
       fetchData();
@@ -542,7 +539,6 @@ export default function Home() {
       {/* 🌟 SELECTED MATERIAL MODAL (学習記録・起動モーダル) 🌟 */}
       {selectedMaterial && (
         <>
-          {/* 背景の暗転（タップで閉じる処理も closeModal に統一） */}
           <div 
             className={`fixed inset-0 bg-black/70 backdrop-blur-md z-[500] transition-opacity duration-300 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`} 
             onClick={closeModal}
@@ -555,15 +551,13 @@ export default function Home() {
             style={{ 
               transform: `translateY(${isModalClosing ? '100%' : modalSwipeY > 0 ? `${modalSwipeY}px` : '0'})`,
               transition: isModalClosing ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : modalSwipeY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
-            
               ,willChange: 'transform',      // GPUを強制稼働させてカクつきを消す
               overscrollBehaviorY: 'contain', // 背後のページがリロードされるのを防ぐ
               touchAction: modalSwipeY > 0 ? 'none' : 'pan-y' // スワイプ中はブラウザの挙動を完全にOFF
             }}
-
             className={`fixed bottom-0 left-0 right-0 w-full z-[501] rounded-t-[2.5rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
           >
-            {/* 🌟 スワイプで閉じられることを示すバー */}
+            {/* スワイプで閉じられることを示すバー */}
             <div className={`absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 rounded-full ${isDarkMode ? 'bg-white/20' : 'bg-slate-300'}`}></div>
 
             <button onClick={closeModal} className={`absolute top-6 right-6 p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>
@@ -583,9 +577,21 @@ export default function Home() {
               
               <div className="flex flex-col justify-center">
                 <p className={`text-sm font-black line-clamp-2 leading-snug ${textMain}`}>{selectedMaterial.title}</p>
+                
+                {/* 前回の学習日時表示 */}
                 <div className={`flex items-center gap-1 mt-2 text-xs font-bold px-2 py-1 rounded-md self-start ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                   <History className="w-3 h-3" /> 前回: {lastStudiedDate || "読込中..."}
                 </div>
+
+                {/* 前回のメモを表示するエリア */}
+                {lastMemo && (
+                  <div className={`mt-3 p-3 rounded-xl border border-dashed text-[11px] leading-relaxed font-bold ${isDarkMode ? 'bg-indigo-500/5 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}>
+                    <div className="flex items-center gap-1 mb-1 opacity-70">
+                      <BookText className="w-3 h-3" /> 前回のメモ
+                    </div>
+                    {lastMemo}
+                  </div>
+                )}
               </div>
             </div>
 
