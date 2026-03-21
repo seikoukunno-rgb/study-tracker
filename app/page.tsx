@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 // 🌟 修正：ChevronLeft を追加インポートしています
-import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft } from "lucide-react";
+import { Book, Clock, Plus, BookOpen, CheckCircle2, X, SmartphoneNfc, PencilLine, History, Settings, Loader2, Search, Trash2, FileEdit, BookText, ChevronLeft,Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase"; 
 
@@ -447,9 +447,18 @@ export default function Home() {
 
       {/* --- HEADER --- */}
       <header className={`${bgHeader} shadow-sm px-5 py-6 flex justify-between items-center sticky top-0 z-40 transition-colors duration-300`}>
-        <h1 className={`text-xl font-black italic tracking-tighter flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
-          <BookOpen className="w-6 h-6" /> STUDY TRACKER
-        </h1>
+        <div className="flex items-center gap-3">
+          {/* 🌟 追加：サイドバーを呼び出すハンバーガーメニュー */}
+          <button 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            className={`p-2 -ml-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <h1 className={`text-xl font-black italic tracking-tighter flex items-center gap-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+            STUDY TRACKER
+          </h1>
+        </div>
         <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'}`}>
           <Clock className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}`} />
           <span className={`text-sm font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>今日: {totalTime}分</span>

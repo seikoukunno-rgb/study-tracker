@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   MoreHorizontal, User, Book, SmilePlus, ChevronDown, 
   Edit2, Trash2, X, Share2, Award, Bell, Settings, 
-  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search, ChevronLeft
+  HelpCircle, Target, Rocket, GraduationCap, Calendar, Clock, ChevronRight, BookOpen, Plus, QrCode, Moon, Sun, Pen, AlertCircle, PenLine, Search, ChevronLeft,Menu
 } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 import { useRouter } from "next/navigation";
@@ -917,11 +917,15 @@ function ReportContent() {
 
       <header className={`${bgHeader} pt-6 sticky top-0 z-50 shadow-sm transition-colors duration-300`}>
         <div className="flex justify-between items-center px-6 mb-4">
-          <button onClick={() => window.dispatchEvent(new Event('openSidebar'))} className={`w-10 h-10 rounded-2xl flex items-center justify-center active:scale-90 transition-all border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
-            <User className="w-6 h-6 text-slate-400" />
+          {/* 🌟 変更：人のマークから、誰もが分かる三本線メニューへ */}
+          <button 
+            onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
+          >
+            <Menu className="w-5 h-5 text-slate-500" />
           </button>
           <h1 className="text-lg font-black italic tracking-tighter text-indigo-500">STUDY REPORT</h1>
-          <div className="w-10 h-10"></div>
+          <div className="w-10 h-10"></div> 
         </div>
         <div className="flex px-4 relative">
           <button onClick={() => setActiveTab("record")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "record" ? "text-indigo-500" : textSub}`}>RECORD</button>
