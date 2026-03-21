@@ -105,10 +105,18 @@ export default function Home() {
 
   const handleModalTouchMove = (e: React.TouchEvent) => {
     if (modalTouchStartY === 0) return;
+    
     const currentY = e.touches[0].clientY;
     const diff = currentY - modalTouchStartY;
-    // 下方向のスワイプのみ受け付ける
-    if (diff > 0) setModalSwipeY(diff);
+
+    // 🌟 5px以上の動きで反応開始（遊びを作って誤作動防止）
+    if (diff > 5) {
+      // 画面上部での「引っ張ってリロード」を確実に殺す
+      if (e.cancelable) e.preventDefault();
+      
+      // 指の動きをそのまま反映（1.0倍）させて、スルスル感を出す
+      setModalSwipeY(diff);
+    }
   };
 
   const handleModalTouchEnd = () => {
@@ -547,7 +555,12 @@ export default function Home() {
             style={{ 
               transform: `translateY(${isModalClosing ? '100%' : modalSwipeY > 0 ? `${modalSwipeY}px` : '0'})`,
               transition: isModalClosing ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : modalSwipeY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
+            
+              ,willChange: 'transform',      // GPUを強制稼働させてカクつきを消す
+              overscrollBehaviorY: 'contain', // 背後のページがリロードされるのを防ぐ
+              touchAction: modalSwipeY > 0 ? 'none' : 'pan-y' // スワイプ中はブラウザの挙動を完全にOFF
             }}
+
             className={`fixed bottom-0 left-0 right-0 w-full z-[501] rounded-t-[2.5rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
           >
             {/* 🌟 スワイプで閉じられることを示すバー */}
