@@ -5,11 +5,11 @@ import PdfViewer, { PdfViewerHandle } from '@/components/PdfViewer';
 import PdfSidebar from '@/components/PdfSidebar';
 
 export default function ViewerPage() {
-  // 🌟 PDFビューアーを操作するためのRef
+  // 🌟 PDFビューアーを操作するためのRef（ページジャンプ用）
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
 
-  // 🌟 お絵描き・ツールバーの状態を一括管理
-  // 型定義に 'text' を確実に追加しました
+  // 🌟 お絵描き・ツールバーの状態をこの「司令塔」で一括管理
+  // 🚨 修正：'text' を確実に追加しました！
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser' | 'text'>('none');
   const [drawingColor, setDrawingColor] = useState('#ef4444');
   
@@ -18,19 +18,20 @@ export default function ViewerPage() {
   const [markerWidth, setMarkerWidth] = useState(18);
   const [eraserWidth, setEraserWidth] = useState(30);
 
-  // サイドバーのメモをクリックした時にPDFを指定ページへジャンプ
+  // サイドバーのメモをクリックした時にPDFを指定ページへスクロールさせる
   const handleNoteClick = (pageNumber: number) => {
     pdfViewerRef.current?.scrollToPage(pageNumber);
   };
 
   return (
+    // 🌟 h-[100dvh] でスマホのブラウザ特有の「下の余白バグ」を防止
     <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden relative text-slate-100">
       
       {/* 左側：メインのPDF表示エリア */}
       <div className="flex-1 relative w-full h-full">
         <PdfViewer 
           ref={pdfViewerRef} 
-          pdfUrl="/sample.pdf" 
+          pdfUrl="/sample.pdf" // 👈 表示したいPDFのパスに変更してください
           drawingMode={drawingMode}
           drawingColor={drawingColor}
           penWidth={penWidth}
@@ -39,8 +40,12 @@ export default function ViewerPage() {
         />
       </div>
 
-      {/* 右側：サイドバーとツールバー 
-          🌟 PdfSidebarに 'text' モードや消しゴムの太さを渡します
+      {/* 右側：サイドバー 
+        🌟 「hidden lg:block」を外しました。
+        🌟 自由に動くツールバー（ポップアップ）は PdfSidebar の中に含まれているため、
+           コンポーネント自体はスマホでも常に読み込む必要があります。
+           （サイドバー本体の隠し制御は PdfSidebar.tsx 側のCSSで行います）
+        🚨 修正：PdfSidebarに渡すデータに不足していたeraserWidthなどを追加！
       */}
       <PdfSidebar 
         onNoteClick={handleNoteClick}
