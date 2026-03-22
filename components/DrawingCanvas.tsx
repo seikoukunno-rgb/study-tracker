@@ -28,7 +28,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const pathsRef = useRef<PathData[]>([]);
   const textsRef = useRef<TextData[]>([]);
   const currentPathRef = useRef<Point[]>([]);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -76,7 +75,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log(`🔍 ページ ${pageIndex} のデータを読み込み中...`);
       const { data, error } = await supabase
         .from('annotations')
         .select('data')
@@ -91,32 +89,28 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       }
 
       if (data && data.data) {
-        console.log("✅ データを復元しました:", data.data);
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
-        redraw();
       } else {
-        console.log("ℹ️ このページのデータはまだありません。");
         pathsRef.current = [];
         textsRef.current = [];
-        redraw();
       }
+      redraw();
     };
     loadAnnotations();
-    
-    // 🌟【最重要修正】ここの配列から `redraw` を削除しました！
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIndex, pdfId]); 
 
-  // --- 保存 ---
+  // --- 即時保存関数 ---
   const saveAnnotations = async () => {
+    console.log(`✍️ ページ ${pageIndex} の保存処理を開始します... (線の数: ${pathsRef.current.length})`);
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       console.error("🚨 保存失敗: ログインしていません");
       return;
     }
 
-    console.log(`💾 ページ ${pageIndex} を保存中...`);
     const annotationData = { paths: pathsRef.current, texts: textsRef.current };
 
     const { error } = await supabase
@@ -132,15 +126,8 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (error) {
       console.error("❌ 保存エラー:", error.message);
     } else {
-      console.log("🚀 保存成功！");
+      console.log(`🚀 ページ ${pageIndex} の保存に成功しました！`);
     }
-  };
-
-  const triggerSave = () => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
-      saveAnnotations();
-    }, 1000); 
   };
 
   // --- イベントハンドラ ---
@@ -217,11 +204,14 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (!isDrawing) return;
     if ('touches' in e && e.touches.length > 0) { cancelDrawing(); return; }
     setIsDrawing(false);
+    
     if (currentPathRef.current.length > 0) {
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
-      triggerSave();
+      
+      // 🌟 タイマーを廃止し、問答無用で即座に保存！
+      saveAnnotations();
     }
   };
 
@@ -229,7 +219,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (textValue.trim() && textInput) {
       textsRef.current.push({ text: textValue, x: textInput.x, y: textInput.y + 6, color });
       redraw();
-      triggerSave();
+      
+      // 🌟 テキスト確定時も即座に保存！
+      saveAnnotations();
     }
     setTextInput(null);
     setTextValue("");
