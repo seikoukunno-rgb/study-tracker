@@ -1,12 +1,15 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabase"; // ⚠️ パスが違う場合は調整してください
+// 🌟 usePathname を追加でインポート
+import { useRouter, usePathname } from "next/navigation"; 
+import { supabase } from "../lib/supabase";
 import { User, X, QrCode, Moon, Sun, Bell, PenLine, Share2, Trash2 } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function GlobalSidebar() {
   const router = useRouter();
+  const pathname = usePathname(); // 🌟 現在のURLを取得
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [userName, setUserName] = useState("ユーザー");
@@ -25,7 +28,6 @@ export default function GlobalSidebar() {
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const sidebarStartX = useRef<number | null>(null);
 
-  // 🌟 初期化＆他ページからの「開け！」イベントをリッスンする
   useEffect(() => {
     const handleOpen = () => setShowProfileMenu(true);
     window.addEventListener('openSidebar', handleOpen);
@@ -49,12 +51,12 @@ export default function GlobalSidebar() {
       clearInterval(timer);
     };
   }, []);
-
+  
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-setMyUserId(user.id);
+    setMyUserId(user.id);
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     if (profile) {
@@ -64,14 +66,11 @@ setMyUserId(user.id);
       else if (rawAvatar.trim() !== "") setUserAvatar(rawAvatar);
     }
 
-    // 🌟 【ここから追加】フォロワー数・フォロー中数の取得 🌟
-    // 自分がフォローされている数（フォロワー）
     const { count: followers } = await supabase
       .from('follows')
       .select('*', { count: 'exact', head: true })
       .eq('following_id', user.id);
       
-    // 自分がフォローしている数（フォロー中）
     const { count: following } = await supabase
       .from('follows')
       .select('*', { count: 'exact', head: true })
@@ -79,7 +78,6 @@ setMyUserId(user.id);
 
     if (followers !== null) setFollowerCount(followers);
     if (following !== null) setFollowingCount(following);
-    // 🌟 【追加ここまで】 🌟
   };
 
   const toggleDarkMode = () => {
@@ -90,7 +88,6 @@ setMyUserId(user.id);
     window.dispatchEvent(new Event('darkModeChanged'));
   };
 
-  // 🌟 スワイプ操作
   const handleEdgeTouchStart = (e: React.TouchEvent) => {
     sidebarStartX.current = e.touches[0].clientX;
     setIsDraggingSidebar(true);
@@ -119,12 +116,11 @@ setMyUserId(user.id);
     localStorage.setItem('study_reminders_v2', JSON.stringify(newReminders));
   };
 
-// 🌟 アプリ全体をシェアする関数
   const handleShareApp = async () => {
     const shareData = {
       title: 'Mercury',
       text: '学習とタスクを管理するアプリ「Mercury」を一緒に使おう！',
-      url: 'https://study-tracker-rzbj.vercel.app', // Vercelの公開URL
+      url: 'https://study-tracker-rzbj.vercel.app', 
     };
 
     if (navigator.share) {
@@ -134,9 +130,8 @@ setMyUserId(user.id);
         console.error('共有がキャンセルされたか失敗しました', error);
       }
     } else {
-      // パソコンなどシェア機能がないブラウザ用のフォールバック
       navigator.clipboard.writeText(shareData.url);
-      alert("アプリのURLをコピーしました！"); // もし showToast があればそれに変えてもOKです
+      alert("アプリのURLをコピーしました！"); 
     }
   };
 
@@ -156,7 +151,12 @@ setMyUserId(user.id);
 
   const textMain = isDarkMode ? "text-white" : "text-slate-800";
   const bgSubCard = isDarkMode ? "bg-[#2c2c2e] border-[#38383a]" : "bg-slate-50 border-slate-100";
-  const profileUrl = typeof window !== 'undefined' && myUserId ? `${window.location.origin}/user/${myUserId}` : ""; // ご自身のURLに書き換えてください
+  const profileUrl = typeof window !== 'undefined' && myUserId ? `${window.location.origin}/user/${myUserId}` : ""; 
+
+  // 🌟 【最重要修正】PDF画面（/viewer）を開いている時は、メニューやスワイプ判定を一切描画しない！
+  if (pathname?.startsWith('/viewer')) {
+    return null; 
+  }
 
   return (
     <div className="z-[9999]">
@@ -208,7 +208,7 @@ setMyUserId(user.id);
             </div>
           </div>
 
-          {/* 🌟 フォロワー表示エリア（タップ可能にする） */}
+          {/* フォロワー表示エリア */}
           <div className="flex gap-6 mt-6 pt-5 border-t border-white/20 px-2">
              <button 
                onClick={() => { setShowProfileMenu(false); router.push('/network?tab=followers'); }} 
@@ -225,7 +225,6 @@ setMyUserId(user.id);
                <span className="text-[10px] font-bold tracking-widest text-indigo-200 uppercase mt-0.5">Following</span>
              </button>
           </div>
-          
         </div> 
         
         <div className="flex-grow p-6 overflow-y-auto"> 
@@ -263,7 +262,7 @@ setMyUserId(user.id);
         </div> 
       </div> 
 
-      {/* 🌟 画面左端のスワイプ判定エリア（どの画面でも左端からスワイプで出せるようにする） */}
+      {/* 🌟 PDF画面以外でのみ、左端のスワイプ判定を有効にする */}
       {!showProfileMenu && (
         <div 
           onTouchStart={handleEdgeTouchStart}
@@ -289,7 +288,7 @@ setMyUserId(user.id);
                   fgColor={"#4f46e5"} 
                   level={"H"} 
                   imageSettings={{
-                    src: "/logo.png", // 🌟 ここが public/logo.png を読み込む設定です
+                    src: "/logo.png",
                     height: 50,
                     width: 50,
                     excavate: true,

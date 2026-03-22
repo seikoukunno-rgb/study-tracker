@@ -85,7 +85,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     }
   };
 
-  const showNav = pathname !== "/login" && !isRoomDetail;
+ const showNav = pathname !== "/login" && !isRoomDetail && !pathname.startsWith("/viewer");
 
   // 🌟 サーバーとクライアントの不一致を完全に防ぐ
   if (!mounted) return null;
