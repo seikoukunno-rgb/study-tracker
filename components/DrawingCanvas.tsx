@@ -1,3 +1,4 @@
+// components/DrawingCanvas.tsx
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -104,16 +105,22 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }
   };
 
+  // 🌟【最強の魔法】お絵かきを強制終了して、描きかけの「点」を消去する
+  const cancelDrawing = useCallback(() => {
+    if (isDrawing) {
+      setIsDrawing(false);
+      currentPathRef.current = []; // 描きかけの点をゴミ箱へ
+      redraw(); // 画面を綺麗にする
+    }
+  }, [isDrawing, redraw]);
+
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (mode === 'none') return;
 
     if ('touches' in e) {
-      // 🌟【最重要修正】2本目の指が触れた瞬間、1本目の指で書いてしまった「点」を完全に消去してキャンセルする！
       if (e.touches.length >= 2) {
-        setIsDrawing(false);
-        currentPathRef.current = []; // 描きかけていた点を消去
-        redraw(); // 画面を再描画して点を消す
-        return; 
+        cancelDrawing(); // 2本指なら即キャンセルして点を消す！
+        return;
       }
       stopEvent(e);
     } else {
@@ -142,12 +149,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (!isDrawing || mode === 'none' || mode === 'text') return;
 
     if ('touches' in e) {
-      // 🌟【最重要修正】描いている途中で2本目の指が触れた場合も、キャンセルして点を残さない
       if (e.touches.length >= 2) {
-        setIsDrawing(false);
-        currentPathRef.current = [];
-        redraw();
-        return; 
+        cancelDrawing(); // 描いてる途中で2本指になったら点を消す！
+        return;
       }
       stopEvent(e);
       if (e.cancelable) e.preventDefault();
@@ -163,8 +167,15 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     redraw();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
+
+    // 🌟 画面から指を離した時、まだ別の指が画面に残っていたらズーム操作とみなしてキャンセル！
+    if ('touches' in e && e.touches.length > 0) {
+      cancelDrawing();
+      return;
+    }
+
     setIsDrawing(false);
     if (currentPathRef.current.length > 0) {
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
@@ -188,12 +199,13 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         ref={canvasRef}
         onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
         onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
+        // 🌟 ブラウザがズームを優先してタッチを横取りした時に、点を消す
+        onTouchCancel={cancelDrawing} 
         className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${
           mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
         }`}
       />
 
-      {/* テキストボックス（モバイル対応） */}
       {textInput && (
         <input
           type="text" autoFocus value={textValue}
@@ -202,15 +214,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
-          onMouseDown={stopEvent}
-          onTouchStart={stopEvent}
+          onMouseDown={stopEvent} onTouchStart={stopEvent}
           className="absolute z-20 bg-white border-2 border-indigo-600 rounded px-3 py-1 outline-none shadow-2xl text-black"
           style={{ 
-            left: textInput.x, 
-            top: textInput.y - 14, 
-            color, 
-            fontSize: '20px', 
-            fontWeight: 'bold',
+            left: textInput.x, top: textInput.y - 14, color, fontSize: '20px', fontWeight: 'bold',
             transformOrigin: 'top left',
             transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
           }}
