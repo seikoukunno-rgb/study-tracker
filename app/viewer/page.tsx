@@ -26,6 +26,11 @@ export default function ViewerPage() {
     // 🌟 h-[100dvh] でスマホのブラウザ特有の「下の余白バグ」を防止
     <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden relative">
       
+
+      {/* 🌟 これを追加して保存してください！ */}
+      <h1 className="absolute top-10 left-10 z-[999] text-5xl text-red-500 font-bold bg-white p-4">
+        画面更新テスト！！！
+      </h1>
       {/* 左側：メインのPDF表示エリア */}
       <div className="flex-1 relative w-full h-full">
         <PdfViewer 
