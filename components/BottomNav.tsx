@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { PenTool, BarChart2, Users, User, CalendarDays } from "lucide-react";
+import { PenTool, BarChart2, Users, User, CalendarDays, } from "lucide-react";
 
 export default function BottomNav() {
   const router = useRouter();

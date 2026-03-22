@@ -3,6 +3,7 @@
 
 import { useState, useRef, forwardRef, useImperativeHandle, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+// 🌟 `TransformWrapper` の中に `DrawingCanvas` がいるので、coords補正が効きます
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -13,16 +14,27 @@ const pdfOptions = { cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`, cMa
 
 type PdfViewerProps = {
   pdfUrl: string;
-  // 🌟 'text' を追加
+  // 🌟 'text' モードを型定義に追加
   drawingMode?: 'none' | 'pen' | 'marker' | 'eraser' | 'text'; 
   drawingColor?: string;
+  // 🌟 太さのPropを追加（デフォルト値を設定）
+  penWidth?: number;
+  markerWidth?: number;
+  eraserWidth?: number;
 };
 
 export type PdfViewerHandle = { scrollToPage: (pageNumber: number) => void; };
 
-const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawingMode = 'none', drawingColor = '#ef4444' }, ref) => {
+const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ 
+  pdfUrl, 
+  drawingMode = 'none', 
+  drawingColor = '#ef4444',
+  // デフォルトの太さ
+  penWidth = 3,
+  markerWidth = 18,
+  eraserWidth = 30
+}, ref) => {
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -60,35 +72,26 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
           initialScale={1}
           minScale={1}
           maxScale={4}
-          // 🌟 ペンなどの描画モード中はズーム/パンを無効化（誤操作防止）
+          // ペンモード中はズームを無効化（座標ズレを防ぐためではなく、誤操作防止）
           disabled={drawingMode !== 'none'}
           centerZoomedOut={false}
-          // 🌟 パン（移動）のロックを解除。自由にスクロール可能に
           panning={{ disabled: false }}
-          // 🌟 マウスホイールでのズームを許可
           wheel={{ wheelDisabled: false, step: 0.1 }}
-          // 🌟 ダブルクリックでのズームを許可
           doubleClick={{ disabled: false, mode: "zoomIn" }}
         >
           <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full flex flex-col items-center">
             <Document
               file={file}
               options={pdfOptions}
-              onLoadSuccess={({ numPages }) => { setNumPages(numPages); setLoadError(null); }}
-              onLoadError={(error) => setLoadError(error.message)}
+              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
               className="flex flex-col items-center gap-2 w-full"
-              loading={
-                <div className="flex flex-col items-center justify-center mt-32 absolute top-0">
-                  <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <div className="text-indigo-400 font-black tracking-widest animate-pulse">LOADING...</div>
-                </div>
-              }
+              loading={<div className="mt-32 text-indigo-400 font-black animate-pulse">LOADING...</div>}
             >
               {numPages && Array.from(new Array(numPages), (_, index) => (
                 <div 
                   key={`page_${index + 1}`}
                   ref={(el) => { pageRefs.current[index + 1] = el; }} 
-                  className="relative shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden bg-white mb-2"
+                  className="relative shadow-2xl overflow-hidden bg-white mb-2"
                   style={{ width: pdfWidth }}
                 >
                   <Page 
@@ -98,8 +101,15 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  {/* 🌟 キャンバス呼び出し */}
-                  <DrawingCanvas mode={drawingMode} color={drawingColor} pageIndex={index + 1} />
+                  {/* 🌟 キャンバスにすべての太さとモードを渡す */}
+                  <DrawingCanvas 
+                    mode={drawingMode} 
+                    color={drawingColor} 
+                    penWidth={penWidth}
+                    markerWidth={markerWidth}
+                    eraserWidth={eraserWidth}
+                    pageIndex={index + 1} 
+                  />
                 </div>
               ))}
             </Document>
