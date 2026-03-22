@@ -83,7 +83,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         .eq('user_id', user.id)
         .eq('pdf_id', pdfId)
         .eq('page_index', pageIndex)
-        .maybeSingle(); // 🌟 406エラー対策：データがなくてもエラーにしない
+        .maybeSingle();
 
       if (error) {
         console.error("❌ 読み込みエラー:", error.message);
@@ -103,7 +103,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       }
     };
     loadAnnotations();
-  }, [pageIndex, pdfId, redraw]);
+    
+    // 🌟【最重要修正】ここの配列から `redraw` を削除しました！
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIndex, pdfId]); 
 
   // --- 保存 ---
   const saveAnnotations = async () => {
