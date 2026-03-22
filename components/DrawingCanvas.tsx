@@ -19,18 +19,13 @@ type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: numbe
 type TextData = { text: string; x: number; y: number; color: string };
 
 export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex, pdfId = 'default-pdf' }: DrawingCanvasProps) {
-  
-  // 🌟 診断用：DrawingCanvasが本当に読み込まれているかチェック
-  useEffect(() => {
-    if (pageIndex === 1) {
-      alert("💡 DrawingCanvasが起動しました！(ページ1)");
-    }
-  }, [pageIndex]);
-
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number } | null>(null);
   const [textValue, setTextValue] = useState("");
+  
+  // 🌟 コンソールを見なくても画面でわかるステータス表示
+  const [statusMsg, setStatusMsg] = useState<string>("");
 
   const transformContext = useTransformContext();
   const pathsRef = useRef<PathData[]>([]);
@@ -77,54 +72,62 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // --- 読み込み (テスト用) ---
+  // --- 読み込み ---
   useEffect(() => {
     const loadAnnotations = async () => {
-      // 🌟 ログインチェックを無効化
-      // const { data: { user } } = await supabase.auth.getUser();
-      // if (!user) return;
+      setStatusMsg("読み込み中...");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setStatusMsg("未ログイン");
+        return;
+      }
 
-      console.log(`🔍 ページ ${pageIndex} を読み込みます...`);
       const { data, error } = await supabase
         .from('annotations')
         .select('data')
-        // .eq('user_id', user.id) // 🌟 誰のデータでも一旦無視してPDFとページ番号だけで検索
+        .eq('user_id', user.id)
         .eq('pdf_id', pdfId)
         .eq('page_index', pageIndex)
         .maybeSingle();
 
       if (error) {
-        console.error(`❌ ページ ${pageIndex} 読み込みエラー:`, error.message);
+        setStatusMsg("❌ 読込エラー: " + error.message);
         return;
       }
 
       if (data && data.data) {
-        console.log(`✅ ページ ${pageIndex} の復元成功！`, data.data);
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
+        setStatusMsg("✅ データ復元完了");
       } else {
         pathsRef.current = [];
         textsRef.current = [];
+        setStatusMsg("");
       }
       redraw();
+      setTimeout(() => setStatusMsg(""), 3000);
     };
     loadAnnotations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIndex, pdfId]); 
 
-  // --- 保存 (テスト用) ---
+  // --- 保存 ---
   const saveAnnotations = async () => {
-    console.log(`💾 ページ ${pageIndex} の強制保存を試みます... (線の数: ${pathsRef.current.length})`);
+    setStatusMsg("💾 保存中...");
     
-    // 🌟 誰が書いたかわかるように、テスト用の固定IDを使います
-    const dummyUserId = "11111111-1111-1111-1111-111111111111"; 
+    // 🌟 実際のログインユーザーを使用する（ダミーIDはもう使いません）
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setStatusMsg("🚨 エラー: ログインしていません");
+      return;
+    }
 
     const annotationData = { paths: pathsRef.current, texts: textsRef.current };
 
     const { error } = await supabase
       .from('annotations')
       .upsert({
-        user_id: dummyUserId, // 🌟 固定ID
+        user_id: user.id,
         pdf_id: pdfId,
         page_index: pageIndex,
         data: annotationData,
@@ -132,9 +135,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       }, { onConflict: 'user_id, pdf_id, page_index' });
 
     if (error) {
-      console.error("❌ 保存エラーの正体:", error.message);
+      setStatusMsg("❌ 保存失敗: " + error.message);
     } else {
-      console.log(`🚀 ページ ${pageIndex} の保存に成功しました！！！`);
+      setStatusMsg("🚀 保存成功！");
+      setTimeout(() => setStatusMsg(""), 3000); // 3秒後にメッセージを消す
     }
   };
 
@@ -226,7 +230,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (textValue.trim() && textInput) {
       textsRef.current.push({ text: textValue, x: textInput.x, y: textInput.y + 6, color });
       redraw();
-      
       saveAnnotations();
     }
     setTextInput(null);
@@ -235,6 +238,13 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   return (
     <>
+      {/* 🌟 画面の左上にステータスを強制表示します！ */}
+      {statusMsg && (
+        <div className="absolute top-2 left-2 z-[999] bg-black/80 text-white px-3 py-1 rounded-md text-sm font-bold pointer-events-none shadow-lg border border-white/20">
+          {statusMsg}
+        </div>
+      )}
+
       <canvas
         ref={canvasRef}
         onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}

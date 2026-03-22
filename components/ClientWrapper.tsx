@@ -21,26 +21,23 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
 
   // 1. マウントと初期設定をまとめる
   useEffect(() => {
+    // 🌟 ブラウザに画面が届いてから「準備完了」にする
     setMounted(true);
     
-    // ダークモードの初期判定
     const savedMode = localStorage.getItem('dark_mode');
     setIsDarkMode(savedMode === 'true');
 
-    // 招待コードの初期判定
+    // 🌟 招待コードのチェック（ローカル環境で環境変数が空でも動くように救済措置を追加）
+    const envCode = process.env.NEXT_PUBLIC_INVITATION_CODE;
     const savedCode = localStorage.getItem("mercury_auth");
-    if (savedCode === process.env.NEXT_PUBLIC_INVITATION_CODE) {
+    if (!envCode || savedCode === envCode) {
       setIsAuthorized(true);
     }
 
-    // サービスワーカーの登録
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(() => console.log('SW registered'))
-        .catch((err) => console.log('SW error', err));
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
     }
 
-    // イベントリスナーの登録
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     window.addEventListener('storage', checkDarkMode);
     window.addEventListener('darkModeChanged', checkDarkMode);
@@ -51,29 +48,35 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     };
   }, []);
 
-  // 2. ユーザー認証のチェック（セッションの監視）
+  // 2. ユーザー認証のチェック
   useEffect(() => {
     if (!mounted) return;
+
+    // 🌟 アンマウント時のエラーを防ぐためのフラグ
+    let isSubscribed = true;
 
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user && pathname !== "/login") {
         router.push("/login");
-      } else {
+      } else if (isSubscribed) {
+        // 🌟 認証チェックが終わったら確実にローディングを解除する
         setIsLoading(false);
       }
     };
 
     checkUser();
 
-    // 🌟 セッションが切れた時に自動でログイン画面に飛ばす
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' && pathname !== "/login") {
         router.push("/login");
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isSubscribed = false;
+      subscription.unsubscribe();
+    };
   }, [mounted, pathname, router]);
 
   const handleAuth = () => {
@@ -85,10 +88,20 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     }
   };
 
- const showNav = pathname !== "/login" && !isRoomDetail && !pathname.startsWith("/viewer");
+  const showNav = pathname !== "/login" && !isRoomDetail && !pathname.startsWith("/viewer");
 
-  // 🌟 サーバーとクライアントの不一致を完全に防ぐ
-  if (!mounted) return null;
+  // 🌟🌟 修正の超重要ポイント 🌟🌟
+  // サーバー側（mounted前）は、絶対にnullや中途半端な画面を返さず、
+  // シンプルなローディング画面を返すことでハイドレーションの不一致を完全に防ぎます。
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+        <div className="text-indigo-500 font-black animate-pulse tracking-widest">
+          SYSTEM INITIALIZING...
+        </div>
+      </div>
+    );
+  }
 
   // 招待コード未入力の場合
   if (!isAuthorized) {

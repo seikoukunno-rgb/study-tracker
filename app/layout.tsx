@@ -1,9 +1,9 @@
+// app/layout.tsx
 import './globals.css';
 import type { Metadata } from 'next';
 import ClientWrapper from '@/components/ClientWrapper';
 import GlobalSidebar from '@/components/GlobalSidebar';
 
-// 🌟 PWA（アプリ化）に必要な設定。ここは完璧です！
 export const metadata: Metadata = {
   title: "Mercury",
   description: "Study Tracker",
@@ -21,17 +21,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
-      <body>
-        {/* 🌟 修正ポイント：
-          GlobalSidebar を ClientWrapper の「中」に移動しました。
-          これでサイドバーがアプリのコンテキスト（状態）を正しく共有できるようになります。
-        */}
+    <html lang="ja" suppressHydrationWarning> {/* 🌟 属性の微細な違いを無視する魔法の言葉 */}
+      <body suppressHydrationWarning>
         <ClientWrapper>
-          {children}
-          
-          {/* 🌟 共通サイドバーをここに配置。これで勝手な開閉が止まります */}
-          <GlobalSidebar />
+          <div className="flex min-h-screen">
+            <main className="flex-1 relative overflow-hidden">
+              {children}
+            </main>
+            {/* サイドバー */}
+            <GlobalSidebar />
+          </div>
         </ClientWrapper>
       </body>
     </html>
