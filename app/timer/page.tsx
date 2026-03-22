@@ -159,7 +159,14 @@ function TimerContent() {
       <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
         <div className="flex-1 relative flex flex-col border-r border-[#2c2c2e]">
           <div className="absolute inset-0 z-0">
-            <PdfViewer ref={pdfViewerRef} pdfUrl={securePdfUrl} drawingMode={drawingMode} drawingColor={drawingColor} />
+           // app/timer/page.tsx の中
+<PdfViewer 
+  ref={pdfViewerRef} 
+  pdfUrl={securePdfUrl} 
+  pdfId={`${materialId}-pdf-${currentIndex}`} // 🌟 ここが「司令塔」からデータを送る場所です
+  drawingMode={drawingMode} 
+  drawingColor={drawingColor} 
+/>
           </div>
 
           <button onClick={() => router.back()} className="absolute top-6 left-4 z-40 p-3 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60">

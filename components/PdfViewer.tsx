@@ -1,9 +1,7 @@
-// components/PdfViewer.tsx
 'use client';
 
 import { useState, useRef, forwardRef, useImperativeHandle, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-// 🌟 `TransformWrapper` の中に `DrawingCanvas` がいるので、coords補正が効きます
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -14,10 +12,9 @@ const pdfOptions = { cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`, cMa
 
 type PdfViewerProps = {
   pdfUrl: string;
-  // 🌟 'text' モードを型定義に追加
+  pdfId?: string; // 🌟 受付窓口に ID を追加
   drawingMode?: 'none' | 'pen' | 'marker' | 'eraser' | 'text'; 
   drawingColor?: string;
-  // 🌟 太さのPropを追加（デフォルト値を設定）
   penWidth?: number;
   markerWidth?: number;
   eraserWidth?: number;
@@ -27,9 +24,9 @@ export type PdfViewerHandle = { scrollToPage: (pageNumber: number) => void; };
 
 const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ 
   pdfUrl, 
+  pdfId, // 🌟 引数に pdfId を追加
   drawingMode = 'none', 
   drawingColor = '#ef4444',
-  // デフォルトの太さ
   penWidth = 3,
   markerWidth = 18,
   eraserWidth = 30
@@ -72,11 +69,8 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
           initialScale={1}
           minScale={1}
           maxScale={4}
-          // ❌ disabled={drawingMode !== 'none'} は削除！
           centerZoomedOut={false}
-          // 🌟 1本指の移動(パン)は、ペン等を使っている時だけ無効にする
           panning={{ disabled: drawingMode !== 'none' }}
-          // 🌟 2本指のピンチズームは「常に許可」する
           pinch={{ disabled: false }}
           wheel={{ wheelDisabled: false, step: 0.1 }}
           doubleClick={{ disabled: false, mode: "zoomIn" }}
@@ -103,21 +97,16 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  {/* 🌟 キャンバスにすべての太さとモードを渡す */}
+                  {/* 🌟 修正：PdfViewer ではなく、DrawingCanvas を正しく呼び出します */}
                   <DrawingCanvas 
-  mode={drawingMode} 
-  color={drawingColor} 
-  penWidth={penWidth}
-  markerWidth={markerWidth}
-  eraserWidth={eraserWidth}
-  pageIndex={index + 1} 
-  
-  // 🌟 ここを大改修！
-  // "sample-pdf-001" という固定の名前をやめて、
-  // 今開いているPDFのURL（またはID）が入った「変数」に変えます。
-  // 波括弧 {} で囲むのがポイントです！
-  pdfId={pdfUrl} 
-/>
+                    mode={drawingMode} 
+                    color={drawingColor} 
+                    penWidth={penWidth}
+                    markerWidth={markerWidth}
+                    eraserWidth={eraserWidth}
+                    pageIndex={index + 1} 
+                    pdfId={pdfId || pdfUrl} // 🌟 親からきた pdfId を渡す
+                  />
                 </div>
               ))}
             </Document>
