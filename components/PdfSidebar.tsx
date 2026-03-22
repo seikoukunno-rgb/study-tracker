@@ -36,14 +36,13 @@ export default function PdfSidebar({
   return (
     <aside className="w-80 h-full bg-[#1c1c1e] border-l border-[#2c2c2e] flex flex-col relative">
       
-      {/* 🌟 黒い浮いているツールバー */}
-      <div className="absolute top-4 left-[-270px] z-50 bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border border-white/10 shadow-2xl">
+      {/* 🌟 黒い浮いているツールバー（ここを修正！） */}
+      <div className="absolute top-4 left-[-260px] z-50 bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border border-white/10 shadow-2xl">
         
         {/* ペン */}
         <button 
           onClick={() => setDrawingMode('pen')}
           className={`p-2 rounded-lg ${drawingMode === 'pen' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
-          title="ペン"
         >
           <PenTool className="w-5 h-5" />
         </button>
@@ -52,7 +51,6 @@ export default function PdfSidebar({
         <button 
           onClick={() => setDrawingMode('marker')}
           className={`p-2 rounded-lg ${drawingMode === 'marker' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
-          title="マーカー"
         >
           <Highlighter className="w-5 h-5" />
         </button>
@@ -61,7 +59,6 @@ export default function PdfSidebar({
         <button 
           onClick={() => setDrawingMode('eraser')}
           className={`p-2 rounded-lg ${drawingMode === 'eraser' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
-          title="消しゴム"
         >
           <Eraser className="w-5 h-5" />
         </button>
