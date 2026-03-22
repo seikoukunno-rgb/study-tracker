@@ -72,10 +72,12 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
           initialScale={1}
           minScale={1}
           maxScale={4}
-          // ペンモード中はズームを無効化（座標ズレを防ぐためではなく、誤操作防止）
-          disabled={drawingMode !== 'none'}
+          // ❌ disabled={drawingMode !== 'none'} は削除！
           centerZoomedOut={false}
-          panning={{ disabled: false }}
+          // 🌟 1本指の移動(パン)は、ペン等を使っている時だけ無効にする
+          panning={{ disabled: drawingMode !== 'none' }}
+          // 🌟 2本指のピンチズームは「常に許可」する
+          pinch={{ disabled: false }}
           wheel={{ wheelDisabled: false, step: 0.1 }}
           doubleClick={{ disabled: false, mode: "zoomIn" }}
         >

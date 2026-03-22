@@ -60,13 +60,13 @@ export default function PdfSidebar({
           <Eraser className="w-5 h-5" />
         </button>
 
-        {/* 🌟 テキスト追加ボタン（ついに合流！） */}
-        <button 
-          onClick={() => setDrawingMode('text')}
-          className={`p-2 rounded-lg ${drawingMode === 'text' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
-        >
-          <Type className="w-5 h-5" />
-        </button>
+        {/* 🌟 テキスト追加ボタン */}
+<button 
+  onClick={() => setDrawingMode('text')}
+  className={`p-2 rounded-lg ${drawingMode === 'text' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
+>
+  <Type className="w-5 h-5" />
+</button>
 
         <div className="w-[1px] h-6 bg-white/20 mx-1" />
 
