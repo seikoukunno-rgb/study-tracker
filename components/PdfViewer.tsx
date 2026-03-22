@@ -105,14 +105,19 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                   />
                   {/* 🌟 キャンバスにすべての太さとモードを渡す */}
                   <DrawingCanvas 
-                    mode={drawingMode} 
-                    color={drawingColor} 
-                    penWidth={penWidth}
-                    markerWidth={markerWidth}
-                    eraserWidth={eraserWidth}
-                    pageIndex={index + 1} 
-                    pdfId="sample-pdf-001"
-                  />
+  mode={drawingMode} 
+  color={drawingColor} 
+  penWidth={penWidth}
+  markerWidth={markerWidth}
+  eraserWidth={eraserWidth}
+  pageIndex={index + 1} 
+  
+  // 🌟 ここを大改修！
+  // "sample-pdf-001" という固定の名前をやめて、
+  // 今開いているPDFのURL（またはID）が入った「変数」に変えます。
+  // 波括弧 {} で囲むのがポイントです！
+  pdfId={pdfUrl} 
+/>
                 </div>
               ))}
             </Document>
