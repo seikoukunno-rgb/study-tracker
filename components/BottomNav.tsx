@@ -22,7 +22,8 @@ export default function BottomNav() {
     };
   }, []);
 
-  if (pathname === "/timer" || pathname === "/nfc-setup" || pathname === "/login") {
+ // 🌟 この行を探して、"/viewer" を追加してください
+  if (pathname === "/timer" || pathname === "/nfc-setup" || pathname === "/login" || pathname.startsWith("/viewer")) {
     return null;
   }
 
