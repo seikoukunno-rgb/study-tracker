@@ -13,8 +13,9 @@ const pdfOptions = { cMapUrl: `https://unpkg.com/pdfjs-dist@4.4.168/cmaps/`, cMa
 
 type PdfViewerProps = {
   pdfUrl: string;
-  drawingMode?: 'none' | 'pen' | 'marker' | 'eraser'; // 🌟 マーカー追加
-  drawingColor?: string; // 🌟 色を受け取る
+  // 🌟 'text' を追加
+  drawingMode?: 'none' | 'pen' | 'marker' | 'eraser' | 'text'; 
+  drawingColor?: string;
 };
 
 export type PdfViewerHandle = { scrollToPage: (pageNumber: number) => void; };
@@ -26,7 +27,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
   const containerRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
-  const [currentScale, setCurrentScale] = useState(1);
 
   const file = useMemo(() => ({ url: pdfUrl }), [pdfUrl]);
 
@@ -43,20 +43,16 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
 
   useEffect(() => {
     const updateWidth = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth);
-      }
+      if (containerRef.current) setContainerWidth(containerRef.current.clientWidth);
     };
     const timer = setTimeout(updateWidth, 100);
     window.addEventListener('resize', updateWidth);
     return () => { clearTimeout(timer); window.removeEventListener('resize', updateWidth); };
   }, []);
 
-  // 🌟 横幅ピッタリに合わせる（余白を作らない）
   const pdfWidth = containerWidth > 0 ? containerWidth : undefined;
 
   return (
-    // 🌟 超重要: overflow-x-hidden を追加し、横スクロールを物理的に抹殺
     <div ref={containerRef} className="h-full w-full bg-[#0a0a0a] overflow-y-auto overflow-x-hidden relative no-scrollbar">
       {containerWidth > 0 && (
         <TransformWrapper
@@ -64,12 +60,15 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
           initialScale={1}
           minScale={1}
           maxScale={4}
+          // 🌟 ペンなどの描画モード中はズーム/パンを無効化（誤操作防止）
           disabled={drawingMode !== 'none'}
           centerZoomedOut={false}
-          panning={{ disabled: currentScale <= 1.05 }}
-          wheel={{ wheelDisabled: true }}
-          doubleClick={{ disabled: true }}
-          onTransformed={(ref) => setCurrentScale(ref.state.scale)}
+          // 🌟 パン（移動）のロックを解除。自由にスクロール可能に
+          panning={{ disabled: false }}
+          // 🌟 マウスホイールでのズームを許可
+          wheel={{ wheelDisabled: false, step: 0.1 }}
+          // 🌟 ダブルクリックでのズームを許可
+          doubleClick={{ disabled: false, mode: "zoomIn" }}
         >
           <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full flex flex-col items-center">
             <Document
@@ -89,7 +88,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
                 <div 
                   key={`page_${index + 1}`}
                   ref={(el) => { pageRefs.current[index + 1] = el; }} 
-                  // 🌟 横揺れを防ぐため、幅をピッタリコンテナサイズにする
                   className="relative shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden bg-white mb-2"
                   style={{ width: pdfWidth }}
                 >
@@ -100,7 +98,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({ pdfUrl, drawing
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  {/* 🌟 キャンバスに色とモードを渡す */}
+                  {/* 🌟 キャンバス呼び出し */}
                   <DrawingCanvas mode={drawingMode} color={drawingColor} pageIndex={index + 1} />
                 </div>
               ))}
