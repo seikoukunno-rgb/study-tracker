@@ -1,8 +1,9 @@
-// components/DrawingCanvas.tsx
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTransformContext } from "react-zoom-pan-pinch";
+// 🌟 Supabase クライアントのインポート（パスは環境に合わせて調整してください）
+import { supabase } from '@/lib/supabase';
 
 type DrawingCanvasProps = {
   mode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -11,13 +12,15 @@ type DrawingCanvasProps = {
   markerWidth: number;
   eraserWidth: number;
   pageIndex: number;
+  // 🌟 どのPDFに書いているかを識別するためのIDを追加（ViewerPageから渡す必要があります）
+  pdfId?: string; 
 };
 
 type Point = { x: number; y: number };
 type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: number; points: Point[] };
 type TextData = { text: string; x: number; y: number; color: string };
 
-export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex }: DrawingCanvasProps) {
+export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex, pdfId = 'default-pdf' }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number } | null>(null);
@@ -28,6 +31,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const pathsRef = useRef<PathData[]>([]);
   const textsRef = useRef<TextData[]>([]);
   const currentPathRef = useRef<Point[]>([]);
+
+  // 🌟 保存の負荷を減らすためのタイマー（Debounce用）
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -72,6 +78,68 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
+  // ==========================================
+  // 🌟 Supabase 連携：読み込みと保存ロジック
+  // ==========================================
+
+  // 1. ページ読み込み時にデータを取得（ロード）
+  useEffect(() => {
+    const loadAnnotations = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('annotations')
+        .select('data')
+        .eq('user_id', user.id)
+        .eq('pdf_id', pdfId)
+        .eq('page_index', pageIndex)
+        .single();
+
+      if (data && data.data) {
+        pathsRef.current = data.data.paths || [];
+        textsRef.current = data.data.texts || [];
+        redraw(); // 取得したデータでキャンバスを描画
+      }
+    };
+
+    loadAnnotations();
+  }, [pageIndex, pdfId, redraw]);
+
+  // 2. データを保存（セーブ）する関数
+  const saveAnnotations = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const annotationData = {
+      paths: pathsRef.current,
+      texts: textsRef.current,
+    };
+
+    const { error } = await supabase
+      .from('annotations')
+      .upsert({
+        user_id: user.id,
+        pdf_id: pdfId,
+        page_index: pageIndex,
+        data: annotationData,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id, pdf_id, page_index' }); // 同じページなら上書き
+
+    if (error) console.error("保存エラー:", error);
+  };
+
+  // 3. 負荷を減らす「遅延保存（Debounce）」
+  // 描き終わってから1秒後に保存。もし1秒以内に次を描き始めたらタイマーをリセット
+  const triggerSave = () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveAnnotations();
+    }, 1000); 
+  };
+
+  // ==========================================
+
   useEffect(() => {
     const initCanvas = () => {
       const canvas = canvasRef.current;
@@ -105,12 +173,11 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }
   };
 
-  // 🌟【最強の魔法】お絵かきを強制終了して、描きかけの「点」を消去する
   const cancelDrawing = useCallback(() => {
     if (isDrawing) {
       setIsDrawing(false);
-      currentPathRef.current = []; // 描きかけの点をゴミ箱へ
-      redraw(); // 画面を綺麗にする
+      currentPathRef.current = [];
+      redraw();
     }
   }, [isDrawing, redraw]);
 
@@ -119,7 +186,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
     if ('touches' in e) {
       if (e.touches.length >= 2) {
-        cancelDrawing(); // 2本指なら即キャンセルして点を消す！
+        cancelDrawing(); 
         return;
       }
       stopEvent(e);
@@ -150,7 +217,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
     if ('touches' in e) {
       if (e.touches.length >= 2) {
-        cancelDrawing(); // 描いてる途中で2本指になったら点を消す！
+        cancelDrawing();
         return;
       }
       stopEvent(e);
@@ -170,7 +237,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const stopDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
 
-    // 🌟 画面から指を離した時、まだ別の指が画面に残っていたらズーム操作とみなしてキャンセル！
     if ('touches' in e && e.touches.length > 0) {
       cancelDrawing();
       return;
@@ -181,6 +247,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
+      
+      // 🌟 線を引き終わったので保存タイマーを起動！
+      triggerSave();
     }
   };
 
@@ -188,6 +257,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (textValue.trim() && textInput) {
       textsRef.current.push({ text: textValue, x: textInput.x, y: textInput.y + 6, color });
       redraw();
+      
+      // 🌟 テキストを確定したので保存タイマーを起動！
+      triggerSave();
     }
     setTextInput(null);
     setTextValue("");
@@ -199,7 +271,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         ref={canvasRef}
         onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
         onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
-        // 🌟 ブラウザがズームを優先してタッチを横取りした時に、点を消す
         onTouchCancel={cancelDrawing} 
         className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${
           mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
