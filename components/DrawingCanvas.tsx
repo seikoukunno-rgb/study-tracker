@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-// 🌟 ズーム状態を取得するためのフックを追加
 import { useTransformContext } from "react-zoom-pan-pinch";
 
 type DrawingCanvasProps = {
@@ -29,7 +28,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const textsRef = useRef<TextData[]>([]);
   const currentPathRef = useRef<Point[]>([]);
 
-  // 再描画関数（最新の太さ対応）
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -39,11 +37,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // 1. 過去の線を描画
     pathsRef.current.forEach((path) => {
       if (path.points.length === 0) return;
       ctx.globalCompositeOperation = path.mode === 'eraser' ? 'destination-out' : (path.mode === 'marker' ? 'multiply' : 'source-over');
-      ctx.lineWidth = path.width; // 保存されている太さを使う
+      ctx.lineWidth = path.width;
       ctx.globalAlpha = path.mode === 'marker' ? 0.4 : 1.0;
       ctx.strokeStyle = path.mode === 'eraser' ? 'rgba(0,0,0,1)' : path.color;
 
@@ -53,11 +50,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       ctx.stroke();
     });
 
-    // 2. 現在描画中の線を描画
     if (currentPathRef.current.length > 0 && mode !== 'none' && mode !== 'text') {
       ctx.globalCompositeOperation = mode === 'eraser' ? 'destination-out' : (mode === 'marker' ? 'multiply' : 'source-over');
-      const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
-      ctx.lineWidth = width;
+      ctx.lineWidth = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       ctx.globalAlpha = mode === 'marker' ? 0.4 : 1.0;
       ctx.strokeStyle = mode === 'eraser' ? 'rgba(0,0,0,1)' : color;
 
@@ -67,7 +62,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       ctx.stroke();
     }
 
-    // 3. テキストを描画
     textsRef.current.forEach((t) => {
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
@@ -92,7 +86,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     return () => { clearTimeout(timer); window.removeEventListener('resize', initCanvas); };
   }, [redraw]);
 
-  // ズーム座標補正
   const getCorrectedCoordinates = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -104,16 +97,31 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     };
   };
 
+  const stopEvent = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+      e.nativeEvent.stopImmediatePropagation();
+    }
+  };
+
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (mode === 'none') return;
+
+    if ('touches' in e) {
+      // 🌟【最重要修正】2本目の指が触れた瞬間、1本目の指で書いてしまった「点」を完全に消去してキャンセルする！
+      if (e.touches.length >= 2) {
+        setIsDrawing(false);
+        currentPathRef.current = []; // 描きかけていた点を消去
+        redraw(); // 画面を再描画して点を消す
+        return; 
+      }
+      stopEvent(e);
+    } else {
+      stopEvent(e);
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    // 🌟【最重要修正：赤い点解決】
-    // 画面に触れた瞬間、すでに2本以上の指が検知された場合は、ズーム操作と判断してお絵かきを開始しない！
-    if ('touches' in e && e.touches.length >= 2) {
-      return; 
-    }
 
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
@@ -132,21 +140,20 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
-    
-    // 🌟【最重要修正：赤い点解決】
-    // 描いている途中に2本目の指が触れたら、描画を強制キャンセルして親のズームに操作を譲る！
-    if ('touches' in e) {
-      if (e.touches.length >= 2) {
-        setIsDrawing(false); // お絵かきモードOFF
-        currentPathRef.current = []; // 変な線が残らないようにクリア
-        redraw(); // キャンバスを一度綺麗にする
-        return;
-      }
-      if (e.cancelable) e.preventDefault(); // 1本指なら画面がスクロールしないようにロック
-    }
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if ('touches' in e) {
+      // 🌟【最重要修正】描いている途中で2本目の指が触れた場合も、キャンセルして点を残さない
+      if (e.touches.length >= 2) {
+        setIsDrawing(false);
+        currentPathRef.current = [];
+        redraw();
+        return; 
+      }
+      stopEvent(e);
+      if (e.cancelable) e.preventDefault();
+    } else {
+      stopEvent(e);
+    }
 
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
@@ -181,24 +188,22 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         ref={canvasRef}
         onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
         onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
-        // 🌟 touch-noneを削除し、pointer-eventsだけで制御（モバイルでの誤作動防止）
-        className={`absolute top-0 left-0 z-10 w-full h-full ${
+        className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${
           mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
         }`}
       />
+
+      {/* テキストボックス（モバイル対応） */}
       {textInput && (
         <input
           type="text" autoFocus value={textValue}
           onChange={(e) => setTextValue(e.target.value)}
           onBlur={handleTextSubmit} 
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur(); // Enterで確実にフォーカスを外して確定
-            }
+            if (e.key === 'Enter') e.currentTarget.blur();
           }}
-          // 🌟 テキストボックスに触れた時はCanvasのタッチ判定をストップさせる
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={stopEvent}
+          onTouchStart={stopEvent}
           className="absolute z-20 bg-white border-2 border-indigo-600 rounded px-3 py-1 outline-none shadow-2xl text-black"
           style={{ 
             left: textInput.x, 
@@ -207,7 +212,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             fontSize: '20px', 
             fontWeight: 'bold',
             transformOrigin: 'top left',
-            // ズームに応じて input 自体の大きさも変える
             transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
           }}
           placeholder="文字を入力..."
