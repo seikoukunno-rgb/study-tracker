@@ -1,9 +1,8 @@
 'use client';
 
 import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react'; 
-import { Timer, PenTool, Highlighter, Eraser, Type } from 'lucide-react';
+import { Timer, PenTool, Highlighter, Eraser, Type, GripVertical, X, Send, Plus } from 'lucide-react';
 
-// 🌟 修正1：eraserWidth と setEraserWidth を受付表に確実に追加！
 type PdfSidebarProps = {
   onNoteClick: (pageNumber: number) => void;
   drawingMode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -14,58 +13,43 @@ type PdfSidebarProps = {
   setPenWidth: Dispatch<SetStateAction<number>>;
   markerWidth: number;
   setMarkerWidth: Dispatch<SetStateAction<number>>;
-  eraserWidth: number;                      // 👈 追加
-  setEraserWidth: Dispatch<SetStateAction<number>>; // 👈 追加
+  eraserWidth: number;
+  setEraserWidth: Dispatch<SetStateAction<number>>;
 };
 
 export default function PdfSidebar({ 
   onNoteClick, drawingMode, setDrawingMode,
   drawingColor, setDrawingColor,
   penWidth, setPenWidth, markerWidth, setMarkerWidth,
-  eraserWidth, setEraserWidth               // 🌟 修正1：ここにも追加！
+  eraserWidth, setEraserWidth
 }: PdfSidebarProps) {
 
-  // 🌟 位置とドラッグ状態の管理
-  const [pos, setPos] = useState({ x: 0, y: 20 });
+  // 🌟 位置管理（初期位置は画面中央上部）
+  const [pos, setPos] = useState({ x: 0, y: 30 });
   const [isDragging, setIsDragging] = useState(false);
   
-  const dragStart = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, initialX: 0, initialY: 0 });
 
-  // 1. 画面に触れた瞬間に「長押しタイマー(400ms)」をスタート
-  const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // 1. ドラッグ開始（ハンドルを掴んだとき）
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     
-    dragStart.current = { x: clientX, y: clientY, initialX: pos.x, initialY: pos.y };
+    dragStart.current = { 
+      mouseX: clientX, 
+      mouseY: clientY, 
+      initialX: pos.x, 
+      initialY: pos.y 
+    };
 
-    timerRef.current = setTimeout(() => {
-      setIsDragging(true);
-      // スマホなら「ブルッ」と振動させて長押し完了を知らせる
-      if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-        window.navigator.vibrate(50); 
-      }
-    }, 400); 
-  };
-
-  // 2. 指を離した、またはタイマー発動前に大きく動かしたらキャンセル
-  const cancelTimer = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    // スマホなら少しだけ振動させる（心地よい操作感）
+    if (typeof window !== 'undefined' && window.navigator?.vibrate) {
+      window.navigator.vibrate(10); 
     }
   };
 
-  const handleMoveEarly = (e: React.MouseEvent | React.TouchEvent) => {
-    if (isDragging) return; 
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const dx = Math.abs(clientX - dragStart.current.x);
-    const dy = Math.abs(clientY - dragStart.current.y);
-    if (dx > 10 || dy > 10) cancelTimer();
-  };
-
-  // 3. 実際にドラッグして移動させる処理
+  // 2. 移動と終了の処理
   useEffect(() => {
     const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!isDragging) return;
@@ -75,15 +59,12 @@ export default function PdfSidebar({
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
       
       setPos({
-        x: dragStart.current.initialX + (clientX - dragStart.current.x),
-        y: dragStart.current.initialY + (clientY - dragStart.current.y)
+        x: dragStart.current.initialX + (clientX - dragStart.current.mouseX),
+        y: dragStart.current.initialY + (clientY - dragStart.current.mouseY)
       });
     };
 
-    const handleEnd = () => {
-      cancelTimer();
-      setIsDragging(false);
-    };
+    const handleEnd = () => setIsDragging(false);
 
     if (isDragging) {
       window.addEventListener('mousemove', handleMove, { passive: false });
@@ -103,47 +84,50 @@ export default function PdfSidebar({
     <>
       {/* 🌟 自由に動くフローティングツールバー */}
       <div 
-        onMouseDown={handleStart} onTouchStart={handleStart}
-        onMouseMove={handleMoveEarly} onTouchMove={handleMoveEarly}
-        onMouseUp={cancelTimer} onTouchEnd={cancelTimer} onMouseLeave={cancelTimer}
         style={{ 
-          transform: `translate(calc(-50% + ${pos.x}px), ${pos.y}px) scale(${isDragging ? 1.05 : 1})`,
+          transform: `translate(calc(-50% + ${pos.x}px), ${pos.y}px)`,
           touchAction: 'none' 
         }}
-        // 🌟 修正2：クラスに「top-0」を追加して、Y軸のスタート地点を確定させました
-        className={`fixed top-0 left-1/2 z-[100] bg-black/90 backdrop-blur-xl px-3 py-2 rounded-2xl flex items-center gap-3 border border-white/10 select-none transition-shadow ${
-          isDragging ? 'shadow-[0_20px_50px_rgba(0,0,0,0.8)] ring-2 ring-indigo-500/50 cursor-grabbing' : 'shadow-[0_10px_30px_rgba(0,0,0,0.5)] cursor-grab'
+        className={`fixed top-0 left-1/2 z-[100] bg-[#1c1c1e]/90 backdrop-blur-xl pl-1 pr-3 py-1.5 rounded-2xl flex items-center gap-1 border border-white/10 select-none shadow-2xl transition-shadow ${
+          isDragging ? 'ring-2 ring-indigo-500/50 shadow-indigo-500/20' : ''
         }`}
       >
+        {/* 🌟 移動用ハンドル：ここを掴むと自由に動かせる */}
+        <div 
+          onMouseDown={handleDragStart} 
+          onTouchStart={handleDragStart}
+          className="p-2 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/60 transition-colors"
+        >
+          <GripVertical className="w-5 h-5" />
+        </div>
+
         <div className={`flex items-center gap-1 ${isDragging ? 'pointer-events-none' : ''}`}>
-          <button onClick={() => setDrawingMode('pen')} className={`p-2 rounded-xl transition-all ${drawingMode === 'pen' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><PenTool className="w-5 h-5" /></button>
-          <button onClick={() => setDrawingMode('marker')} className={`p-2 rounded-xl transition-all ${drawingMode === 'marker' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><Highlighter className="w-5 h-5" /></button>
-          <button onClick={() => setDrawingMode('eraser')} className={`p-2 rounded-xl transition-all ${drawingMode === 'eraser' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><Eraser className="w-5 h-5" /></button>
-          <button onClick={() => setDrawingMode('text')} className={`p-2 rounded-xl transition-all ${drawingMode === 'text' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><Type className="w-5 h-5" /></button>
+          <button onClick={() => setDrawingMode(drawingMode === 'pen' ? 'none' : 'pen')} className={`p-2 rounded-xl transition-all ${drawingMode === 'pen' ? 'bg-indigo-600 text-white shadow-lg' : 'text-white/40 hover:bg-white/10'}`}><PenTool className="w-4 h-4" /></button>
+          <button onClick={() => setDrawingMode(drawingMode === 'marker' ? 'none' : 'marker')} className={`p-2 rounded-xl transition-all ${drawingMode === 'marker' ? 'bg-indigo-600 text-white shadow-lg' : 'text-white/40 hover:bg-white/10'}`}><Highlighter className="w-4 h-4" /></button>
+          <button onClick={() => setDrawingMode(drawingMode === 'eraser' ? 'none' : 'eraser')} className={`p-2 rounded-xl transition-all ${drawingMode === 'eraser' ? 'bg-indigo-600 text-white shadow-lg' : 'text-white/40 hover:bg-white/10'}`}><Eraser className="w-4 h-4" /></button>
+          <button onClick={() => setDrawingMode(drawingMode === 'text' ? 'none' : 'text')} className={`p-2 rounded-xl transition-all ${drawingMode === 'text' ? 'bg-indigo-600 text-white shadow-lg' : 'text-white/40 hover:bg-white/10'}`}><Type className="w-4 h-4" /></button>
           
-          <div className="w-[1px] h-6 bg-white/10 mx-2" />
+          <div className="w-[1px] h-5 bg-white/10 mx-1" />
 
           {/* 色選択 */}
-          <div className="flex gap-2 mr-1">
+          <div className="flex gap-1.5">
             {['#ef4444', '#3b82f6', '#eab308'].map((c) => (
-              <button key={c} onClick={() => setDrawingColor(c)} className={`w-6 h-6 rounded-full border-2 transition-transform ${drawingColor === c ? 'border-white scale-125' : 'border-transparent'}`} style={{ backgroundColor: c }} />
+              <button key={c} onClick={() => setDrawingColor(c)} className={`w-5 h-5 rounded-full border-2 transition-transform ${drawingColor === c ? 'border-white scale-110' : 'border-transparent opacity-50 hover:opacity-100'}`} style={{ backgroundColor: c }} />
             ))}
           </div>
         </div>
       </div>
 
-      {/* 右側の本来のサイドバー（PC用） */}
-      <aside className="hidden lg:flex w-80 h-full bg-[#1c1c1e] border-l border-[#2c2c2e] flex-col relative z-10">
+      {/* 右側のPC用サイドバー */}
+      <aside className="hidden lg:flex w-80 h-full bg-[#0d0d0f] border-l border-white/5 flex-col relative z-10">
         <div className="p-8">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2 bg-indigo-500/20 rounded-lg"><Timer className="w-4 h-4 text-indigo-400" /></div>
             <h2 className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">Control Panel</h2>
           </div>
-          
-          <div className="bg-gradient-to-br from-white/5 to-white/[0.02] rounded-3xl p-8 border border-white/5 text-center shadow-inner">
-            <span className="text-[10px] font-bold text-indigo-400/80 tracking-widest uppercase mb-2 block">Study Session</span>
-            <div className="text-5xl font-black text-white mb-8 tracking-tighter tabular-nums">00:00</div>
-            <button className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-xl active:scale-95">RESUME</button>
+          <div className="bg-white/5 rounded-3xl p-8 border border-white/5 text-center">
+            <div className="text-5xl font-black text-white mb-8 tracking-tighter">00:00</div>
+            <button className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold">RESUME</button>
           </div>
         </div>
       </aside>
