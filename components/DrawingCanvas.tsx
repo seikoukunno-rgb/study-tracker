@@ -2,7 +2,6 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTransformContext } from "react-zoom-pan-pinch";
-// 🌟 Supabase クライアントのインポート（パスは環境に合わせて調整してください）
 import { supabase } from '@/lib/supabase';
 
 type DrawingCanvasProps = {
@@ -12,7 +11,6 @@ type DrawingCanvasProps = {
   markerWidth: number;
   eraserWidth: number;
   pageIndex: number;
-  // 🌟 どのPDFに書いているかを識別するためのIDを追加（ViewerPageから渡す必要があります）
   pdfId?: string; 
 };
 
@@ -27,19 +25,15 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const [textValue, setTextValue] = useState("");
 
   const transformContext = useTransformContext();
-
   const pathsRef = useRef<PathData[]>([]);
   const textsRef = useRef<TextData[]>([]);
   const currentPathRef = useRef<Point[]>([]);
-
-  // 🌟 保存の負荷を減らすためのタイマー（Debounce用）
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -50,7 +44,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       ctx.lineWidth = path.width;
       ctx.globalAlpha = path.mode === 'marker' ? 0.4 : 1.0;
       ctx.strokeStyle = path.mode === 'eraser' ? 'rgba(0,0,0,1)' : path.color;
-
       ctx.beginPath();
       ctx.moveTo(path.points[0].x, path.points[0].y);
       path.points.forEach(p => ctx.lineTo(p.x, p.y));
@@ -62,7 +55,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       ctx.lineWidth = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       ctx.globalAlpha = mode === 'marker' ? 0.4 : 1.0;
       ctx.strokeStyle = mode === 'eraser' ? 'rgba(0,0,0,1)' : color;
-
       ctx.beginPath();
       ctx.moveTo(currentPathRef.current[0].x, currentPathRef.current[0].y);
       currentPathRef.current.forEach(p => ctx.lineTo(p.x, p.y));
@@ -78,43 +70,51 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // ==========================================
-  // 🌟 Supabase 連携：読み込みと保存ロジック
-  // ==========================================
-
-  // 1. ページ読み込み時にデータを取得（ロード）
+  // --- 読み込み ---
   useEffect(() => {
     const loadAnnotations = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log(`🔍 ページ ${pageIndex} のデータを読み込み中...`);
       const { data, error } = await supabase
         .from('annotations')
         .select('data')
         .eq('user_id', user.id)
         .eq('pdf_id', pdfId)
         .eq('page_index', pageIndex)
-        .single();
+        .maybeSingle(); // 🌟 406エラー対策：データがなくてもエラーにしない
+
+      if (error) {
+        console.error("❌ 読み込みエラー:", error.message);
+        return;
+      }
 
       if (data && data.data) {
+        console.log("✅ データを復元しました:", data.data);
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
-        redraw(); // 取得したデータでキャンバスを描画
+        redraw();
+      } else {
+        console.log("ℹ️ このページのデータはまだありません。");
+        pathsRef.current = [];
+        textsRef.current = [];
+        redraw();
       }
     };
-
     loadAnnotations();
   }, [pageIndex, pdfId, redraw]);
 
-  // 2. データを保存（セーブ）する関数
+  // --- 保存 ---
   const saveAnnotations = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.error("🚨 保存失敗: ログインしていません");
+      return;
+    }
 
-    const annotationData = {
-      paths: pathsRef.current,
-      texts: textsRef.current,
-    };
+    console.log(`💾 ページ ${pageIndex} を保存中...`);
+    const annotationData = { paths: pathsRef.current, texts: textsRef.current };
 
     const { error } = await supabase
       .from('annotations')
@@ -124,13 +124,15 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         page_index: pageIndex,
         data: annotationData,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id, pdf_id, page_index' }); // 同じページなら上書き
+      }, { onConflict: 'user_id, pdf_id, page_index' });
 
-    if (error) console.error("保存エラー:", error);
+    if (error) {
+      console.error("❌ 保存エラー:", error.message);
+    } else {
+      console.log("🚀 保存成功！");
+    }
   };
 
-  // 3. 負荷を減らす「遅延保存（Debounce）」
-  // 描き終わってから1秒後に保存。もし1秒以内に次を描き始めたらタイマーをリセット
   const triggerSave = () => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
@@ -138,8 +140,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }, 1000); 
   };
 
-  // ==========================================
-
+  // --- イベントハンドラ ---
   useEffect(() => {
     const initCanvas = () => {
       const canvas = canvasRef.current;
@@ -160,17 +161,12 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const scale = transformContext.transformState.scale || 1;
-    return {
-      x: (clientX - rect.left) / scale,
-      y: (clientY - rect.top) / scale,
-    };
+    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
   };
 
   const stopEvent = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
-      e.nativeEvent.stopImmediatePropagation();
-    }
+    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
   };
 
   const cancelDrawing = useCallback(() => {
@@ -183,30 +179,16 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (mode === 'none') return;
-
     if ('touches' in e) {
-      if (e.touches.length >= 2) {
-        cancelDrawing(); 
-        return;
-      }
+      if (e.touches.length >= 2) { cancelDrawing(); return; }
       stopEvent(e);
     } else {
       stopEvent(e);
     }
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const { x, y } = getCorrectedCoordinates(clientX, clientY);
-
-    if (mode === 'text') {
-      setTextInput({ x, y });
-      setTextValue("");
-      return;
-    }
-
+    if (mode === 'text') { setTextInput({ x, y }); setTextValue(""); return; }
     setIsDrawing(true);
     currentPathRef.current = [{ x, y }];
     redraw();
@@ -214,41 +196,28 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
-
     if ('touches' in e) {
-      if (e.touches.length >= 2) {
-        cancelDrawing();
-        return;
-      }
+      if (e.touches.length >= 2) { cancelDrawing(); return; }
       stopEvent(e);
       if (e.cancelable) e.preventDefault();
     } else {
       stopEvent(e);
     }
-
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const { x, y } = getCorrectedCoordinates(clientX, clientY);
-
     currentPathRef.current.push({ x, y });
     redraw();
   };
 
   const stopDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
-
-    if ('touches' in e && e.touches.length > 0) {
-      cancelDrawing();
-      return;
-    }
-
+    if ('touches' in e && e.touches.length > 0) { cancelDrawing(); return; }
     setIsDrawing(false);
     if (currentPathRef.current.length > 0) {
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
-      
-      // 🌟 線を引き終わったので保存タイマーを起動！
       triggerSave();
     }
   };
@@ -257,8 +226,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (textValue.trim() && textInput) {
       textsRef.current.push({ text: textValue, x: textInput.x, y: textInput.y + 6, color });
       redraw();
-      
-      // 🌟 テキストを確定したので保存タイマーを起動！
       triggerSave();
     }
     setTextInput(null);
@@ -276,15 +243,12 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
           mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
         }`}
       />
-
       {textInput && (
         <input
           type="text" autoFocus value={textValue}
           onChange={(e) => setTextValue(e.target.value)}
           onBlur={handleTextSubmit} 
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           onMouseDown={stopEvent} onTouchStart={stopEvent}
           className="absolute z-20 bg-white border-2 border-indigo-600 rounded px-3 py-1 outline-none shadow-2xl text-black"
           style={{ 
