@@ -3,6 +3,7 @@
 import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react'; 
 import { Timer, PenTool, Highlighter, Eraser, Type } from 'lucide-react';
 
+// 🌟 修正1：eraserWidth と setEraserWidth を受付表に確実に追加！
 type PdfSidebarProps = {
   onNoteClick: (pageNumber: number) => void;
   drawingMode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -13,12 +14,15 @@ type PdfSidebarProps = {
   setPenWidth: Dispatch<SetStateAction<number>>;
   markerWidth: number;
   setMarkerWidth: Dispatch<SetStateAction<number>>;
+  eraserWidth: number;                      // 👈 追加
+  setEraserWidth: Dispatch<SetStateAction<number>>; // 👈 追加
 };
 
 export default function PdfSidebar({ 
   onNoteClick, drawingMode, setDrawingMode,
   drawingColor, setDrawingColor,
-  penWidth, setPenWidth, markerWidth, setMarkerWidth 
+  penWidth, setPenWidth, markerWidth, setMarkerWidth,
+  eraserWidth, setEraserWidth               // 🌟 修正1：ここにも追加！
 }: PdfSidebarProps) {
 
   // 🌟 位置とドラッグ状態の管理
@@ -37,14 +41,14 @@ export default function PdfSidebar({
 
     timerRef.current = setTimeout(() => {
       setIsDragging(true);
-      // スマホなら「ブルッ」と振動させて長押し完了を知らせる（対応機種のみ）
+      // スマホなら「ブルッ」と振動させて長押し完了を知らせる
       if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50); 
       }
     }, 400); 
   };
 
-  // 2. 指を離した、またはタイマー発動前に大きく動かしたらキャンセル（ただのタップやスクロールと判定）
+  // 2. 指を離した、またはタイマー発動前に大きく動かしたらキャンセル
   const cancelTimer = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -58,15 +62,14 @@ export default function PdfSidebar({
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const dx = Math.abs(clientX - dragStart.current.x);
     const dy = Math.abs(clientY - dragStart.current.y);
-    // 10px以上指がズレたら、長押しをキャンセルする
     if (dx > 10 || dy > 10) cancelTimer();
   };
 
-  // 3. 実際にドラッグして移動させる処理（長押しが完了して isDragging が true の時だけ発動）
+  // 3. 実際にドラッグして移動させる処理
   useEffect(() => {
     const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!isDragging) return;
-      if (e.cancelable) e.preventDefault(); // 移動中のスクロールを完全にブロック
+      if (e.cancelable) e.preventDefault(); 
 
       const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
@@ -104,16 +107,14 @@ export default function PdfSidebar({
         onMouseMove={handleMoveEarly} onTouchMove={handleMoveEarly}
         onMouseUp={cancelTimer} onTouchEnd={cancelTimer} onMouseLeave={cancelTimer}
         style={{ 
-          // 移動と、長押し成功時のフワッと拡大するアニメーション
           transform: `translate(calc(-50% + ${pos.x}px), ${pos.y}px) scale(${isDragging ? 1.05 : 1})`,
           touchAction: 'none' 
         }}
-        // 長押し中はカーソルが変わり、影が濃くなって「掴んでいる感」を出す
-        className={`fixed left-1/2 z-[100] bg-black/90 backdrop-blur-xl px-3 py-2 rounded-2xl flex items-center gap-3 border border-white/10 select-none transition-shadow ${
+        // 🌟 修正2：クラスに「top-0」を追加して、Y軸のスタート地点を確定させました
+        className={`fixed top-0 left-1/2 z-[100] bg-black/90 backdrop-blur-xl px-3 py-2 rounded-2xl flex items-center gap-3 border border-white/10 select-none transition-shadow ${
           isDragging ? 'shadow-[0_20px_50px_rgba(0,0,0,0.8)] ring-2 ring-indigo-500/50 cursor-grabbing' : 'shadow-[0_10px_30px_rgba(0,0,0,0.5)] cursor-grab'
         }`}
       >
-        {/* 🌟 長押しして掴んでいる最中は、誤ってボタンを押さないように pointer-events-none でガードする */}
         <div className={`flex items-center gap-1 ${isDragging ? 'pointer-events-none' : ''}`}>
           <button onClick={() => setDrawingMode('pen')} className={`p-2 rounded-xl transition-all ${drawingMode === 'pen' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><PenTool className="w-5 h-5" /></button>
           <button onClick={() => setDrawingMode('marker')} className={`p-2 rounded-xl transition-all ${drawingMode === 'marker' ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'text-white/40 hover:bg-white/10'}`}><Highlighter className="w-5 h-5" /></button>
