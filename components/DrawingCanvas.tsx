@@ -19,6 +19,14 @@ type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: numbe
 type TextData = { text: string; x: number; y: number; color: string };
 
 export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex, pdfId = 'default-pdf' }: DrawingCanvasProps) {
+  
+  // 🌟 診断用：DrawingCanvasが本当に読み込まれているかチェック
+  useEffect(() => {
+    if (pageIndex === 1) {
+      alert("💡 DrawingCanvasが起動しました！(ページ1)");
+    }
+  }, [pageIndex]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number } | null>(null);
@@ -69,26 +77,29 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // --- 読み込み ---
+  // --- 読み込み (テスト用) ---
   useEffect(() => {
     const loadAnnotations = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // 🌟 ログインチェックを無効化
+      // const { data: { user } } = await supabase.auth.getUser();
+      // if (!user) return;
 
+      console.log(`🔍 ページ ${pageIndex} を読み込みます...`);
       const { data, error } = await supabase
         .from('annotations')
         .select('data')
-        .eq('user_id', user.id)
+        // .eq('user_id', user.id) // 🌟 誰のデータでも一旦無視してPDFとページ番号だけで検索
         .eq('pdf_id', pdfId)
         .eq('page_index', pageIndex)
         .maybeSingle();
 
       if (error) {
-        console.error("❌ 読み込みエラー:", error.message);
+        console.error(`❌ ページ ${pageIndex} 読み込みエラー:`, error.message);
         return;
       }
 
       if (data && data.data) {
+        console.log(`✅ ページ ${pageIndex} の復元成功！`, data.data);
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
       } else {
@@ -101,22 +112,19 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIndex, pdfId]); 
 
-  // --- 即時保存関数 ---
+  // --- 保存 (テスト用) ---
   const saveAnnotations = async () => {
-    console.log(`✍️ ページ ${pageIndex} の保存処理を開始します... (線の数: ${pathsRef.current.length})`);
+    console.log(`💾 ページ ${pageIndex} の強制保存を試みます... (線の数: ${pathsRef.current.length})`);
     
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error("🚨 保存失敗: ログインしていません");
-      return;
-    }
+    // 🌟 誰が書いたかわかるように、テスト用の固定IDを使います
+    const dummyUserId = "11111111-1111-1111-1111-111111111111"; 
 
     const annotationData = { paths: pathsRef.current, texts: textsRef.current };
 
     const { error } = await supabase
       .from('annotations')
       .upsert({
-        user_id: user.id,
+        user_id: dummyUserId, // 🌟 固定ID
         pdf_id: pdfId,
         page_index: pageIndex,
         data: annotationData,
@@ -124,9 +132,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       }, { onConflict: 'user_id, pdf_id, page_index' });
 
     if (error) {
-      console.error("❌ 保存エラー:", error.message);
+      console.error("❌ 保存エラーの正体:", error.message);
     } else {
-      console.log(`🚀 ページ ${pageIndex} の保存に成功しました！`);
+      console.log(`🚀 ページ ${pageIndex} の保存に成功しました！！！`);
     }
   };
 
@@ -210,7 +218,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
       
-      // 🌟 タイマーを廃止し、問答無用で即座に保存！
       saveAnnotations();
     }
   };
@@ -220,7 +227,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       textsRef.current.push({ text: textValue, x: textInput.x, y: textInput.y + 6, color });
       redraw();
       
-      // 🌟 テキスト確定時も即座に保存！
       saveAnnotations();
     }
     setTextInput(null);

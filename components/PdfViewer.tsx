@@ -111,6 +111,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                     markerWidth={markerWidth}
                     eraserWidth={eraserWidth}
                     pageIndex={index + 1} 
+                    pdfId="sample-pdf-001"
                   />
                 </div>
               ))}
