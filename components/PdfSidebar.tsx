@@ -1,16 +1,19 @@
 // components/PdfSidebar.tsx
 'use client';
 
-import { Dispatch, SetStateAction } from 'react'; // 🌟 Dispatchを追加
-import { Timer, PenTool, Highlighter, Eraser, Type, Minus, Plus } from 'lucide-react'; // 🌟 Type, Minus, Plusを追加
+import { Dispatch, SetStateAction } from 'react';
+// 🌟 Type (テキストアイコン) を追加
+import { Timer, PenTool, Highlighter, Eraser, Type } from 'lucide-react';
 
-// 1. 🌟 型定義（Props）をアップデート
+// 1. 🌟 Props の型定義を最新版にアップデート
 type PdfSidebarProps = {
   onNoteClick: (pageNumber: number) => void;
+  // 'text' モードを追加
   drawingMode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
   setDrawingMode: Dispatch<SetStateAction<'none' | 'pen' | 'marker' | 'eraser' | 'text'>>;
   drawingColor: string;
   setDrawingColor: Dispatch<SetStateAction<string>>;
+  // 太さ調整用の Props を追加
   penWidth: number;
   setPenWidth: Dispatch<SetStateAction<number>>;
   markerWidth: number;
@@ -33,13 +36,14 @@ export default function PdfSidebar({
   return (
     <aside className="w-80 h-full bg-[#1c1c1e] border-l border-[#2c2c2e] flex flex-col relative">
       
-      {/* 🌟 黒い浮いているツールバー（ここを修正！） */}
-      <div className="absolute top-4 left-[-260px] z-50 bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border border-white/10 shadow-2xl">
+      {/* 🌟 黒い浮いているツールバー */}
+      <div className="absolute top-4 left-[-270px] z-50 bg-black/80 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border border-white/10 shadow-2xl">
         
         {/* ペン */}
         <button 
           onClick={() => setDrawingMode('pen')}
           className={`p-2 rounded-lg ${drawingMode === 'pen' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
+          title="ペン"
         >
           <PenTool className="w-5 h-5" />
         </button>
@@ -48,6 +52,7 @@ export default function PdfSidebar({
         <button 
           onClick={() => setDrawingMode('marker')}
           className={`p-2 rounded-lg ${drawingMode === 'marker' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
+          title="マーカー"
         >
           <Highlighter className="w-5 h-5" />
         </button>
@@ -56,17 +61,19 @@ export default function PdfSidebar({
         <button 
           onClick={() => setDrawingMode('eraser')}
           className={`p-2 rounded-lg ${drawingMode === 'eraser' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
+          title="消しゴム"
         >
           <Eraser className="w-5 h-5" />
         </button>
 
-        {/* 🌟 テキスト追加ボタン */}
-<button 
-  onClick={() => setDrawingMode('text')}
-  className={`p-2 rounded-lg ${drawingMode === 'text' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
->
-  <Type className="w-5 h-5" />
-</button>
+        {/* 🌟 テキスト追加ボタン（ついに合流！） */}
+        <button 
+          onClick={() => setDrawingMode('text')}
+          className={`p-2 rounded-lg ${drawingMode === 'text' ? 'bg-indigo-600' : 'text-white/60 hover:bg-white/10'}`}
+          title="テキスト入力"
+        >
+          <Type className="w-5 h-5" />
+        </button>
 
         <div className="w-[1px] h-6 bg-white/20 mx-1" />
 
@@ -76,6 +83,7 @@ export default function PdfSidebar({
             <span className="text-[10px] font-black text-white/40 uppercase">Size</span>
             <input 
               type="range" 
+              // ペンは1〜10、マーカーは10〜50
               min={drawingMode === 'pen' ? "1" : "10"} 
               max={drawingMode === 'pen' ? "10" : "50"} 
               value={drawingMode === 'pen' ? penWidth : markerWidth}
@@ -101,7 +109,7 @@ export default function PdfSidebar({
         </div>
       </div>
 
-      {/* ...残りのタイマーやメモのコード... */}
+      {/* ...残りのタイマーやメモのコード（修正不要）... */}
     </aside>
   );
 }

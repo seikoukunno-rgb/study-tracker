@@ -97,12 +97,23 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     };
   };
 
+  // 🌟 【最重要】親のズーム機能へイベントが貫通するのを防ぐ魔法
+  const stopEvent = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) {
+      e.nativeEvent.stopImmediatePropagation();
+    }
+  };
+
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    if (mode === 'none') return;
-    
-    // 🌟【重要】2本指以上のタッチ（ズーム操作）が来たら、お絵かきを無視してズームに譲る
-    if ('touches' in e && e.touches.length >= 2) {
-      return; 
+    if (mode === 'none') return; // スクロールモードなら何もしない（親が動く）
+
+    // 🌟 1本指なら動きをせき止め、2本指ならスルーする
+    if ('touches' in e) {
+      if (e.touches.length >= 2) return; // 2本指なので親にズーム・移動させる
+      stopEvent(e); // 1本指なので画面をロックしてペンにする
+    } else {
+      stopEvent(e); // マウスの場合も画面をロック
     }
 
     const canvas = canvasRef.current;
@@ -125,16 +136,19 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
-    
-    // 🌟【重要】1本指ならスクロールを止め、2本目が触れたら描画をキャンセルする
+
     if ('touches' in e) {
       if (e.touches.length >= 2) {
-        setIsDrawing(false); // 描画強制終了
-        currentPathRef.current = []; // 変な線が残らないようにクリア
+        // 描いてる途中で2本目の指が触れたら、描画をキャンセルして親のズームに譲る
+        setIsDrawing(false);
+        currentPathRef.current = [];
         redraw();
-        return;
+        return; 
       }
-      if (e.cancelable) e.preventDefault(); // 1本指なら画面スクロールを防ぐ
+      stopEvent(e); // 1本指の時は親の移動をブロック
+      if (e.cancelable) e.preventDefault();
+    } else {
+      stopEvent(e);
     }
 
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -170,32 +184,27 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         ref={canvasRef}
         onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
         onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
-        className={`absolute top-0 left-0 z-10 w-full h-full ${
-          // 🌟【重要】touch-none を削除！これでブラウザが2本指ズームを検知できるようになります
+        // 🌟 touch-none が無いとスマホで画面がカクつくので復活させます
+        className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${
           mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'
         }`}
       />
 
+      {/* テキストボックス */}
       {textInput && (
         <input
           type="text" autoFocus value={textValue}
           onChange={(e) => setTextValue(e.target.value)}
           onBlur={handleTextSubmit} 
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur(); // Enterで確実にフォーカスを外して確定させる
-            }
+            if (e.key === 'Enter') e.currentTarget.blur();
           }}
-          // 🌟【重要】テキストボックスに触れた時は、Canvasのタッチ判定をストップさせる
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={stopEvent} onTouchStart={stopEvent}
           className="absolute z-20 bg-white border-2 border-indigo-600 rounded px-3 py-1 outline-none shadow-2xl text-black"
           style={{ 
             left: textInput.x, 
             top: textInput.y - 14, 
-            color, 
-            fontSize: '20px', 
-            fontWeight: 'bold',
+            color, fontSize: '20px', fontWeight: 'bold',
             transformOrigin: 'top left',
             transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
           }}
