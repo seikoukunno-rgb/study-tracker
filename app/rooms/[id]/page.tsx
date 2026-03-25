@@ -46,7 +46,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [modalDragY, setModalDragY] = useState(0);
   const modalTouchStartY = useRef<number | null>(null);
 
-  // 🌟 長押し・メッセージ編集用State
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -144,7 +143,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           });
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => {
-          // 他人のメッセージ編集をリアルタイムに反映
           setMessages(prev => prev.map(m => m.id === p.new.id ? { ...m, content: p.new.content } : m));
         })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => {
@@ -178,7 +176,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal) fetchStaruns();
   }, [showRankingModal]);
 
-  // 🌟 名前が確実に表示されるマニュアルジョイン方式
+  // 🌟【修正】メンバー情報をそのまま流用する超絶シンプルな学習記録取得
   const fetchStudyLogsForStarun = async () => {
     if (!selectedStarunId) return;
     setIsLogsLoading(true);
@@ -192,10 +190,10 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     const startTime = `${targetStarun.start_date}T00:00:00+09:00`;
     const endTime = `${targetStarun.end_date}T23:59:59+09:00`;
 
-    // 1. 学習記録の生データを取得（通信量削減のためカラム指定）
+    // 1. 学習記録だけ取得（プロフィール情報を無駄に問い合わせない）
     const { data: rawLogs, error } = await supabase
       .from('study_logs')
-      .select('id, student_id, material_id, duration_minutes, studied_at, created_at')
+      .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
       .in('student_id', participatingIds)
       .gte('created_at', startTime)
       .lte('created_at', endTime)
@@ -207,25 +205,23 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    // 2. プロフィールと教材データを別々に取得してアプリ側でマージする
-    const studentIds = Array.from(new Set(rawLogs.map(l => l.student_id)));
+    // 2. 教材情報だけ取得（アイコンとタイトル用）
     const materialIds = Array.from(new Set(rawLogs.map(l => l.material_id).filter(Boolean)));
-
-    const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
     const { data: materialsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
-
-    const profMap: Record<string, any> = {};
-    profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー" }; });
-
+    
     const matMap: Record<string, any> = {};
     materialsData?.forEach(m => { matMap[m.id] = m; });
 
-    const formattedLogs = rawLogs.map(log => ({
-      ...log,
-      display_name: profMap[log.student_id]?.display_name || "ユーザー",
-      avatar_url: profMap[log.student_id]?.avatar_url,
-      materials: matMap[log.material_id] || null
-    }));
+    // 3. 🌟 ここで members の情報をそのまま使って結合！確実に名前が反映されます。
+    const formattedLogs = rawLogs.map(log => {
+      const member = members.find(m => m.user_id === log.student_id);
+      return {
+        ...log,
+        display_name: member?.profiles?.display_name || "ユーザー",
+        avatar_url: member?.profiles?.avatar_url || null,
+        materials: matMap[log.material_id] || null
+      };
+    });
 
     setStudyLogs(formattedLogs);
     setIsLogsLoading(false);
@@ -235,7 +231,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal && !isCreatingStarun && isParticipating) fetchStudyLogsForStarun();
   }, [selectedStarunId, isCreatingStarun, showRankingModal, isParticipating]);
 
-  // 🌟 スタラン作成（最大1週間制限）
   const handleCreateStarun = async () => {
     if (!newStarunName.trim() || !newStarunStart || !newStarunEnd) return showToast("全て入力してください");
     if (newStarunStart > newStarunEnd) return showToast("終了日は開始日以降に設定してください");
@@ -305,7 +300,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/rooms');
   };
 
-  // 🌟 送信・編集
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !currentUser) return;
@@ -339,7 +333,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     await supabase.from('messages').delete().eq('id', id);
   };
 
-  // 🌟 長押し処理
   const handleTouchStartMsg = (id: string) => {
     pressTimer.current = setTimeout(() => { setActiveMessageId(id); }, 500);
   };
