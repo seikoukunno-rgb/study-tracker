@@ -12,8 +12,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [room, setRoom] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]); // DB上の全メンバー
-  const [activeUsers, setActiveUsers] = useState<any[]>([]); // 現在開いている（オンライン）のメンバー
+  const [members, setMembers] = useState<any[]>([]); 
+  const [activeUsers, setActiveUsers] = useState<any[]>([]); 
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -38,27 +38,25 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       if (!user) return;
       setCurrentUser(user);
 
-      // プロフィール取得
-      const { data: profile } = await supabase.from('profiles').select('full_name, avatar_url, nickname, name').eq('id', user.id).single();
-      const myDisplayName = profile?.nickname || profile?.name || profile?.full_name || "ユーザー";
-      setMyProfile({ ...profile, display_name: myDisplayName });
-
-      // フォロー情報の取得
       const { data: followData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
       if (followData) setFollows(followData.map(f => f.following_id));
 
-      // ルーム情報と全メンバー取得 (リレーションを明示的に指定)
       const { data: groupData } = await supabase.from('groups').select('*').eq('id', roomId).single();
-      const { data: membersData } = await supabase.from('group_members').select(`user_id, profiles ( full_name, name, nickname, avatar_url )`).eq('group_id', roomId);
-      
-      let currentMembers: any[] = membersData || [];
-      const isMeInRoom = currentMembers.some(m => m.user_id === user.id);
-      
-      // 🌟 修正1: 「初めて」参加した1度目だけ、データベースにメッセージを記録する
-      if (!isMeInRoom) {
+      const { data: membersData } = await supabase.from('group_members').select('user_id').eq('group_id', roomId);
+      const { data: msgsData } = await supabase.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: true });
+
+      let currentMemberIds = membersData ? membersData.map(m => m.user_id) : [];
+      // 🌟 TSエラー修正：nullの可能性を排除した変数を定義
+      let currentMsgsData = msgsData || [];
+
+      const { data: myProf } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const myDisplayName = myProf?.nickname || myProf?.name || myProf?.full_name || "ユーザー";
+      setMyProfile({ ...myProf, display_name: myDisplayName });
+
+      if (!currentMemberIds.includes(user.id)) {
         await supabase.from('group_members').insert([{ group_id: roomId, user_id: user.id }]);
+        currentMemberIds.push(user.id);
         
-        // 参加システムメッセージをDBに保存
         await supabase.from('messages').insert([{
           room_id: roomId,
           user_id: user.id,
@@ -67,18 +65,46 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           is_stamp: false
         }]);
 
-        currentMembers = [...currentMembers, { user_id: user.id, profiles: profile }];
+        // 最新のメッセージリストを再取得して上書き
+        const { data: newMsgsData } = await supabase.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: true });
+        if (newMsgsData) {
+          currentMsgsData = newMsgsData;
+        }
       }
 
-      // メッセージ取得
-      const { data: msgs } = await supabase.from('messages').select(`*, profiles ( full_name, name, nickname, avatar_url )`).eq('room_id', roomId).order('created_at', { ascending: true });
+      // currentMsgsData（絶対にnullにならない配列）を使用する
+      const allUserIds = Array.from(new Set([
+        ...currentMemberIds, 
+        ...currentMsgsData.map(m => m.user_id)
+      ]));
+
+      const { data: profilesData } = await supabase.from('profiles').select('*').in('id', allUserIds);
+
+      const profileMap: Record<string, any> = {};
+      if (profilesData) {
+        profilesData.forEach(p => {
+          profileMap[p.id] = {
+            ...p,
+            display_name: p.nickname || p.name || p.full_name || "ユーザー"
+          };
+        });
+      }
+
+      const finalMembers = currentMemberIds.map(id => ({
+        user_id: id,
+        profiles: profileMap[id] || { display_name: "ユーザー" }
+      }));
+
+      const finalMessages = currentMsgsData.map(m => ({
+        ...m,
+        profiles: profileMap[m.user_id] || { display_name: "ユーザー" }
+      }));
 
       if (groupData) setRoom(groupData);
-      setMembers(currentMembers);
-      if (msgs) setMessages(msgs);
+      setMembers(finalMembers);
+      setMessages(finalMessages);
       setIsLoading(false);
 
-      // Realtime Presence (オンライン検知)
       const channel = supabase.channel(`room-${roomId}`, {
         config: { presence: { key: user.id } }
       });
@@ -89,13 +115,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           const onlineIds = Object.keys(newState);
           setActiveUsers(onlineIds);
         })
-        // 🌟 修正2: 開くたびにメッセージが出る問題を防ぐため、presence の join イベントでのメッセージ追加を削除しました
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, async (p) => {
           if (p.new.user_id === user.id) return;
-          const { data: userData } = await supabase.from('profiles').select('full_name, name, nickname, avatar_url').eq('id', p.new.user_id).single();
+          const { data: userData } = await supabase.from('profiles').select('*').eq('id', p.new.user_id).single();
+          const pName = userData?.nickname || userData?.name || userData?.full_name || "ユーザー";
+          
           setMessages(prev => {
             if (prev.some(m => m.id === p.new.id)) return prev;
-            return [...prev, { ...p.new, profiles: userData }];
+            return [...prev, { ...p.new, profiles: { ...userData, display_name: pName } }];
           });
         })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => {
@@ -217,7 +244,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           }
 
           const isMine = m.user_id === currentUser?.id;
-          const displayName = m.profiles?.nickname || m.profiles?.name || m.profiles?.full_name || "ユーザー";
+          const displayName = m.profiles?.display_name || "ユーザー";
           
           return (
             <div key={m.id} className={`flex flex-col animate-in slide-in-from-bottom-2 fade-in duration-300 ${isMine ? 'items-end' : 'items-start'}`}>
@@ -279,7 +306,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                 const isMe = member.user_id === currentUser?.id;
                 const isOnline = activeUsers.includes(member.user_id);
                 const isFollowing = follows.includes(member.user_id);
-                const displayName = member.profiles?.nickname || member.profiles?.name || member.profiles?.full_name || "ユーザー";
+                const displayName = member.profiles?.display_name || "ユーザー";
 
                 return (
                   <div key={member.user_id} className={`flex items-center justify-between p-4 rounded-[1.5rem] border transition-colors ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-slate-50 border-slate-100'}`}>
