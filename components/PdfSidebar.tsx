@@ -1,13 +1,12 @@
 'use client';
 
 import { Dispatch, SetStateAction } from 'react'; 
-import { Timer, Play, Pause, Plus, X, Send } from 'lucide-react';
+import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2 } from 'lucide-react'; // 🌟 Edit2を追加
 
 type PdfSidebarProps = {
   seconds: number;
   isRunning: boolean;
   setIsRunning: Dispatch<SetStateAction<boolean>>;
-  // 🌟 メモ機能に必要なPropsを復活
   notes: any[];
   isAddingNote: boolean;
   setIsAddingNote: Dispatch<SetStateAction<boolean>>;
@@ -16,12 +15,18 @@ type PdfSidebarProps = {
   noteContent: string;
   setNoteContent: Dispatch<SetStateAction<string>>;
   handleSaveNote: () => void;
+  handleDeleteNote: (id: string) => void;
   onNoteClick: (pageNumber: number) => void;
+  // 🌟 追加：編集機能用のProps
+  handleEditNote: (note: any) => void;
+  handleCancelNote: () => void;
+  editingNoteId: string | null;
 };
 
 export default function PdfSidebar({ 
   seconds, isRunning, setIsRunning,
-  notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, handleSaveNote, onNoteClick
+  notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, 
+  handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId
 }: PdfSidebarProps) {
   
   const formatTime = (totalSeconds: number) => {
@@ -50,19 +55,28 @@ export default function PdfSidebar({
           </button>
         </div>
 
-        {/* 🌟 メモ機能 */}
+        {/* メモ機能 */}
         <div className="flex items-center justify-between mb-4">
           <span className="text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase">Notes</span>
-          <button onClick={() => setIsAddingNote(true)} className="p-1 hover:bg-white/10 rounded-md transition-colors text-indigo-400">
+          <button 
+            onClick={() => { setIsAddingNote(true); setNoteContent(""); }} 
+            className="p-1 hover:bg-white/10 rounded-md transition-colors text-indigo-400"
+          >
             <Plus className="w-4 h-4" />
           </button>
         </div>
 
         {isAddingNote && (
-          <div className="bg-[#2c2c2e] p-4 rounded-xl border border-indigo-500/50 mb-4 shadow-lg">
+          <div className="bg-[#2c2c2e] p-4 rounded-xl border border-indigo-500/50 mb-4 shadow-lg animate-in fade-in duration-200">
             <div className="flex justify-between items-center mb-3">
-              <input type="number" value={notePage} onChange={(e) => setNotePage(Number(e.target.value))} className="w-16 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs font-black text-indigo-400 outline-none" placeholder="Page" />
-              <button onClick={() => setIsAddingNote(false)}><X className="w-4 h-4 text-slate-500" /></button>
+              {/* 🌟 編集時はタイトルを変更 */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-indigo-400/70 font-black uppercase">{editingNoteId ? "メモを編集" : "新規メモ"}</span>
+                <input type="number" value={notePage} onChange={(e) => setNotePage(Number(e.target.value))} className="w-16 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs font-black text-indigo-400 outline-none" placeholder="Page" />
+              </div>
+              <button onClick={editingNoteId ? handleCancelNote : () => setIsAddingNote(false)}>
+                <X className="w-4 h-4 text-slate-500 hover:text-white transition-colors" />
+              </button>
             </div>
             <textarea autoFocus value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="メモを入力..." className="w-full bg-transparent text-sm font-bold text-white outline-none resize-none h-20 placeholder:text-slate-600 mb-2" />
             <button onClick={handleSaveNote} className="w-full py-2 bg-indigo-600 rounded-lg text-xs font-black flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all text-white">
@@ -73,13 +87,33 @@ export default function PdfSidebar({
 
         <div className="space-y-2">
           {notes.map((note) => (
-            <button key={note.id} onClick={() => onNoteClick(note.page_number)} className="w-full text-left p-4 rounded-xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all group">
-              <div className="flex justify-between text-[10px] font-black mb-2 text-slate-500">
-                <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">P.{note.page_number}</span>
-                <span>{new Date(note.created_at).toLocaleDateString()}</span>
+            <div key={note.id} className="relative w-full group animate-in fade-in duration-300">
+              <button onClick={() => onNoteClick(note.page_number)} className="w-full text-left p-4 rounded-xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all">
+                <div className="flex justify-between text-[10px] font-black mb-2 text-slate-500 pr-12">
+                  <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">P.{note.page_number}</span>
+                  <span>{new Date(note.created_at).toLocaleDateString()}</span>
+                </div>
+                <p className="text-xs font-bold leading-relaxed text-slate-300 line-clamp-3">{note.content}</p>
+              </button>
+
+              {/* 🌟 アクションボタン群 (ホバーで出現) */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
+                {/* 編集ボタン */}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleEditNote(note); }}
+                  className="p-1.5 bg-black/60 text-indigo-400 hover:text-white hover:bg-indigo-500 rounded-md transition-all"
+                >
+                  <Edit2 size={14} />
+                </button>
+                {/* 削除ボタン */}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                  className="p-1.5 bg-black/60 text-rose-500 hover:text-white hover:bg-rose-500 rounded-md transition-all"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
-              <p className="text-xs font-bold leading-relaxed text-slate-300 line-clamp-3">{note.content}</p>
-            </button>
+            </div>
           ))}
           {notes.length === 0 && !isAddingNote && <p className="text-xs font-bold text-slate-600 text-center py-4">メモはありません</p>}
         </div>

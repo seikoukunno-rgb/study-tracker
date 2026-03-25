@@ -27,7 +27,7 @@ function TimerContent() {
   const [memo, setMemo] = useState("");
   const [showSaveModal, setShowSaveModal] = useState(false);
   
-  // 🌟 サイドバー開閉用のState
+  // サイドバー開閉用のState
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [pdfList, setPdfList] = useState<string[]>([]);
@@ -46,10 +46,13 @@ function TimerContent() {
   const [markerWidth, setMarkerWidth] = useState(18);
   const [eraserWidth, setEraserWidth] = useState(30);
 
+  // メモ機能のState
   const [notes, setNotes] = useState<any[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [notePage, setNotePage] = useState(1);
   const [noteContent, setNoteContent] = useState("");
+  // 🌟 追加：編集中のメモIDを保持するState
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   const fetchMaterialPaths = useCallback(async () => {
     if (!materialId) { setIsInitializing(false); return; }
@@ -107,12 +110,50 @@ function TimerContent() {
 
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
+  // 🌟 修正：メモの保存・更新ロジック
   const handleSaveNote = async () => {
     if (!noteContent.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return alert("ログインが必要です");
-    await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
-    setNoteContent(""); setIsAddingNote(false); fetchNotes();
+
+    if (editingNoteId) {
+      // 編集（UPDATE）の場合
+      await supabase.from('notes').update({ page_number: notePage, content: noteContent }).eq('id', editingNoteId);
+    } else {
+      // 新規（INSERT）の場合
+      await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
+    }
+    
+    setNoteContent(""); 
+    setIsAddingNote(false); 
+    setEditingNoteId(null);
+    fetchNotes();
+  };
+
+  // 🌟 追加：メモの削除ロジック
+  const handleDeleteNote = async (noteId: string) => {
+    if (!window.confirm("このメモを削除しますか？")) return;
+    const { error } = await supabase.from('notes').delete().eq('id', noteId);
+    if (error) {
+      alert("削除エラー: " + error.message);
+    } else {
+      fetchNotes();
+    }
+  };
+
+  // 🌟 追加：メモの編集開始ロジック
+  const handleEditNote = (note: any) => {
+    setIsAddingNote(true);
+    setNotePage(note.page_number);
+    setNoteContent(note.content);
+    setEditingNoteId(note.id);
+  };
+
+  // 🌟 追加：メモの編集キャンセルロジック
+  const handleCancelNote = () => {
+    setIsAddingNote(false);
+    setNoteContent("");
+    setEditingNoteId(null);
   };
 
   useEffect(() => {
@@ -155,10 +196,8 @@ function TimerContent() {
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (
-      // 🌟 修正1: flex-col を使って、上から「ツールバー」「PDF領域」の縦並びにする
       <div className="flex flex-col h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
         
-        {/* 🌟 修正2: ツールバーに setIsSidebarOpen を渡す */}
         <PdfToolbar 
           mode={drawingMode} setMode={setDrawingMode}
           color={drawingColor} setColor={setDrawingColor}
@@ -169,10 +208,8 @@ function TimerContent() {
           setIsSidebarOpen={setIsSidebarOpen}
         />
 
-        {/* 🌟 修正3: ツールバーの下の領域。PDFとサイドバーを横並びにするコンテナ */}
         <div className="flex-1 flex overflow-hidden relative">
           
-          {/* メインのPDF表示エリア */}
           <div className="flex-1 relative border-r border-[#2c2c2e]">
             <PdfViewer 
               ref={pdfViewerRef} 
@@ -190,8 +227,6 @@ function TimerContent() {
             </button>
           </div>
 
-          {/* 🌟 修正4: サイドバーの開閉アニメーションとオーバーレイ背景 */}
-          {/* サイドバーが開いている時の暗転背景 */}
           {isSidebarOpen && (
             <div 
               className="absolute inset-0 bg-black/50 z-40 md:hidden"
@@ -199,12 +234,10 @@ function TimerContent() {
             />
           )}
 
-          {/* サイドバー本体（右からスライドイン） */}
           <div className={`
             absolute top-0 right-0 h-full z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
             ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
           `}>
-            {/* PdfSidebarコンポーネントの中の hidden lg:flex を無効化するため、ラッパーで囲む */}
             <div className="w-80 h-full bg-[#0d0d0f] shadow-2xl border-l border-white/10">
               <PdfSidebar 
                 seconds={seconds}
@@ -219,6 +252,11 @@ function TimerContent() {
                 setNoteContent={setNoteContent}
                 handleSaveNote={handleSaveNote}
                 onNoteClick={handleNoteClick}
+                // 🌟 修正：追加されたPropsを全て渡す
+                handleDeleteNote={handleDeleteNote}
+                handleEditNote={handleEditNote}
+                handleCancelNote={handleCancelNote}
+                editingNoteId={editingNoteId}
               />
             </div>
           </div>
