@@ -83,10 +83,9 @@ function ReportContent() {
   const handleEdgeTouchMove = (e: React.TouchEvent) => { 
     if (sidebarStartX.current === null) return;
     const diffX = e.touches[0].clientX - sidebarStartX.current;
-    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
     if (diffX > 40) {
       window.dispatchEvent(new Event('openSidebar'));
-      sidebarStartX.current = null; // 連続発火防止
+      sidebarStartX.current = null;
     }
   };
   const handleEdgeTouchEnd = () => { 
@@ -166,35 +165,84 @@ function ReportContent() {
     localStorage.setItem('study_reminders_v2', JSON.stringify(newReminders));
   };
 
+  // 🌟【修正】グラフ用（自分全件）とタイムライン用（自分＋フォロワー直近1週間）の分離＆マニュアルジョイン
   const fetchLogs = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     
     if (user && isMounted.current) {
       setCurrentUser(user);
+      setMyUserId(user.id);
 
-      const { data: logsData } = await supabase
+      // 1. フォローしているユーザーIDを取得
+      const { data: followings } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
+      const followingIds = followings?.map(f => f.following_id) || [];
+
+      // 2. 自分の全学習記録を取得（グラフ集計用）
+      const { data: myLogsData } = await supabase
         .from('study_logs')
-        .select('*')
+        .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
         .eq('student_id', user.id)
         .order('created_at', { ascending: false });
 
-      const { data: matData } = await supabase
+      // 3. 自分の全教材を取得（フィルタやグラフのラベル用）
+      const { data: myMatsData } = await supabase
         .from('materials')
         .select('*')
         .eq('student_id', user.id);
 
-      if (logsData && matData && isMounted.current) {
-        setRawLogs(logsData);
-        setRawMats(matData);
-        setLogs(logsData.map(log => ({
-          ...log, 
-          materials: matData?.find(m => m.id === log.material_id) || null, 
-          reactions: {}, 
-          userReaction: null
-        })));
-        
-        processChartData(logsData, matData, chartRange); 
+      // 4. 直近1週間の日時を計算
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const oneWeekAgoIso = oneWeekAgo.toISOString();
+
+      // 5. フォロワーの直近1週間の学習記録を爆速クエリで取得
+      let followerLogsData: any[] = [];
+      if (followingIds.length > 0) {
+        const { data: fLogs } = await supabase
+          .from('study_logs')
+          .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
+          .in('student_id', followingIds)
+          .gte('created_at', oneWeekAgoIso)
+          .order('created_at', { ascending: false });
+        if (fLogs) followerLogsData = fLogs;
+      }
+
+      // 6. 自分のログも直近1週間に絞り、フォロワーのログと合体してタイムライン用データを作成
+      const myRecentLogs = (myLogsData || []).filter(l => l.created_at >= oneWeekAgoIso);
+      const allRawLogs = [...myRecentLogs, ...followerLogsData].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      // 7. 必要なプロフィールと教材だけをマニュアルジョイン
+      const studentIds = Array.from(new Set(allRawLogs.map(l => l.student_id)));
+      const materialIds = Array.from(new Set(allRawLogs.map(l => l.material_id).filter(Boolean)));
+
+      const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
+      const { data: otherMatsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
+
+      const profMap: Record<string, any> = {};
+      profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー" }; });
+
+      const matMap: Record<string, any> = {};
+      myMatsData?.forEach(m => { matMap[m.id] = m; });
+      otherMatsData?.forEach(m => { matMap[m.id] = m; });
+
+      // タイムライン用にフォーマット
+      const formattedLogs = allRawLogs.map(log => {
+         return {
+           ...log,
+           profiles: profMap[log.student_id] || { display_name: "ユーザー" },
+           materials: matMap[log.material_id] || null,
+           reactions: {},
+           userReaction: null,
+           subject: matMap[log.material_id]?.title || "名称未設定"
+         };
+      });
+
+      if (isMounted.current) {
+        setRawLogs(myLogsData || []); // グラフには自分の全データのみ
+        setRawMats(myMatsData || []); // 教材フィルタ用
+        setLogs(formattedLogs); // タイムラインには「自分とフォロワーの直近1週間」
+        processChartData(myLogsData || [], myMatsData || [], chartRange);
       }
     }
     if (isMounted.current) setIsLoading(false);
@@ -487,6 +535,7 @@ function ReportContent() {
     return m > 0 ? `${h}時間${m}分` : `${h}時間`;
   };
 
+  // 🌟【修正】時間と分の単位をライトモード時に黒（slate-900）にして視認性を向上
   const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
     if (!minutes || minutes === 0) {
       return <span className={`text-lg font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>0分</span>;
@@ -498,12 +547,12 @@ function ReportContent() {
       <div className="flex items-baseline justify-end gap-1">
         {h > 0 && (
           <>
-            <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{h}</span>
-            <span className="text-sm font-bold text-indigo-400 mr-1">時間</span>
+            <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>{h}</span>
+            <span className={`text-sm font-bold mr-1 ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>時間</span>
           </>
         )}
-        <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{m}</span>
-        <span className="text-sm font-bold text-indigo-400">分</span>
+        <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>{m}</span>
+        <span className={`text-sm font-bold ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>分</span>
       </div>
     );
   };
@@ -887,7 +936,7 @@ function ReportContent() {
                   {allSubjects
                     .filter(title => {
                       const matchesSearch = (title as string).toLowerCase().includes(materialSearchQuery.toLowerCase());
-                      const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                      const materialLogs = rawLogs.filter(l => (rawMats?.find(m => m.id === l.material_id)?.title || l.subject || "名称未設定") === title);
                       
                       if (!matchesSearch || materialLogs.length === 0) return false;
 
@@ -906,12 +955,11 @@ function ReportContent() {
                       return true;
                     })
                     .map(title => {
-                    const materialLogs = logs.filter(l => (l.materials?.title || l.subject || "名称未設定") === title);
+                    const materialLogs = rawLogs.filter(l => (rawMats?.find(m => m.id === l.material_id)?.title || l.subject || "名称未設定") === title);
                     const totalMinutes = materialLogs.reduce((sum, l) => sum + l.duration_minutes, 0);
                     const lastLog = materialLogs[0];
                     
                     let imageUrl = rawMats.find(m => m.title === title)?.image_url;
-                    if (!imageUrl) imageUrl = materialLogs.find(l => l.materials?.image_url)?.materials?.image_url;
                     
                     const activeReminders = reminders[title as string] || [];
                     
@@ -956,7 +1004,7 @@ function ReportContent() {
             </div>
 
             {/* =================================================================
-                右側：TIMELINE タブ
+                右側：TIMELINE タブ (自分＋フォロワーの直近1週間)
             ================================================================= */}
             <div className={`w-1/2 px-4 space-y-4 transition-all duration-300 ${activeTab === "timeline" ? "opacity-100 h-auto" : "opacity-0 h-0 overflow-hidden pointer-events-none"}`}>
               
@@ -1000,18 +1048,20 @@ function ReportContent() {
                 getFilteredTimelineLogs().map((log: any) => (
                   <div key={log.id} className="relative mb-6">
                     
-                    {/* 🌟 背景の「削除エリア」 */}
-                    <div className={`absolute inset-0 rounded-[2.5rem] flex items-center justify-end pr-10 overflow-hidden transition-colors duration-300 ${swipingLogId === log.id && swipeOffset < -100 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
-                      <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingLogId === log.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -100 ? 'scale-125' : 'scale-100'}`}>
-                        <Trash2 className={`w-8 h-8 text-white mb-1 ${swipeOffset < -100 ? 'animate-bounce' : ''}`} />
-                        <span className="text-white text-[12px] font-black tracking-widest">
-                          {swipeOffset < -100 ? '離して削除' : '削除'}
-                        </span>
+                    {/* 🌟 自分の記録のみ削除可能 */}
+                    {log.student_id === currentUser?.id && (
+                      <div className={`absolute inset-0 rounded-[2.5rem] flex items-center justify-end pr-10 overflow-hidden transition-colors duration-300 ${swipingLogId === log.id && swipeOffset < -100 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
+                        <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingLogId === log.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -100 ? 'scale-125' : 'scale-100'}`}>
+                          <Trash2 className={`w-8 h-8 text-white mb-1 ${swipeOffset < -100 ? 'animate-bounce' : ''}`} />
+                          <span className="text-white text-[12px] font-black tracking-widest">
+                            {swipeOffset < -100 ? '離して削除' : '削除'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div 
-                      onTouchStart={(e) => handleLogTouchStart(e, log.id)}
+                      onTouchStart={(e) => { if (log.student_id === currentUser?.id) handleLogTouchStart(e, log.id); }}
                       onTouchMove={handleLogTouchMove}
                       onTouchEnd={() => handleLogTouchEnd(log.id)}
                       style={{ 
@@ -1025,19 +1075,20 @@ function ReportContent() {
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
                             {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
-                              <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                              <img src={log.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover pointer-events-none" />
                             ) : (
                               <User className="w-5 h-5 text-indigo-400" />
                             )}
                           </div>
                           <div className="flex flex-col">
                             <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
-                              {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.nickname || log.profiles?.name || "ユーザー")}
+                              {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.display_name || "ユーザー")}
                             </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
+                          {/* 🌟 自分の記録のみ編集可能 */}
                           {log.student_id === currentUser?.id && (
                             <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
                               <MoreHorizontal className={`w-5 h-5 ${textSub}`} />

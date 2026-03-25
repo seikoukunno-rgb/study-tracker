@@ -296,10 +296,9 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/rooms');
   };
 
-  // 🌟 ルームの共有機能（リンク共有）
   const handleShareRoom = async () => {
     if (!room) return;
-    const shareUrl = window.location.href; // このルームのURLがそのまま参加リンクになります
+    const shareUrl = window.location.href; 
     const shareData = {
       title: `ルーム「${room.name}」への招待`,
       text: `スタランで一緒に勉強しよう！\nルーム「${room.name}」に招待されています🔥\n\n👇ここから直接参加できます！\n`,
@@ -449,7 +448,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           </button>
           <div>
             <h1 className="text-base font-black leading-tight line-clamp-1">{room?.name || "ルーム"}</h1>
-            <p className="text-[10px] font-bold text-indigo-500 mt-0.5 tracking-wider">直近10件以降は3日で消滅します ⏳</p>
+            {/* 🌟 変更点：3日で消滅のテキストを撤去し、安心感のあるテキストに変更 */}
+            <p className="text-[10px] font-bold text-indigo-500 mt-0.5 tracking-wider">過去のメッセージもすべて保存されます 📚</p>
           </div>
         </div>
         
@@ -544,7 +544,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 🌟 設定モーダル（共有ボタン追加） */}
       {showSettingsModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)}></div>
@@ -563,8 +562,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             <div className="overflow-y-auto space-y-6 px-6 pb-12 no-scrollbar">
-              
-              {/* 🌟 ルームの共有機能 */}
               <div className="space-y-2">
                 <h3 className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>ルームの共有</h3>
                 <button onClick={handleShareRoom} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-95 ${bgCard}`}>
