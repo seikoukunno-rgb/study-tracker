@@ -1,9 +1,8 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useTransformContext } from "react-zoom-pan-pinch";
 import { supabase } from '@/lib/supabase';
-import { Move, Trash2, Check } from 'lucide-react'; // 🌟 Check(確定ボタン)を追加
+import { Move, Trash2, Check } from 'lucide-react';
 
 type DrawingCanvasProps = {
   mode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -25,7 +24,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const [textInput, setTextInput] = useState<{ x: number; y: number; w: number; h: number; fontSize: number } | null>(null);
   const [textValue, setTextValue] = useState("");
 
-  const transformContext = useTransformContext();
   const pathsRef = useRef<PathData[]>([]);
   const textsRef = useRef<TextData[]>([]);
   const currentPathRef = useRef<Point[]>([]);
@@ -179,13 +177,21 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     setTextValue("");
   }, [color, redraw, saveAnnotations]);
 
+
+  // 🌟🌟🌟 ここがズレを完璧に直す新しい計算式です 🌟🌟🌟
   const getCorrectedCoordinates = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    
+    // Canvasの「画面上の見た目のサイズ」と「内部のCSSサイズ」の比率を割り出す
+    const scaleX = rect.width / canvas.offsetWidth;
+    const scaleY = rect.height / canvas.offsetHeight;
+    
+    return { 
+      x: (clientX - rect.left) / scaleX, 
+      y: (clientY - rect.top) / scaleY 
+    };
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -208,7 +214,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   };
 
   const initDraw = (clientX: number, clientY: number) => {
-    // 🌟 画面の別の場所をタッチした時、開いているテキストがあれば確定させる
     if (textInputRef.current) {
       if (textValueRef.current.trim()) {
         handleTextSubmit();
@@ -288,13 +293,16 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const startBoxX = textInput?.x || 0;
     const startBoxY = textInput?.y || 0;
-    const scale = transformContext.transformState.scale || 1;
+
+    const canvas = canvasRef.current;
+    const scaleX = canvas ? (canvas.getBoundingClientRect().width / canvas.offsetWidth) : 1;
+    const scaleY = canvas ? (canvas.getBoundingClientRect().height / canvas.offsetHeight) : 1;
 
     const doMove = (moveEvent: MouseEvent | TouchEvent) => {
       if (moveEvent.cancelable) moveEvent.preventDefault(); 
       const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
       const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
-      setTextInput(prev => prev ? { ...prev, x: startBoxX + (clientX - startX) / scale, y: startBoxY + (clientY - startY) / scale } : prev);
+      setTextInput(prev => prev ? { ...prev, x: startBoxX + (clientX - startX) / scaleX, y: startBoxY + (clientY - startY) / scaleY } : prev);
     };
 
     const stopMove = () => {
@@ -318,14 +326,17 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const startBoxW = textInput?.w || 200;
     const startBoxH = textInput?.h || 50;
-    const scale = transformContext.transformState.scale || 1;
+
+    const canvas = canvasRef.current;
+    const scaleX = canvas ? (canvas.getBoundingClientRect().width / canvas.offsetWidth) : 1;
+    const scaleY = canvas ? (canvas.getBoundingClientRect().height / canvas.offsetHeight) : 1;
 
     const doResize = (moveEvent: MouseEvent | TouchEvent) => {
       if (moveEvent.cancelable) moveEvent.preventDefault();
       const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
       const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
       setTextInput(prev => prev ? { 
-        ...prev, w: Math.max(80, startBoxW + (clientX - startX) / scale), h: Math.max(40, startBoxH + (clientY - startY) / scale) 
+        ...prev, w: Math.max(80, startBoxW + (clientX - startX) / scaleX), h: Math.max(40, startBoxH + (clientY - startY) / scaleY) 
       } : prev);
     };
 
@@ -372,7 +383,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
           <textarea
             autoFocus value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
-            // 🌟 モバイルでのバグの原因だった onBlur を完全に削除！
             className="w-full h-full bg-transparent outline-none resize-none p-2 text-black font-bold leading-tight"
             style={{ color, fontSize: `${textInput.fontSize}px` }}
             placeholder="文字を入力..."
@@ -383,26 +393,34 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             className="absolute -right-3 -bottom-3 w-6 h-6 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
           />
 
-          {/* ミニツールバー */}
           <div 
             className="absolute -bottom-14 left-0 bg-white shadow-xl border border-gray-200 rounded-lg flex items-center p-1.5 gap-1 z-50 text-gray-800"
             onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
           >
             <button
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.min(100, p.fontSize + 2) } : p); }}
+              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.min(100, p.fontSize + 2) } : p); }}
+              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.min(100, p.fontSize + 2) } : p); }}
               className="p-1.5 hover:bg-gray-100 rounded text-sm font-black flex items-center justify-center min-w-[32px] text-black"
             >
               A+
             </button>
             <button
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.max(10, p.fontSize - 2) } : p); }}
+              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.max(10, p.fontSize - 2) } : p); }}
+              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.max(10, p.fontSize - 2) } : p); }}
               className="p-1.5 hover:bg-gray-100 rounded text-sm font-black flex items-center justify-center min-w-[32px] text-black"
             >
               A-
             </button>
             <div className="w-[1px] h-5 bg-gray-300 mx-1" />
             <button
-              onPointerDown={(e) => {
+              onMouseDown={(e) => {
+                e.stopPropagation(); e.preventDefault();
+                setTextInput(null);
+                setTextValue("");
+                saveAnnotations();
+                redraw();
+              }}
+              onTouchStart={(e) => {
                 e.stopPropagation(); e.preventDefault();
                 setTextInput(null);
                 setTextValue("");
@@ -414,9 +432,12 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
               <Trash2 size={16} />
             </button>
             <div className="w-[1px] h-5 bg-gray-300 mx-1" />
-            {/* 🌟 確定（保存）ボタンを追加！ */}
             <button
-              onPointerDown={(e) => {
+              onMouseDown={(e) => {
+                e.stopPropagation(); e.preventDefault();
+                handleTextSubmit();
+              }}
+              onTouchStart={(e) => {
                 e.stopPropagation(); e.preventDefault();
                 handleTextSubmit();
               }}

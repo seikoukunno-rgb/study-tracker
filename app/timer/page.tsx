@@ -58,7 +58,7 @@ function TimerContent() {
       
       if (!material || !material.pdf_url || material.pdf_url === '[]') { 
         setPdfList([]);
-        setIsInitializing(false); 
+        setIsInitializing(false); // 🌟 PDFがない通常教材の場合はここでロード完了
         return; 
       }
 
@@ -73,12 +73,16 @@ function TimerContent() {
         }
       }
       setPdfList(paths);
-    } catch (e: any) { setPdfError(e.message); } 
+      // 🚨 修正ポイント：ここではまだロード画面を終わらせない！（URLのセキュア化を待つ）
+    } catch (e: any) { 
+      setPdfError(e.message); 
+      setIsInitializing(false); 
+    } 
   }, [materialId]);
 
   const fetchSignedUrl = useCallback(async () => {
     if (pdfList.length === 0) {
-      setIsInitializing(false);
+      // 🚨 修正ポイント：ここにあった setIsInitializing(false) を削除。これが「一瞬フラッシュする」最大の原因でした。
       return;
     }
     setPdfError(null);
@@ -90,8 +94,10 @@ function TimerContent() {
       const { data, error: storageError } = await supabase.storage.from('pdfs').createSignedUrl(filePath, 300);
       if (storageError) throw new Error("セキュアPDFの発行に失敗しました");
       setSecurePdfUrl(data.signedUrl);
-    } catch (e: any) { setPdfError(e.message); } finally {
-      setIsInitializing(false);
+    } catch (e: any) { 
+      setPdfError(e.message); 
+    } finally {
+      setIsInitializing(false); // 🌟 PDFの準備が完璧に整ったここで、初めてローディングを消す！
     }
   }, [pdfList, currentIndex]);
 
@@ -237,13 +243,13 @@ function TimerContent() {
                 handleSaveNote={handleSaveNote} handleDeleteNote={handleDeleteNote}
                 onNoteClick={handleNoteClick} handleEditNote={handleEditNote}
                 handleCancelNote={handleCancelNote} editingNoteId={editingNoteId}
-                // 🌟 追加：PDF切り替えデータを渡す
                 pdfList={pdfList} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex}
               />
             </div>
           </div>
         </div>
 
+        {/* セーブモーダル */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -266,6 +272,7 @@ function TimerContent() {
     );
   }
 
+  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」
   return (
     <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4 relative">
       <div className="absolute top-6 left-6">
