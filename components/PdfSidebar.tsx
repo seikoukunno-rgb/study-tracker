@@ -1,7 +1,7 @@
 'use client';
 
 import { Dispatch, SetStateAction } from 'react'; 
-import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText } from 'lucide-react';
+import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText, ChevronDown, RotateCcw, Save, Loader2, PencilLine } from 'lucide-react'; // 🌟 アイコンを追加
 
 type PdfSidebarProps = {
   seconds: number;
@@ -20,17 +20,24 @@ type PdfSidebarProps = {
   handleEditNote: (note: any) => void;
   handleCancelNote: () => void;
   editingNoteId: string | null;
-  // 🌟 追加：PDF切り替え用のProps
   pdfList: string[];
   currentIndex: number;
   setCurrentIndex: Dispatch<SetStateAction<number>>;
+  
+  // 🌟 追加：タイマーの保存に必要なProps
+  memo: string;
+  setMemo: Dispatch<SetStateAction<string>>;
+  handleSave: () => void;
+  isSaving: boolean;
+  setSeconds: Dispatch<SetStateAction<number>>;
 };
 
 export default function PdfSidebar({ 
   seconds, isRunning, setIsRunning,
   notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, 
   handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId,
-  pdfList, currentIndex, setCurrentIndex
+  pdfList, currentIndex, setCurrentIndex,
+  memo, setMemo, handleSave, isSaving, setSeconds // 🌟 受け取る
 }: PdfSidebarProps) {
   
   const formatTime = (totalSeconds: number) => {
@@ -40,7 +47,7 @@ export default function PdfSidebar({
   };
 
   return (
-    <aside className="w-full h-full flex flex-col relative z-10 overflow-y-auto no-scrollbar">
+    <aside className="w-full h-full flex flex-col relative z-10 overflow-y-auto no-scrollbar pb-10">
       <div className="p-6">
         
         {/* タイマー機能 */}
@@ -53,30 +60,71 @@ export default function PdfSidebar({
           <div className="text-4xl font-black text-white mb-6 tracking-tighter tabular-nums">
             {formatTime(seconds)}
           </div>
-          <button 
-            onClick={() => setIsRunning(!isRunning)} 
-            className={`w-full py-4 rounded-xl font-bold transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 ${isRunning ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-indigo-600 text-white'}`}
-          >
-            {isRunning ? <><Pause size={18} fill="currentColor"/> PAUSE</> : <><Play size={18} fill="currentColor"/> RESUME</>}
-          </button>
+          
+          {/* 🌟 修正：通常のタイマー画面と同じ「リセット」＆「保存」UIを搭載 */}
+          <div className="flex gap-2">
+            {!isRunning && seconds > 0 && (
+              <button 
+                onClick={() => { setIsRunning(false); setSeconds(0); setMemo(""); }}
+                className="flex-1 py-3 bg-white/10 text-white/70 rounded-xl font-bold hover:bg-white/20 active:scale-95 transition-all flex items-center justify-center"
+              >
+                <RotateCcw size={16} />
+              </button>
+            )}
+            <button 
+              onClick={() => setIsRunning(!isRunning)} 
+              className={`flex-[3] py-3 rounded-xl font-bold transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2 ${isRunning ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-indigo-600 text-white'}`}
+            >
+              {isRunning ? <><Pause size={16} fill="currentColor"/> PAUSE</> : <><Play size={16} fill="currentColor"/> {seconds > 0 ? 'RESUME' : 'START'}</>}
+            </button>
+          </div>
+
+          {/* 🌟 追加：一時停止時に現れる保存（メモ）エリア */}
+          <div className={`transition-all duration-500 overflow-hidden text-left ${!isRunning && seconds > 0 ? 'max-h-96 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <div>
+                <label className="flex items-center gap-1 text-[10px] font-black text-white/40 mb-2 uppercase tracking-widest">
+                  <PencilLine className="w-3 h-3" /> メモ・感想 (任意)
+                </label>
+                <textarea
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  placeholder="今日の学びや反省を記録..."
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none focus:border-indigo-500 transition-all resize-none h-20 placeholder:text-white/20"
+                />
+              </div>
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="w-full bg-indigo-500 hover:bg-indigo-400 text-white py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg disabled:opacity-50"
+              >
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? "保存中..." : "記録を保存して終了"}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 🌟 PDFファイル切り替え機能 */}
+        {/* 🌟 修正：PDFファイル切り替えのデザインをスタイリッシュに刷新！ */}
         {pdfList && pdfList.length > 1 && (
-          <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/10 shadow-lg mb-8">
-            <label className="flex items-center gap-2 text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase mb-3">
+          <div className="mb-8">
+            <label className="flex items-center gap-2 text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase mb-2 ml-1">
               <FileText className="w-3.5 h-3.5" /> Document Select
             </label>
-            <select 
-              value={currentIndex}
-              onChange={(e) => setCurrentIndex(Number(e.target.value))}
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-xs font-bold text-slate-200 outline-none focus:border-indigo-500 transition-colors cursor-pointer appearance-none"
-            >
-              {pdfList.map((pdf, idx) => {
-                const name = pdf.split('/').pop()?.replace(/^\d+_/, '') || `PDF Document ${idx + 1}`;
-                return <option key={idx} value={idx}>{name}</option>;
-              })}
-            </select>
+            <div className="relative group">
+              <select 
+                value={currentIndex}
+                onChange={(e) => setCurrentIndex(Number(e.target.value))}
+                className="w-full bg-[#1c1c1e] hover:bg-[#252528] border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer appearance-none shadow-lg pr-10"
+              >
+                {pdfList.map((pdf, idx) => {
+                  const name = pdf.split('/').pop()?.replace(/^\d+_/, '') || `PDF Document ${idx + 1}`;
+                  return <option key={idx} value={idx}>{name}</option>;
+                })}
+              </select>
+              {/* カスタムの矢印アイコンで純正セレクトボックス感を消す */}
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-hover:text-white/70 transition-colors pointer-events-none" />
+            </div>
           </div>
         )}
 

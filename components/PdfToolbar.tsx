@@ -1,6 +1,6 @@
 'use client';
 
-import { PenTool, Highlighter, Eraser, Type, MousePointer2, ChevronDown, Menu, Play, Pause, Trash2 } from 'lucide-react';
+import { PenTool, Highlighter, Eraser, Type, MousePointer2, ChevronDown, Menu, Play, Pause, Trash2, Check } from 'lucide-react';
 import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react';
 
 type PdfToolbarProps = {
@@ -31,19 +31,17 @@ export default function PdfToolbar({
   const currentWidth = mode === 'marker' ? markerWidth : (mode === 'eraser' ? eraserWidth : penWidth);
   const setWidth = mode === 'marker' ? setMarkerWidth : (mode === 'eraser' ? setEraserWidth : setPenWidth);
 
-  // 🌟 パレットを自動で閉じる確実なロジック
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
         setShowPalette(false);
       }
     };
-    // キャンバスに触れた瞬間（書き始めた瞬間）に閉じる
     const handleCanvasInteract = () => setShowPalette(false);
 
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
-    document.addEventListener('canvas-interact', handleCanvasInteract); // キャンバスからの合図を受信
+    document.addEventListener('canvas-interact', handleCanvasInteract);
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
@@ -73,7 +71,7 @@ export default function PdfToolbar({
 
   const handleClearAll = () => {
     if (window.confirm('現在のページの書き込み（テキスト含む）をすべて消去しますか？')) {
-      document.dispatchEvent(new Event('clear-canvas')); // キャンバスへ全消去の合図を送信
+      document.dispatchEvent(new Event('clear-canvas'));
       setShowPalette(false);
     }
   };
@@ -112,8 +110,13 @@ export default function PdfToolbar({
       </div>
 
       <div className="flex items-center h-full pr-2">
-        <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
-          {isRunning ? <Play className="w-4 h-4 text-indigo-400 fill-current animate-pulse" /> : <Pause className="w-4 h-4 text-amber-400 fill-current" />}
+        <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors group">
+          {/* 🌟 修正：動いている時はPauseアイコン、止まっている時はPlayアイコンにする */}
+          {isRunning ? (
+            <Pause className="w-4 h-4 text-amber-400 fill-current animate-pulse" />
+          ) : (
+            <Play className="w-4 h-4 text-indigo-400 fill-current ml-0.5 group-hover:scale-110 transition-transform" />
+          )}
           <span className="text-white font-black font-mono text-base tracking-wider w-12 text-center">{formatTime(seconds)}</span>
         </button>
       </div>
@@ -145,7 +148,6 @@ export default function PdfToolbar({
             </>
           )}
 
-          {/* 🌟 消しゴムの時に「すべて消去」ボタンを表示 */}
           {mode === 'eraser' && (
             <div className="mt-4 pt-4 border-t border-white/10">
               <button 

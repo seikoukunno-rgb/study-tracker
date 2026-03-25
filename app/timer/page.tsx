@@ -244,6 +244,12 @@ function TimerContent() {
                 onNoteClick={handleNoteClick} handleEditNote={handleEditNote}
                 handleCancelNote={handleCancelNote} editingNoteId={editingNoteId}
                 pdfList={pdfList} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex}
+              
+              memo={memo}
+                setMemo={setMemo}
+                handleSave={handleSave}
+                isSaving={isSaving}
+                setSeconds={setSeconds}
               />
             </div>
           </div>
