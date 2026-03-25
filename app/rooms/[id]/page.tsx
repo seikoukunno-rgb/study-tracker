@@ -169,7 +169,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal) fetchStaruns();
   }, [showRankingModal]);
 
-  // 🌟 コスト削減＆日本時間(JST)を考慮した最適化クエリ
+  // 🌟 修正ポイント：Supabaseの外部キーエラーを完全に回避する「マニュアルジョイン」で取得
   const fetchStudyLogsForStarun = async () => {
     if (!selectedStarunId) return;
     setIsLogsLoading(true);
@@ -180,31 +180,48 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     const participatingIds = members.filter(m => m.is_ranking_participant).map(m => m.user_id);
     if (participatingIds.length === 0) { setStudyLogs([]); setIsLogsLoading(false); return; }
 
-    // 日本時間（JST）の 00:00:00 〜 23:59:59 で正確に絞り込む (+09:00 指定)
     const startTime = `${targetStarun.start_date}T00:00:00+09:00`;
     const endTime = `${targetStarun.end_date}T23:59:59+09:00`;
 
-    // 🌟 最適化: thoughts（感想）を除外し、画像URLと時間だけを取得してデータ通信量を極限まで削減
-    const { data: logsData } = await supabase
+    // 1. まず学習記録の「生データ」だけを取得
+    const { data: rawLogs, error: logsError } = await supabase
       .from('study_logs')
-      .select(`
-        id, student_id, duration_minutes, studied_at, created_at,
-        profiles:student_id (nickname, name, full_name, avatar_url),
-        materials:material_id (title, image_url)
-      `)
+      .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
       .in('student_id', participatingIds)
       .gte('created_at', startTime)
       .lte('created_at', endTime)
       .order('created_at', { ascending: false });
 
-    if (logsData) {
-      const formattedLogs = logsData.map((log: any) => ({
-        ...log,
-        display_name: log.profiles?.nickname || log.profiles?.name || log.profiles?.full_name || "ユーザー",
-        avatar_url: log.profiles?.avatar_url
-      }));
-      setStudyLogs(formattedLogs);
+    if (logsError || !rawLogs) {
+      console.error("学習記録の取得エラー:", logsError);
+      setStudyLogs([]);
+      setIsLogsLoading(false);
+      return;
     }
+
+    // 2. 取得した記録から、必要なプロフィールIDと教材IDを抽出
+    const studentIds = Array.from(new Set(rawLogs.map(l => l.student_id)));
+    const materialIds = Array.from(new Set(rawLogs.map(l => l.material_id).filter(Boolean)));
+
+    // 3. プロフィールと教材情報をそれぞれ単独で取得
+    const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
+    const { data: materialsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
+
+    // 4. アプリ側で辞書化（マップ化）して結合する
+    const profMap: Record<string, any> = {};
+    profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー" }; });
+
+    const matMap: Record<string, any> = {};
+    materialsData?.forEach(m => { matMap[m.id] = m; });
+
+    const formattedLogs = rawLogs.map(log => ({
+      ...log,
+      display_name: profMap[log.student_id]?.display_name || "ユーザー",
+      avatar_url: profMap[log.student_id]?.avatar_url,
+      materials: matMap[log.material_id] || null
+    }));
+
+    setStudyLogs(formattedLogs);
     setIsLogsLoading(false);
   };
 
@@ -243,7 +260,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (!error) {
       setIsParticipating(true);
       setMembers(prev => prev.map(m => m.user_id === currentUser.id ? { ...m, is_ranking_participant: true } : m));
-      fetchStudyLogsForStarun();
       showToast("スタランに参加しました！");
     }
   };
