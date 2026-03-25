@@ -214,23 +214,22 @@ function ReportContent() {
       
       // 7. 必要なプロフィールと教材だけをマニュアルジョイン
       const studentIds = Array.from(new Set(allRawLogs.map(l => l.student_id)));
-      const materialIds = Array.from(new Set(allRawLogs.map(l => l.material_id).filter(Boolean)));
+      const materialIds = Array.from(new Set([...allRawLogs.map(l => l.material_id), ...(myLogsData || []).map(l => l.material_id)].filter(Boolean)));
 
       const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
-      const { data: otherMatsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
+      const { data: allMatsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
 
       const profMap: Record<string, any> = {};
-      profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー" }; });
+      profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー", avatar_url: p.avatar_url }; });
 
       const matMap: Record<string, any> = {};
-      myMatsData?.forEach(m => { matMap[m.id] = m; });
-      otherMatsData?.forEach(m => { matMap[m.id] = m; });
+      allMatsData?.forEach(m => { matMap[m.id] = m; });
 
       // タイムライン用にフォーマット
       const formattedLogs = allRawLogs.map(log => {
          return {
            ...log,
-           profiles: profMap[log.student_id] || { display_name: "ユーザー" },
+           profiles: profMap[log.student_id] || { display_name: "ユーザー", avatar_url: null },
            materials: matMap[log.material_id] || null,
            reactions: {},
            userReaction: null,
@@ -381,11 +380,15 @@ function ReportContent() {
 
   const handleUpdate = async () => {
     if (!editingLog) return;
-    const { error } = await supabase.from('study_logs').update({
-      studied_at: new Date(editDate).toISOString().split('T')[0],
+    const updateData: any = {
       duration_minutes: Number(editMinutes),
       thoughts: editMemo
-    }).eq('id', editingLog.id);
+    };
+    if (editDate) {
+      updateData.studied_at = editDate.split('T')[0];
+    }
+
+    const { error } = await supabase.from('study_logs').update(updateData).eq('id', editingLog.id);
 
     if (error) {
       showToast(`更新エラー: ${error.message}`, "error", "error"); 
@@ -500,7 +503,7 @@ function ReportContent() {
 
   const allSubjects = Array.from(new Set([
     ...rawMats.map(m => m.title),
-    ...logs.map(log => log.materials?.title || log.subject || "名称未設定")
+    ...rawLogs.map(log => rawMats.find(m => m.id === log.material_id)?.title || log.subject || "名称未設定")
   ]));
 
   const getFilteredTimelineLogs = () => {
@@ -535,7 +538,6 @@ function ReportContent() {
     return m > 0 ? `${h}時間${m}分` : `${h}時間`;
   };
 
-  // 🌟【修正】時間と分の単位をライトモード時に黒（slate-900）にして視認性を向上
   const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
     if (!minutes || minutes === 0) {
       return <span className={`text-lg font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>0分</span>;
@@ -569,6 +571,7 @@ function ReportContent() {
     <div className={`min-h-screen pb-20 font-sans overflow-x-hidden transition-colors duration-300 ${bgPage}`}
          onTouchStart={handleMainTouchStart}
          onTouchEnd={handleMainTouchEnd}
+         onClick={() => setActiveEditMenu(null)}
     >
       
       {toastMessage && (
@@ -822,7 +825,6 @@ function ReportContent() {
         <div className="flex px-4 relative">
           <button onClick={() => setActiveTab("record")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "record" ? "text-indigo-500" : textSub}`}>RECORD</button>
           <button onClick={() => setActiveTab("timeline")} className={`flex-1 pb-3 text-xs font-black text-center transition-all ${activeTab === "timeline" ? "text-indigo-500" : textSub}`}>TIMELINE</button>
-          {/* タブの下線アニメーション */}
           <div className="absolute bottom-0 left-4 right-4 h-1 bg-slate-100 dark:bg-slate-800 rounded-full">
             <div className={`absolute top-0 bottom-0 w-1/2 bg-indigo-500 rounded-full transition-transform duration-300 ${activeTab === "timeline" ? "translate-x-full" : "translate-x-0"}`}></div>
           </div>
@@ -853,7 +855,8 @@ function ReportContent() {
                 </div>
 
                 <div className="relative h-48 flex">
-                  <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                  {/* 🌟 修正: Y軸のテキストをライトモード時は黒（slate-900）にして視認性アップ */}
+                  <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-400' : 'text-slate-900'}`}>
                     {[maxChartVal, Math.round(maxChartVal * 0.75), Math.round(maxChartVal * 0.5), Math.round(maxChartVal * 0.25), 0].map((val, idx) => (
                       <div key={idx} className="flex items-center w-full">
                         <span className="w-12 text-right pr-2 shrink-0">{formatTimeForChart(val)}</span>
@@ -869,7 +872,8 @@ function ReportContent() {
                             <div key={idx} className="w-full transition-all" style={{ height: `${seg.heightPercent}%`, backgroundColor: seg.color }}></div>
                           ))}
                         </div>
-                        <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${textSub}`}>{data.date}</span>
+                        {/* 🌟 修正: X軸の日付テキストもライトモード時は黒（slate-900）に */}
+                        <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-900'}`}>{data.date}</span>
                       </div>
                     ))}
                   </div>
@@ -1026,17 +1030,17 @@ function ReportContent() {
                   ))}
                 </div>
 
-                <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`w-full border font-black py-4 px-6 rounded-[2rem] shadow-sm flex items-center justify-between text-sm transition-all focus:ring-4 ring-indigo-500/20 ${bgCard}`}>
+                <button onClick={(e) => { e.stopPropagation(); setIsFilterOpen(!isFilterOpen); }} className={`w-full border font-black py-4 px-6 rounded-[2rem] shadow-sm flex items-center justify-between text-sm transition-all focus:ring-4 ring-indigo-500/20 ${bgCard}`}>
                   <span>{filterSubject === "all" ? "すべての教材を一覧" : filterSubject}</span>
                   <ChevronDown className={`w-5 h-5 transition-transform ${isFilterOpen ? 'rotate-180' : ''} ${textSub}`} />
                 </button>
 
                 {isFilterOpen && (
                   <>
-                    <div className="fixed inset-0 z-30" onClick={() => setIsFilterOpen(false)}></div>
+                    <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setIsFilterOpen(false); }}></div>
                     <div className={`absolute top-full left-0 right-0 mt-2 border rounded-3xl shadow-xl z-40 overflow-hidden py-2 animate-in fade-in slide-in-from-top-2 ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
-                      <button onClick={() => { setFilterSubject("all"); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors ${filterSubject === "all" ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>すべての教材を一覧</button>
-                      {Array.from(new Set(allSubjects)).map((sub: any) => <button key={sub} onClick={() => { setFilterSubject(sub); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors border-t ${isDarkMode ? 'border-slate-800/50' : 'border-slate-50'} ${filterSubject === sub ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>{sub}</button>)}
+                      <button onClick={(e) => { e.stopPropagation(); setFilterSubject("all"); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors ${filterSubject === "all" ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>すべての教材を一覧</button>
+                      {Array.from(new Set(allSubjects)).map((sub: any) => <button key={sub} onClick={(e) => { e.stopPropagation(); setFilterSubject(sub); setIsFilterOpen(false); }} className={`w-full text-left px-6 py-4 text-sm font-black transition-colors border-t ${isDarkMode ? 'border-slate-800/50' : 'border-slate-50'} ${filterSubject === sub ? (isDarkMode ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600') : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-50')}`}>{sub}</button>)}
                     </div>
                   </>
                 )}
@@ -1048,7 +1052,7 @@ function ReportContent() {
                 getFilteredTimelineLogs().map((log: any) => (
                   <div key={log.id} className="relative mb-6">
                     
-                    {/* 🌟 自分の記録のみ削除可能 */}
+                    {/* 🌟 自分の記録のみスワイプ削除可能 */}
                     {log.student_id === currentUser?.id && (
                       <div className={`absolute inset-0 rounded-[2.5rem] flex items-center justify-end pr-10 overflow-hidden transition-colors duration-300 ${swipingLogId === log.id && swipeOffset < -100 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
                         <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingLogId === log.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -100 ? 'scale-125' : 'scale-100'}`}>
@@ -1071,7 +1075,7 @@ function ReportContent() {
                       }}
                       className={`p-6 rounded-[2.5rem] shadow-sm border relative group z-10 transition-colors w-full ${bgCard} ${swipingLogId === log.id ? 'shadow-2xl' : ''}`}
                     >
-                      <div className="flex justify-between items-center mb-5">
+                      <div className="flex justify-between items-center mb-5 relative">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
                             {log.profiles?.avatar_url && !log.profiles.avatar_url.startsWith('bg-') ? (
@@ -1088,11 +1092,42 @@ function ReportContent() {
                         </div>
                         <div className="flex items-center gap-1">
                           <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
-                          {/* 🌟 自分の記録のみ編集可能 */}
+                          {/* 🌟 自分の記録のみ編集メニュー（...）を表示 */}
                           {log.student_id === currentUser?.id && (
-                            <button onClick={() => setActiveEditMenu(activeEditMenu === log.id ? null : log.id)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
-                              <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
-                            </button>
+                            <div className="relative">
+                              <button onClick={(e) => { e.stopPropagation(); setActiveEditMenu(activeEditMenu === log.id ? null : log.id); }} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                                <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
+                              </button>
+                              
+                              {/* 🌟 編集＆削除ドロップダウンメニュー */}
+                              {activeEditMenu === log.id && (
+                                <div className={`absolute right-0 top-full mt-1 z-50 rounded-xl shadow-xl border overflow-hidden w-28 animate-in fade-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingLog(log);
+                                      setEditDate(log.studied_at ? `${log.studied_at}T00:00` : new Date(log.created_at).toISOString().slice(0,16));
+                                      setEditMinutes(log.duration_minutes);
+                                      setEditMemo(log.thoughts || "");
+                                      setActiveEditMenu(null);
+                                    }} 
+                                    className={`w-full px-4 py-3 flex items-center gap-2 text-xs font-bold transition-colors ${isDarkMode ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" /> 編集
+                                  </button>
+                                  <div className={`h-px w-full ${isDarkMode ? 'bg-[#38383a]' : 'bg-slate-100'}`}></div>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteClick(log.id);
+                                    }} 
+                                    className={`w-full px-4 py-3 flex items-center gap-2 text-xs font-bold text-rose-500 transition-colors ${isDarkMode ? 'hover:bg-rose-500/10' : 'hover:bg-rose-50'}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> 削除
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1115,13 +1150,13 @@ function ReportContent() {
                             {fe.emoji}
                           </div>
                         ))}
-                        <button onClick={() => setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id)} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
+                        <button onClick={(e) => { e.stopPropagation(); setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id); }} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
                           <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
                         </button>
                         {activeReactionMenu === log.id && (
                           <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
                             {EMOJIS.map(emoji => (
-                              <button key={emoji} onClick={() => { handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); setActiveReactionMenu(null); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
+                              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); setActiveReactionMenu(null); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
                             ))}
                           </div>
                         )}
