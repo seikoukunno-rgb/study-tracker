@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag, CheckCircle2, Edit2, X } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag, CheckCircle2, Edit2, X, Share2 } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -176,7 +176,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal) fetchStaruns();
   }, [showRankingModal]);
 
-  // 🌟【修正】メンバー情報をそのまま流用する超絶シンプルな学習記録取得
   const fetchStudyLogsForStarun = async () => {
     if (!selectedStarunId) return;
     setIsLogsLoading(true);
@@ -190,7 +189,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     const startTime = `${targetStarun.start_date}T00:00:00+09:00`;
     const endTime = `${targetStarun.end_date}T23:59:59+09:00`;
 
-    // 1. 学習記録だけ取得（プロフィール情報を無駄に問い合わせない）
     const { data: rawLogs, error } = await supabase
       .from('study_logs')
       .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
@@ -205,14 +203,12 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    // 2. 教材情報だけ取得（アイコンとタイトル用）
     const materialIds = Array.from(new Set(rawLogs.map(l => l.material_id).filter(Boolean)));
     const { data: materialsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
     
     const matMap: Record<string, any> = {};
     materialsData?.forEach(m => { matMap[m.id] = m; });
 
-    // 3. 🌟 ここで members の情報をそのまま使って結合！確実に名前が反映されます。
     const formattedLogs = rawLogs.map(log => {
       const member = members.find(m => m.user_id === log.student_id);
       return {
@@ -298,6 +294,28 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       await supabase.from('messages').insert([{ room_id: roomId, user_id: currentUser.id, content: `${myProfile?.display_name} が退室しました 🏃💨`, is_system: true, is_stamp: false }]);
     }
     router.push('/rooms');
+  };
+
+  // 🌟 ルームの共有機能（リンク共有）
+  const handleShareRoom = async () => {
+    if (!room) return;
+    const shareUrl = window.location.href; // このルームのURLがそのまま参加リンクになります
+    const shareData = {
+      title: `ルーム「${room.name}」への招待`,
+      text: `スタランで一緒に勉強しよう！\nルーム「${room.name}」に招待されています🔥\n\n👇ここから直接参加できます！\n`,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        console.error("共有キャンセル", error);
+      }
+    } else {
+      await navigator.clipboard.writeText(`${shareData.text}${shareData.url}`);
+      showToast("招待リンクをコピーしました！");
+    }
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -424,7 +442,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      {/* ヘッダー */}
       <header className={`shrink-0 z-40 px-4 py-3 flex items-center justify-between border-b shadow-sm ${bgHeader}`}>
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/rooms')} className={`p-2.5 rounded-2xl transition-all flex items-center justify-center shrink-0 border shadow-sm active:scale-95 ${bgCard}`}>
@@ -452,7 +469,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </header>
 
-      {/* メッセージエリア */}
       <div ref={scrollRef} className="flex-1 px-4 py-6 space-y-6 overflow-y-auto no-scrollbar scroll-smooth">
         {messages.map((m) => {
           if (m.is_system) {
@@ -484,7 +500,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                   </div>
                 )}
 
-                {/* 長押しメニュー */}
                 {activeMessageId === m.id && isMine && !m.is_stamp && (
                   <div className="absolute top-[-40px] right-0 z-50 bg-white dark:bg-[#2c2c2e] shadow-xl rounded-xl border border-slate-100 dark:border-[#38383a] flex overflow-hidden animate-in zoom-in-95 duration-200">
                     <button onClick={(e) => { e.stopPropagation(); setEditingMessageId(m.id); setNewMessage(m.content); setActiveMessageId(null); }} className="px-4 py-2.5 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#38383a] transition-colors border-r dark:border-[#38383a]">
@@ -501,7 +516,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         })}
       </div>
 
-      {/* 入力エリア */}
       <div className={`shrink-0 z-40 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
         {editingMessageId && (
           <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 flex justify-between items-center text-xs font-bold text-indigo-600 dark:text-indigo-400">
@@ -530,7 +544,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 設定モーダル */}
+      {/* 🌟 設定モーダル（共有ボタン追加） */}
       {showSettingsModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)}></div>
@@ -549,6 +563,23 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             <div className="overflow-y-auto space-y-6 px-6 pb-12 no-scrollbar">
+              
+              {/* 🌟 ルームの共有機能 */}
+              <div className="space-y-2">
+                <h3 className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>ルームの共有</h3>
+                <button onClick={handleShareRoom} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-95 ${bgCard}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl ${isDarkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
+                      <Share2 className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <p className={`text-sm font-black ${textMain}`}>招待リンクを送る</p>
+                      <p className={`text-[10px] font-bold ${textSub}`}>リンクを知っている人は誰でも参加できます</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
               {isHost && (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-2xl border ${bgCard}`}>
@@ -588,7 +619,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* メンバー一覧モーダル */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
@@ -639,7 +669,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 Study Run モーダル */}
       {showRankingModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowRankingModal(false)}></div>
