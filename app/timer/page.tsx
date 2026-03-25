@@ -58,7 +58,7 @@ function TimerContent() {
       
       if (!material || !material.pdf_url || material.pdf_url === '[]') { 
         setPdfList([]);
-        setIsInitializing(false); // 🌟 PDFがない通常教材の場合はここでロード完了
+        setIsInitializing(false); 
         return; 
       }
 
@@ -73,18 +73,11 @@ function TimerContent() {
         }
       }
       setPdfList(paths);
-      // 🚨 修正ポイント：ここではまだロード画面を終わらせない！（URLのセキュア化を待つ）
-    } catch (e: any) { 
-      setPdfError(e.message); 
-      setIsInitializing(false); 
-    } 
+    } catch (e: any) { setPdfError(e.message); setIsInitializing(false); } 
   }, [materialId]);
 
   const fetchSignedUrl = useCallback(async () => {
-    if (pdfList.length === 0) {
-      // 🚨 修正ポイント：ここにあった setIsInitializing(false) を削除。これが「一瞬フラッシュする」最大の原因でした。
-      return;
-    }
+    if (pdfList.length === 0) return;
     setPdfError(null);
     try {
       let filePath = pdfList[currentIndex];
@@ -94,10 +87,8 @@ function TimerContent() {
       const { data, error: storageError } = await supabase.storage.from('pdfs').createSignedUrl(filePath, 300);
       if (storageError) throw new Error("セキュアPDFの発行に失敗しました");
       setSecurePdfUrl(data.signedUrl);
-    } catch (e: any) { 
-      setPdfError(e.message); 
-    } finally {
-      setIsInitializing(false); // 🌟 PDFの準備が完璧に整ったここで、初めてローディングを消す！
+    } catch (e: any) { setPdfError(e.message); } finally {
+      setIsInitializing(false);
     }
   }, [pdfList, currentIndex]);
 
@@ -123,33 +114,21 @@ function TimerContent() {
       await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
     }
     
-    setNoteContent(""); 
-    setIsAddingNote(false); 
-    setEditingNoteId(null);
-    fetchNotes();
+    setNoteContent(""); setIsAddingNote(false); setEditingNoteId(null); fetchNotes();
   };
 
   const handleDeleteNote = async (noteId: string) => {
     if (!window.confirm("このメモを削除しますか？")) return;
     const { error } = await supabase.from('notes').delete().eq('id', noteId);
-    if (error) {
-      alert("削除エラー: " + error.message);
-    } else {
-      fetchNotes();
-    }
+    if (error) alert("削除エラー: " + error.message); else fetchNotes();
   };
 
   const handleEditNote = (note: any) => {
-    setIsAddingNote(true);
-    setNotePage(note.page_number);
-    setNoteContent(note.content);
-    setEditingNoteId(note.id);
+    setIsAddingNote(true); setNotePage(note.page_number); setNoteContent(note.content); setEditingNoteId(note.id);
   };
 
   const handleCancelNote = () => {
-    setIsAddingNote(false);
-    setNoteContent("");
-    setEditingNoteId(null);
+    setIsAddingNote(false); setNoteContent(""); setEditingNoteId(null);
   };
 
   useEffect(() => {
@@ -186,13 +165,14 @@ function TimerContent() {
     pdfViewerRef.current?.scrollToPage(pageNumber);
   };
 
-  if (isInitializing) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
+  if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
-  if (pdfError) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
+  if (pdfError) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (
-      <div className="flex flex-col h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
+      // 🌟🌟🌟 ここが最大の修正ポイント！ 'fixed inset-0 z-50' によって、アンダーバーの干渉を強制シャットアウトします！
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0a] overflow-hidden text-white font-sans">
         
         <PdfToolbar 
           mode={drawingMode} setMode={setDrawingMode}
@@ -223,15 +203,17 @@ function TimerContent() {
             </button>
           </div>
 
+          {/* 🌟 オーバーレイも 'fixed inset-0' で全画面覆う */}
           {isSidebarOpen && (
             <div 
-              className="absolute inset-0 bg-black/50 z-40 md:hidden"
+              className="fixed inset-0 bg-black/50 z-[60] md:hidden"
               onClick={() => setIsSidebarOpen(false)}
             />
           )}
 
+          {/* 🌟 サイドバー自体も 'fixed inset-y-0 right-0' で上下ピッタリに貼り付ける */}
           <div className={`
-            absolute top-0 right-0 h-full z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+            fixed inset-y-0 right-0 z-[70] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
             ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
           `}>
             <div className="w-80 h-full bg-[#0d0d0f] shadow-2xl border-l border-white/10">
@@ -244,18 +226,12 @@ function TimerContent() {
                 onNoteClick={handleNoteClick} handleEditNote={handleEditNote}
                 handleCancelNote={handleCancelNote} editingNoteId={editingNoteId}
                 pdfList={pdfList} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex}
-              
-              memo={memo}
-                setMemo={setMemo}
-                handleSave={handleSave}
-                isSaving={isSaving}
-                setSeconds={setSeconds}
+                memo={memo} setMemo={setMemo} handleSave={handleSave} isSaving={isSaving} setSeconds={setSeconds}
               />
             </div>
           </div>
         </div>
 
-        {/* セーブモーダル */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -278,9 +254,9 @@ function TimerContent() {
     );
   }
 
-  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」
+  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」も念のため full screen (fixed) にしておきます
   return (
-    <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4 relative">
+    <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4">
       <div className="absolute top-6 left-6">
         <button onClick={() => router.back()} className="p-3 bg-white hover:bg-slate-100 rounded-full shadow-sm transition-colors">
           <ArrowLeft className="w-6 h-6" />
