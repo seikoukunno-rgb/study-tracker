@@ -162,35 +162,51 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     setTextValue("");
   }, [color, redraw, saveAnnotations]);
 
-
-  // 🌟🌟🌟 ここが「ズレ」を直すための完璧な計算ロジック 🌟🌟🌟
   const getCorrectedCoordinates = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
-    
-    // Canvasの「画面上の実際の大きさ」を取得（ZoomなどのCSSが反映された状態）
     const rect = canvas.getBoundingClientRect();
-    
-    // Canvasの「内部的な解像度(px)」と「画面の大きさ」の比率を計算
-    // （これにより、Zoom倍率を無理やり計算しなくても、常に完璧に一致します！）
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
     return { 
       x: (clientX - rect.left) * scaleX, 
       y: (clientY - rect.top) * scaleY 
     };
   };
 
-  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  // 🌟🌟🌟 修正1：タッチイベント（スマホ・タブレット用）
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (isResizing.current) return;
     
+    // 🌟 2本指以上で触れた場合は、描画をキャンセルしてイベントを「透過」させる（拡大・移動が発動する）
+    if (e.touches.length >= 2) {
+      if (isDrawing) {
+        setIsDrawing(false);
+        currentPathRef.current = [];
+        redraw();
+      }
+      return; 
+    }
+
+    // 1本指の時だけ、画面を固定して描画処理に専念する
+    e.stopPropagation();
     document.dispatchEvent(new Event('canvas-interact'));
 
-    // 🌟🌟🌟 早く動かしても線が途切れないように、ペンをCanvasに「ロックオン」する！
-    e.currentTarget.setPointerCapture(e.pointerId);
+    const touch = e.touches[0];
+    initDraw(touch.clientX, touch.clientY);
+  };
 
-    const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
+  // 🌟🌟🌟 修正2：マウスイベント（PC用）
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isResizing.current) return;
+    e.stopPropagation();
+    document.dispatchEvent(new Event('canvas-interact'));
+    initDraw(e.clientX, e.clientY);
+  };
+
+  // 共通の描画スタートロジック
+  const initDraw = (clientX: number, clientY: number) => {
+    const { x, y } = getCorrectedCoordinates(clientX, clientY);
 
     if (mode === 'text' || mode === 'none') {
       const clickedTextIndex = textsRef.current.findIndex(t => 
@@ -220,17 +236,35 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     redraw();
   };
 
-  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
+    
+    // 描画中に2本指になったら、描画をやめて移動・拡大に切り替える
+    if (e.touches.length >= 2) {
+      setIsDrawing(false);
+      currentPathRef.current = [];
+      redraw();
+      return;
+    }
+
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault(); // 画面がスクロールするのを防ぐ
+    
+    const touch = e.touches[0];
+    const { x, y } = getCorrectedCoordinates(touch.clientX, touch.clientY);
+    currentPathRef.current.push({ x, y });
+    redraw();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || mode === 'none' || mode === 'text') return;
+    e.stopPropagation();
     const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
     currentPathRef.current.push({ x, y });
     redraw();
   };
 
-  const stopDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // 🌟🌟🌟 書き終わったらペンのロックオンを解除する
-    e.currentTarget.releasePointerCapture(e.pointerId);
-
+  const finishDrawing = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
     if (currentPathRef.current.length > 0) {
@@ -241,75 +275,99 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }
   };
 
-  const handleMoveStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  // 🌟 テキストの「移動」
+  const handleMoveStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation(); // 🌟 ここが重要！テキストを掴んだらPDFの画面移動を完全にブロックする
     isResizing.current = true;
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const startBoxX = textInput?.x || 0;
     const startBoxY = textInput?.y || 0;
     const scale = transformContext.transformState.scale || 1;
 
-    const doMove = (moveEvent: PointerEvent) => {
-      setTextInput(prev => prev ? { ...prev, x: startBoxX + (moveEvent.clientX - startX) / scale, y: startBoxY + (moveEvent.clientY - startY) / scale } : prev);
+    const doMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent.cancelable) moveEvent.preventDefault(); // スワイプスクロールを防ぐ
+      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
+      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
+      setTextInput(prev => prev ? { ...prev, x: startBoxX + (clientX - startX) / scale, y: startBoxY + (clientY - startY) / scale } : prev);
     };
+
     const stopMove = () => {
-      window.removeEventListener('pointermove', doMove);
-      window.removeEventListener('pointerup', stopMove);
+      window.removeEventListener('mousemove', doMove);
+      window.removeEventListener('mouseup', stopMove);
+      window.removeEventListener('touchmove', doMove);
+      window.removeEventListener('touchend', stopMove);
       setTimeout(() => { isResizing.current = false; }, 100);
     };
-    window.addEventListener('pointermove', doMove);
-    window.addEventListener('pointerup', stopMove);
+
+    window.addEventListener('mousemove', doMove, { passive: false });
+    window.addEventListener('mouseup', stopMove);
+    window.addEventListener('touchmove', doMove, { passive: false });
+    window.addEventListener('touchend', stopMove);
   };
 
-  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  // 🌟 テキストの「サイズ変更」
+  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation(); // 🌟 画面移動をブロック
     isResizing.current = true;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startBoxX = textInput?.w || 200;
-    const startBoxY = textInput?.h || 50;
+    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const startBoxW = textInput?.w || 200;
+    const startBoxH = textInput?.h || 50;
     const scale = transformContext.transformState.scale || 1;
 
-    const doResize = (moveEvent: PointerEvent) => {
+    const doResize = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent.cancelable) moveEvent.preventDefault();
+      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
+      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
       setTextInput(prev => prev ? { 
         ...prev, 
-        w: Math.max(100, startBoxX + (moveEvent.clientX - startX) / scale), 
-        h: Math.max(40, startBoxY + (moveEvent.clientY - startY) / scale) 
+        w: Math.max(100, startBoxW + (clientX - startX) / scale), 
+        h: Math.max(40, startBoxH + (clientY - startY) / scale) 
       } : prev);
     };
+
     const stopResize = () => {
-      window.removeEventListener('pointermove', doResize);
-      window.removeEventListener('pointerup', stopResize);
+      window.removeEventListener('mousemove', doResize);
+      window.removeEventListener('mouseup', stopResize);
+      window.removeEventListener('touchmove', doResize);
+      window.removeEventListener('touchend', stopResize);
       setTimeout(() => { isResizing.current = false; }, 100);
     };
-    window.addEventListener('pointermove', doResize);
-    window.addEventListener('pointerup', stopResize);
+
+    window.addEventListener('mousemove', doResize, { passive: false });
+    window.addEventListener('mouseup', stopResize);
+    window.addEventListener('touchmove', doResize, { passive: false });
+    window.addEventListener('touchend', stopResize);
   };
 
   return (
     <>
       <canvas
         ref={canvasRef}
-        onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing}
+        // 🌟 PointerEvent から MouseEvent / TouchEvent の個別処理に完全分離
+        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={finishDrawing} onMouseLeave={finishDrawing}
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={finishDrawing} onTouchCancel={finishDrawing}
         className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
       />
       
       {textInput && (
         <div 
           className="absolute z-20 border-2 border-dashed border-blue-500 bg-white/80 backdrop-blur-sm group"
-          onPointerDown={(e) => e.stopPropagation()} 
+          // 🌟 テキストボックス内を触った時は、裏側のPDFがスワイプされないようにする
+          onMouseDown={(e) => e.stopPropagation()} 
+          onTouchStart={(e) => e.stopPropagation()} 
           style={{ 
             left: textInput.x, top: textInput.y, width: textInput.w, height: textInput.h,
             transformOrigin: 'top left',
-            // 🌟 修正4：Zoomに合わせてテキストボックスの見た目も綺麗に一致させるよう変更
           }}
         >
+          {/* 移動ハンドル */}
           <div 
-            onPointerDown={handleMoveStart}
-            className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-2 py-1 cursor-move rounded-t-md flex items-center gap-1 shadow-md hover:bg-blue-400"
+            onMouseDown={handleMoveStart} onTouchStart={handleMoveStart}
+            className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-3 py-1.5 cursor-move rounded-t-md flex items-center gap-1 shadow-md hover:bg-blue-400 active:bg-blue-600"
           >
-            <Move size={12} /> 移動
+            <Move size={14} /> 移動
           </div>
 
           <textarea
@@ -320,9 +378,11 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             style={{ color, fontSize: '20px' }}
             placeholder="文字を入力..."
           />
+          
+          {/* リサイズハンドル */}
           <div 
-            onPointerDown={handleResizeStart}
-            className="absolute -right-2 -bottom-2 w-5 h-5 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
+            onMouseDown={handleResizeStart} onTouchStart={handleResizeStart}
+            className="absolute -right-3 -bottom-3 w-6 h-6 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
           />
         </div>
       )}
