@@ -1,6 +1,6 @@
 'use client';
 
-import { PenTool, Highlighter, Eraser, Type, MousePointer2, ChevronDown, Menu, Play, Pause } from 'lucide-react';
+import { PenTool, Highlighter, Eraser, Type, MousePointer2, ChevronDown, Menu, Play, Pause, Trash2 } from 'lucide-react';
 import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react';
 
 type PdfToolbarProps = {
@@ -31,21 +31,19 @@ export default function PdfToolbar({
   const currentWidth = mode === 'marker' ? markerWidth : (mode === 'eraser' ? eraserWidth : penWidth);
   const setWidth = mode === 'marker' ? setMarkerWidth : (mode === 'eraser' ? setEraserWidth : setPenWidth);
 
-  // 🌟 パレットを自動で閉じるロジック
+  // 🌟 パレットを自動で閉じる確実なロジック
   useEffect(() => {
-    // ツールバーの外をクリックした時
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
         setShowPalette(false);
       }
     };
-    
-    // 🌟 PDF上で「書き始めた」という合図を受け取った時
+    // キャンバスに触れた瞬間（書き始めた瞬間）に閉じる
     const handleCanvasInteract = () => setShowPalette(false);
 
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
-    document.addEventListener('canvas-interact', handleCanvasInteract);
+    document.addEventListener('canvas-interact', handleCanvasInteract); // キャンバスからの合図を受信
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
@@ -73,9 +71,15 @@ export default function PdfToolbar({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
+  const handleClearAll = () => {
+    if (window.confirm('現在のページの書き込み（テキスト含む）をすべて消去しますか？')) {
+      document.dispatchEvent(new Event('clear-canvas')); // キャンバスへ全消去の合図を送信
+      setShowPalette(false);
+    }
+  };
+
   return (
     <div ref={toolbarRef} className="w-full h-12 bg-[#1c1c1e] border-b border-white/10 flex items-center justify-between px-2 shadow-md relative z-[100] select-none">
-      
       <div className="flex items-center gap-1 h-full">
         <button onClick={() => setIsSidebarOpen(prev => !prev)} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-md transition-colors mr-2">
           <Menu size={20} />
@@ -110,14 +114,12 @@ export default function PdfToolbar({
       <div className="flex items-center h-full pr-2">
         <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
           {isRunning ? <Play className="w-4 h-4 text-indigo-400 fill-current animate-pulse" /> : <Pause className="w-4 h-4 text-amber-400 fill-current" />}
-          <span className="text-white font-black font-mono text-base tracking-wider w-12 text-center">
-            {formatTime(seconds)}
-          </span>
+          <span className="text-white font-black font-mono text-base tracking-wider w-12 text-center">{formatTime(seconds)}</span>
         </button>
       </div>
 
       {showPalette && (mode === 'pen' || mode === 'marker' || mode === 'eraser') && (
-        <div className="absolute top-12 left-12 bg-[#1c1c1e] border border-white/10 border-t-0 p-4 rounded-b-2xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200 w-64 origin-top">
+        <div className="absolute top-12 left-12 bg-[#1c1c1e] border border-white/10 border-t-0 p-5 rounded-b-2xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200 w-64 origin-top">
           <div className="flex justify-between items-center mb-3">
             <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">太さ</span>
             <span className="text-[10px] font-black text-indigo-400">{currentWidth}px</span>
@@ -141,6 +143,18 @@ export default function PdfToolbar({
                 ))}
               </div>
             </>
+          )}
+
+          {/* 🌟 消しゴムの時に「すべて消去」ボタンを表示 */}
+          {mode === 'eraser' && (
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <button 
+                onClick={handleClearAll}
+                className="w-full py-2.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <Trash2 size={16} /> すべて消去
+              </button>
+            </div>
           )}
         </div>
       )}

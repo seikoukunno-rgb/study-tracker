@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTransformContext } from "react-zoom-pan-pinch";
 import { supabase } from '@/lib/supabase';
+import { Move } from 'lucide-react';
 
 type DrawingCanvasProps = {
   mode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -16,17 +17,13 @@ type DrawingCanvasProps = {
 
 type Point = { x: number; y: number };
 type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: number; points: Point[] };
-// 🌟 width を追加して、リサイズされた幅を記憶できるように拡張
-type TextData = { text: string; x: number; y: number; width: number; color: string };
+type TextData = { text: string; x: number; y: number; width: number; height: number; color: string };
 
 export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex, pdfId = 'default-pdf' }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  
-  // 🌟 テキストボックスの幅(w)と高さ(h)も状態として持つ
   const [textInput, setTextInput] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [textValue, setTextValue] = useState("");
-  const [statusMsg, setStatusMsg] = useState<string>("");
 
   const transformContext = useTransformContext();
   const pathsRef = useRef<PathData[]>([]);
@@ -35,22 +32,17 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
 
   const textValueRef = useRef("");
   const textInputRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
-  
-  // 青いドットでのリサイズ用フラグ
   const isResizing = useRef(false);
 
   useEffect(() => { textValueRef.current = textValue; }, [textValue]);
   useEffect(() => { textInputRef.current = textInput; }, [textInput]);
 
-  // 🌟 Canvasでテキストを折り返して描画するためのヘルパー関数
   const wrapText = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number) => {
     const lines = text.split('\n');
     let currentY = y;
-
     lines.forEach(line => {
-      let words = line.split(''); // 日本語対応のため1文字ずつ判定
+      let words = line.split('');
       let currentLine = '';
-
       for (let n = 0; n < words.length; n++) {
         let testLine = currentLine + words[n];
         let metrics = ctx.measureText(testLine);
@@ -106,77 +98,59 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       ctx.font = 'bold 20px sans-serif';
       ctx.textBaseline = 'top';
       ctx.fillStyle = t.color;
-      // 🌟 幅(t.width)を指定して折り返し描画
       wrapText(ctx, t.text, t.x, t.y, t.width, 24); 
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
   useEffect(() => {
     const loadAnnotations = async () => {
-      setStatusMsg("読み込み中...");
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setStatusMsg(""); return; }
-      const { data, error } = await supabase.from('annotations').select('data').eq('user_id', user.id).eq('pdf_id', pdfId).eq('page_index', pageIndex).maybeSingle();
-      if (error) { setStatusMsg("❌ 読込エラー"); return; }
+      if (!user) return;
+      const { data } = await supabase.from('annotations').select('data').eq('user_id', user.id).eq('pdf_id', pdfId).eq('page_index', pageIndex).maybeSingle();
       if (data?.data) {
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
-        setStatusMsg("✅ データ復元完了");
-      } else {
-        pathsRef.current = [];
-        textsRef.current = [];
       }
       redraw();
-      setTimeout(() => setStatusMsg(""), 3000);
     };
     loadAnnotations();
   }, [pageIndex, pdfId, redraw]);
 
   const saveAnnotations = async () => {
-    setStatusMsg("💾 保存中...");
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { error } = await supabase.from('annotations').upsert({
+    await supabase.from('annotations').upsert({
       user_id: user.id, pdf_id: pdfId, page_index: pageIndex,
       data: { paths: pathsRef.current, texts: textsRef.current },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id, pdf_id, page_index' });
-    if (!error) {
-      setStatusMsg("🚀 保存成功！");
-      setTimeout(() => setStatusMsg(""), 3000);
-    }
   };
+
+  // 🌟 Toolbarの「全消去」の合図を受信する魔法
+  useEffect(() => {
+    const handleClearCanvas = () => {
+      pathsRef.current = [];
+      textsRef.current = [];
+      redraw();
+      saveAnnotations();
+    };
+    document.addEventListener('clear-canvas', handleClearCanvas);
+    return () => document.removeEventListener('clear-canvas', handleClearCanvas);
+  }, [redraw]);
 
   const handleTextSubmit = useCallback(() => {
     const val = textValueRef.current;
     const pos = textInputRef.current;
     textValueRef.current = "";
     textInputRef.current = null;
-
     if (val.trim() && pos) {
-      // 🌟 幅(w)も保存する
-      textsRef.current.push({ text: val, x: pos.x, y: pos.y, width: pos.w, color });
+      textsRef.current.push({ text: val, x: pos.x, y: pos.y, width: pos.w, height: pos.h, color });
       redraw();
       saveAnnotations();
     }
     setTextInput(null);
     setTextValue("");
   }, [color, redraw]);
-
-  useEffect(() => {
-    const initCanvas = () => {
-      const canvas = canvasRef.current;
-      const parent = canvas?.parentElement;
-      if (canvas && parent) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-        redraw();
-      }
-    };
-    const timer = setTimeout(initCanvas, 500);
-    window.addEventListener('resize', initCanvas);
-    return () => { clearTimeout(timer); window.removeEventListener('resize', initCanvas); };
-  }, [redraw]);
 
   const getCorrectedCoordinates = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -186,71 +160,52 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
   };
 
-  const stopEvent = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
-  };
-
-  const cancelDrawing = useCallback(() => {
-    if (isDrawing) {
-      setIsDrawing(false);
-      currentPathRef.current = [];
-      redraw();
-    }
-  }, [isDrawing, redraw]);
-
-  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    // 🌟 リサイズ中なら描画開始しない
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isResizing.current) return;
-    if (mode === 'none') return;
-    
-    if ('touches' in e) {
-      if (e.touches.length >= 2) { cancelDrawing(); return; }
-      stopEvent(e);
-    } else {
-      stopEvent(e);
+    // 🌟 書き始めた瞬間に Toolbar に「閉じて！」と合図を送る
+    document.dispatchEvent(new Event('canvas-interact'));
+
+    const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
+
+    // 一度書いたテキストをクリックして再編集
+    if (mode === 'text' || mode === 'none') {
+      const clickedTextIndex = textsRef.current.findIndex(t => 
+        x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + (t.height || 50)
+      );
+      if (clickedTextIndex !== -1) {
+        if (textInputRef.current && textValueRef.current.trim()) handleTextSubmit();
+        const t = textsRef.current[clickedTextIndex];
+        textsRef.current.splice(clickedTextIndex, 1);
+        redraw();
+        setTextInput({ x: t.x, y: t.y, w: t.width, h: t.height || 50 });
+        setTextValue(t.text);
+        return;
+      }
     }
-    
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const { x, y } = getCorrectedCoordinates(clientX, clientY);
 
     if (mode === 'text') {
-      if (textInputRef.current && textValueRef.current.trim()) {
-        handleTextSubmit();
-      }
-      // 🌟 初期サイズを w: 200, h: 50 に設定
+      if (textInputRef.current && textValueRef.current.trim()) handleTextSubmit();
       setTextInput({ x, y, w: 200, h: 50 });
       setTextValue("");
       return;
     }
 
+    if (mode === 'none') return;
     setIsDrawing(true);
     currentPathRef.current = [{ x, y }];
     redraw();
   };
 
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
-    if ('touches' in e) {
-      if (e.touches.length >= 2) { cancelDrawing(); return; }
-      stopEvent(e);
-      if (e.cancelable) e.preventDefault();
-    } else {
-      stopEvent(e);
-    }
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const { x, y } = getCorrectedCoordinates(clientX, clientY);
+    const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
     currentPathRef.current.push({ x, y });
     redraw();
   };
 
-  const stopDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+  const stopDrawing = () => {
     if (!isDrawing) return;
-    if ('touches' in e && e.touches.length > 0) { cancelDrawing(); return; }
     setIsDrawing(false);
-    
     if (currentPathRef.current.length > 0) {
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
@@ -259,82 +214,93 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }
   };
 
-  // 🌟 青いドットをドラッグした時のリサイズ処理
-  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // 🌟 テキストの「移動」
+  const handleMoveStart = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     isResizing.current = true;
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const startW = textInput?.w || 200;
-    const startH = textInput?.h || 50;
-
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startBoxX = textInput?.x || 0;
+    const startBoxY = textInput?.y || 0;
     const scale = transformContext.transformState.scale || 1;
 
-    const doResize = (moveEvent: MouseEvent | TouchEvent) => {
-      if (!isResizing.current) return;
-      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
-      
-      setTextInput(prev => {
-        if (!prev) return prev;
-        // ズーム倍率を考慮してリサイズ量を計算
-        const newW = Math.max(100, startW + (clientX - startX) / scale);
-        const newH = Math.max(40, startH + (clientY - startY) / scale);
-        return { ...prev, w: newW, h: newH };
-      });
+    const doMove = (moveEvent: PointerEvent) => {
+      setTextInput(prev => prev ? { ...prev, x: startBoxX + (moveEvent.clientX - startX) / scale, y: startBoxY + (moveEvent.clientY - startY) / scale } : prev);
     };
-
-    const stopResize = () => {
-      isResizing.current = false;
-      window.removeEventListener('mousemove', doResize);
-      window.addEventListener('mouseup', stopResize);
-      window.removeEventListener('touchmove', doResize);
-      window.addEventListener('touchend', stopResize);
+    const stopMove = () => {
+      window.removeEventListener('pointermove', doMove);
+      window.removeEventListener('pointerup', stopMove);
+      setTimeout(() => { isResizing.current = false; }, 100);
     };
-
-    window.addEventListener('mousemove', doResize);
-    window.addEventListener('mouseup', stopResize);
-    window.addEventListener('touchmove', doResize);
-    window.addEventListener('touchend', stopResize);
+    window.addEventListener('pointermove', doMove);
+    window.addEventListener('pointerup', stopMove);
   };
 
-return (
-  <>
-    <canvas
-      ref={canvasRef}
-      onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing}
-      onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
-      className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
-    />
-    
-    {textInput && (
-      <div 
-        className="absolute z-20 border-2 border-blue-500 bg-white/10 backdrop-blur-sm"
-        style={{ 
-          left: textInput.x, top: textInput.y,
-          width: textInput.w, height: textInput.h,
-          transformOrigin: 'top left',
-          transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
-        }}
-      >
-        <textarea
-          autoFocus
-          value={textValue}
-          onChange={(e) => setTextValue(e.target.value)}
-          onBlur={() => { if(!isResizing.current) handleTextSubmit(); }}
-          className="w-full h-full bg-transparent outline-none resize-none p-2 text-black font-bold leading-tight"
-          style={{ color, fontSize: '20px' }}
-          placeholder="入力開始..."
-        />
-        {/* 🌟 動画のような青いリサイズドット */}
+  // 🌟 テキストの「サイズ変更」
+  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = textInput?.w || 200;
+    const startH = textInput?.h || 50;
+    const scale = transformContext.transformState.scale || 1;
+
+    const doResize = (moveEvent: PointerEvent) => {
+      setTextInput(prev => prev ? { 
+        ...prev, 
+        w: Math.max(100, startW + (moveEvent.clientX - startX) / scale), 
+        h: Math.max(40, startH + (moveEvent.clientY - startY) / scale) 
+      } : prev);
+    };
+    const stopResize = () => {
+      window.removeEventListener('pointermove', doResize);
+      window.removeEventListener('pointerup', stopResize);
+      setTimeout(() => { isResizing.current = false; }, 100); // 誤って確定されるのを防ぐ遅延
+    };
+    window.addEventListener('pointermove', doResize);
+    window.addEventListener('pointerup', stopResize);
+  };
+
+  return (
+    <>
+      <canvas
+        ref={canvasRef}
+        onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing}
+        className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
+      />
+      
+      {textInput && (
         <div 
-          onMouseDown={handleResizeStart}
-          onTouchStart={handleResizeStart}
-          className="absolute -right-2 -bottom-2 w-4 h-4 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-xl z-30"
-        />
-        <div className="absolute -left-1 -top-1 w-2 h-2 bg-blue-500 rounded-full border border-white" />
-      </div>
-    )}
-  </>
-);
+          className="absolute z-20 border-2 border-dashed border-blue-500 bg-white/80 backdrop-blur-sm group"
+          style={{ 
+            left: textInput.x, top: textInput.y, width: textInput.w, height: textInput.h,
+            transformOrigin: 'top left', transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
+          }}
+        >
+          {/* 移動ハンドル */}
+          <div 
+            onPointerDown={handleMoveStart}
+            className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-2 py-1 cursor-move rounded-t-md flex items-center gap-1 shadow-md"
+          >
+            <Move size={12} /> 移動
+          </div>
+
+          <textarea
+            autoFocus value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            onBlur={() => { if (!isResizing.current) handleTextSubmit(); }}
+            className="w-full h-full bg-transparent outline-none resize-none p-2 text-black font-bold leading-tight"
+            style={{ color, fontSize: '20px' }}
+            placeholder="文字を入力..."
+          />
+          {/* リサイズハンドル */}
+          <div 
+            onPointerDown={handleResizeStart}
+            className="absolute -right-2 -bottom-2 w-4 h-4 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30"
+          />
+        </div>
+      )}
+    </>
+  );
 }

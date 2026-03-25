@@ -210,6 +210,15 @@ function TimerContent() {
                 seconds={seconds}
                 isRunning={isRunning}
                 setIsRunning={setIsRunning}
+                notes={notes}
+                isAddingNote={isAddingNote}
+                setIsAddingNote={setIsAddingNote}
+                notePage={notePage}
+                setNotePage={setNotePage}
+                noteContent={noteContent}
+                setNoteContent={setNoteContent}
+                handleSaveNote={handleSaveNote}
+                onNoteClick={handleNoteClick}
               />
             </div>
           </div>
