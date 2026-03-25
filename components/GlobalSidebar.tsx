@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-// 🌟 usePathname を追加でインポート
 import { useRouter, usePathname } from "next/navigation"; 
 import { supabase } from "../lib/supabase";
 import { User, X, QrCode, Moon, Sun, Bell, PenLine, Share2, Trash2 } from "lucide-react";
@@ -8,7 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 
 export default function GlobalSidebar() {
   const router = useRouter();
-  const pathname = usePathname(); // 🌟 現在のURLを取得
+  const pathname = usePathname();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -21,12 +20,15 @@ export default function GlobalSidebar() {
   const [myUserId, setMyUserId] = useState("");
   const [showQrModal, setShowQrModal] = useState(false);
   const [showGlobalReminders, setShowGlobalReminders] = useState(false);
-  const [reminders, setReminders] = useState<Record<string, string[]>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const [sidebarOffset, setSidebarOffset] = useState(0);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const sidebarStartX = useRef<number | null>(null);
+
+  // 🌟 ローカルストレージではなく、DBから取得するためのState
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
   useEffect(() => {
     const handleOpen = () => setShowProfileMenu(true);
@@ -39,10 +41,9 @@ export default function GlobalSidebar() {
     const savedGoal = localStorage.getItem('user_goal');
     if (savedGoal) setUserGoal(savedGoal);
 
-    const savedReminders = localStorage.getItem('study_reminders_v2');
-    if (savedReminders) setReminders(JSON.parse(savedReminders));
-
     fetchProfile();
+    fetchReminders(); // 🌟 初期ロード時にDBからリマインダーを取得
+    
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
 
     return () => {
@@ -80,6 +81,18 @@ export default function GlobalSidebar() {
     if (following !== null) setFollowingCount(following);
   };
 
+  // 🌟 DBからカレンダーと同じリマインダー情報を取得する関数
+  const fetchReminders = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: activeReminders } = await supabase.from('reminders').select('*').eq('student_id', user.id);
+    const { data: activeEvents } = await supabase.from('calendar_events').select('*').eq('student_id', user.id).not('notify_time', 'is', null).eq('is_completed', false);
+
+    if (activeReminders) setReminders(activeReminders);
+    if (activeEvents) setCalendarEvents(activeEvents);
+  };
+
   const toggleDarkMode = () => {
     const newMode = !isDarkMode;
     setIsDarkMode(newMode);
@@ -106,16 +119,6 @@ export default function GlobalSidebar() {
     sidebarStartX.current = null;
   };
 
-  const handleClearReminder = (subject: string, targetIso: string) => {
-    const currentRems = reminders[subject] || [];
-    const updatedRems = currentRems.filter(t => t !== targetIso);
-    const newReminders = { ...reminders };
-    if (updatedRems.length > 0) newReminders[subject] = updatedRems;
-    else delete newReminders[subject]; 
-    setReminders(newReminders);
-    localStorage.setItem('study_reminders_v2', JSON.stringify(newReminders));
-  };
-
   const handleShareApp = async () => {
     const shareData = {
       title: 'Mercury',
@@ -135,6 +138,18 @@ export default function GlobalSidebar() {
     }
   };
 
+  // 🌟 カレンダー側の削除ロジックと統一
+  const handleDeleteReminder = async (item: any) => {
+    if (item.type === 'reminder') {
+      await supabase.from('reminders').delete().eq('id', item.rawId);
+      setReminders(prev => prev.filter(r => r.id !== item.rawId));
+    } else {
+      await supabase.from('calendar_events').update({ notify_time: null }).eq('id', item.rawId);
+      setCalendarEvents(prev => prev.map(e => e.id === item.rawId ? { ...e, notify_time: null } : e));
+    }
+  };
+
+  // 🌟 「あと〇時間」のクールな表示用ヘルパー
   const getCountdownDisplay = (isoStr: string) => {
     const target = new Date(isoStr);
     if (isNaN(target.getTime())) return "";
@@ -153,20 +168,17 @@ export default function GlobalSidebar() {
   const bgSubCard = isDarkMode ? "bg-[#2c2c2e] border-[#38383a]" : "bg-slate-50 border-slate-100";
   const profileUrl = typeof window !== 'undefined' && myUserId ? `${window.location.origin}/user/${myUserId}` : ""; 
 
-  // 🌟 【最重要修正】PDF画面（/viewer）を開いている時は、メニューやスワイプ判定を一切描画しない！
   if (pathname?.startsWith('/viewer')) {
     return null; 
   }
 
   return (
     <div className="z-[9999]">
-      {/* 背景の黒いぼかし */}
       <div 
         className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[100] transition-opacity duration-300 ${showProfileMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
         onClick={() => setShowProfileMenu(false)}
       ></div>
         
-      {/* サイドメニュー本体 */}
       <div 
         onTouchStart={handleEdgeTouchStart}
         onTouchMove={handleEdgeTouchMove}
@@ -208,7 +220,6 @@ export default function GlobalSidebar() {
             </div>
           </div>
 
-          {/* フォロワー表示エリア */}
           <div className="flex gap-6 mt-6 pt-5 border-t border-white/20 px-2">
              <button 
                onClick={() => { setShowProfileMenu(false); router.push('/network?tab=followers'); }} 
@@ -244,14 +255,17 @@ export default function GlobalSidebar() {
                 <span className={`text-sm font-black ${textMain}`}>マイQRコード</span>
               </div>
             </button>
-            <button onClick={() => { setShowGlobalReminders(true); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
+            <button 
+              onClick={() => { fetchReminders(); setShowGlobalReminders(true); setShowProfileMenu(false); }} // 🌟 毎回DBから最新状態を読み込む
+              className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}
+            >
               <div className="flex items-center gap-4">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400"><Bell className="w-5 h-5" /></div>
                 <span className={`text-sm font-black ${textMain}`}>リマインダー確認</span>
               </div>
             </button>
           </div>
-          <button onClick={() => { handleShareApp(); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
+          <button onClick={() => { handleShareApp(); setShowProfileMenu(false); }} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group mt-1 ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-indigo-50'}`}>
               <div className="flex items-center gap-4">
                 <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400">
                   <Share2 className="w-5 h-5" />
@@ -262,7 +276,6 @@ export default function GlobalSidebar() {
         </div> 
       </div> 
 
-      {/* 🌟 PDF画面以外でのみ、左端のスワイプ判定を有効にする */}
       {!showProfileMenu && (
         <div 
           onTouchStart={handleEdgeTouchStart}
@@ -301,36 +314,44 @@ export default function GlobalSidebar() {
         </>
       )}
 
-      {/* リマインダー確認モーダル */}
+      {/* 🌟 統合されたリマインダー確認モーダル */}
       {showGlobalReminders && (
         <>
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]" onClick={() => setShowGlobalReminders(false)}></div>
-          <div className={`fixed top-24 right-4 w-[85%] max-w-xs ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[201] rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-top-4`}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowGlobalReminders(false)}></div>
+          <div className={`fixed top-24 right-4 w-[85%] max-w-xs ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[201] rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300`}>
             <div className={`flex justify-between items-center mb-4 border-b pb-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
               <h3 className={`text-sm font-black flex items-center gap-2 ${textMain}`}><Bell className="w-4 h-4 text-indigo-500"/> 設定中のリマインダー</h3>
               <button onClick={() => setShowGlobalReminders(false)} className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
             </div>
-            {Object.keys(reminders).length === 0 ? (
-              <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されているリマインダーはありません</p>
-            ) : (
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-                {Object.entries(reminders).map(([sub, times]) => 
-                  times.map((timeIso, idx) => (
-                    <div key={`${sub}-${idx}`} className={`flex items-center justify-between p-3 rounded-2xl border mb-2 ${bgSubCard}`}>
+            
+            {(() => {
+              // 🌟 カレンダー画面と同じ形式でデータを合成・ソートする
+              const allDisplayReminders = [
+                ...reminders.map(r => ({ id: `rem_${r.id}`, rawId: r.id, title: r.title, time: r.remind_at, type: 'reminder' })),
+                ...calendarEvents.filter(e => e.notify_time && !e.is_completed).map(e => ({ id: `ev_${e.id}`, rawId: e.id, title: e.title, time: e.notify_time as string, type: 'event' }))
+              ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+              return allDisplayReminders.length === 0 ? (
+                <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されているリマインダーはありません</p>
+              ) : (
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {allDisplayReminders.map((rem) => (
+                    <div key={rem.id} className={`flex items-center justify-between p-3 rounded-2xl border mb-2 ${bgSubCard}`}>
                        <div className="flex-1 pr-2">
-                         <p className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{sub}</p>
+                         <p className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{rem.title}</p>
                          <p className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 inline-block px-2 py-0.5 rounded-md">
-                           {getCountdownDisplay(timeIso)}
+                           {getCountdownDisplay(rem.time)}
                          </p>
                        </div>
-                       <button onClick={() => handleClearReminder(sub, timeIso)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
+                       <button onClick={() => handleDeleteReminder(rem)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
                          <Trash2 className="w-4 h-4" />
                        </button>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
+
           </div>
         </>
       )}
