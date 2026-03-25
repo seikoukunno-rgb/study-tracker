@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag, CheckCircle2, Edit2, X } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -45,6 +45,11 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [modalDragY, setModalDragY] = useState(0);
   const modalTouchStartY = useRef<number | null>(null);
+
+  // 🌟 長押し・メッセージ編集用State
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stampList = ["👍", "🔥", "🎉", "👀", "🚀", "🙏", "💯", "✅", "💡", "😭"];
@@ -138,6 +143,10 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             return [...prev, { ...p.new, profiles: { ...userData, display_name: pName } }];
           });
         })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => {
+          // 他人のメッセージ編集をリアルタイムに反映
+          setMessages(prev => prev.map(m => m.id === p.new.id ? { ...m, content: p.new.content } : m));
+        })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => {
           setMessages(prev => prev.filter(m => m.id !== p.old.id));
         })
@@ -169,7 +178,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal) fetchStaruns();
   }, [showRankingModal]);
 
-  // 🌟 修正ポイント：Supabaseの外部キーエラーを完全に回避する「マニュアルジョイン」で取得
+  // 🌟 名前が確実に表示されるマニュアルジョイン方式
   const fetchStudyLogsForStarun = async () => {
     if (!selectedStarunId) return;
     setIsLogsLoading(true);
@@ -183,31 +192,28 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     const startTime = `${targetStarun.start_date}T00:00:00+09:00`;
     const endTime = `${targetStarun.end_date}T23:59:59+09:00`;
 
-    // 1. まず学習記録の「生データ」だけを取得
-    const { data: rawLogs, error: logsError } = await supabase
+    // 1. 学習記録の生データを取得（通信量削減のためカラム指定）
+    const { data: rawLogs, error } = await supabase
       .from('study_logs')
-      .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
+      .select('id, student_id, material_id, duration_minutes, studied_at, created_at')
       .in('student_id', participatingIds)
       .gte('created_at', startTime)
       .lte('created_at', endTime)
       .order('created_at', { ascending: false });
 
-    if (logsError || !rawLogs) {
-      console.error("学習記録の取得エラー:", logsError);
+    if (error || !rawLogs) {
       setStudyLogs([]);
       setIsLogsLoading(false);
       return;
     }
 
-    // 2. 取得した記録から、必要なプロフィールIDと教材IDを抽出
+    // 2. プロフィールと教材データを別々に取得してアプリ側でマージする
     const studentIds = Array.from(new Set(rawLogs.map(l => l.student_id)));
     const materialIds = Array.from(new Set(rawLogs.map(l => l.material_id).filter(Boolean)));
 
-    // 3. プロフィールと教材情報をそれぞれ単独で取得
     const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
     const { data: materialsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
 
-    // 4. アプリ側で辞書化（マップ化）して結合する
     const profMap: Record<string, any> = {};
     profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー" }; });
 
@@ -229,9 +235,17 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal && !isCreatingStarun && isParticipating) fetchStudyLogsForStarun();
   }, [selectedStarunId, isCreatingStarun, showRankingModal, isParticipating]);
 
+  // 🌟 スタラン作成（最大1週間制限）
   const handleCreateStarun = async () => {
     if (!newStarunName.trim() || !newStarunStart || !newStarunEnd) return showToast("全て入力してください");
     if (newStarunStart > newStarunEnd) return showToast("終了日は開始日以降に設定してください");
+
+    const startDate = new Date(newStarunStart);
+    const endDate = new Date(newStarunEnd);
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    
+    if (diffDays > 7) return showToast("スタランの期間は最大1週間（7日間）に設定してください");
 
     const { data, error } = await supabase.from('staruns').insert([{
       group_id: roomId, name: newStarunName, start_date: newStarunStart, end_date: newStarunEnd, created_by: currentUser?.id
@@ -260,6 +274,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (!error) {
       setIsParticipating(true);
       setMembers(prev => prev.map(m => m.user_id === currentUser.id ? { ...m, is_ranking_participant: true } : m));
+      fetchStudyLogsForStarun();
       showToast("スタランに参加しました！");
     }
   };
@@ -290,13 +305,24 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/rooms');
   };
 
+  // 🌟 送信・編集
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !currentUser) return;
     const content = newMessage;
     setNewMessage(""); setShowStamps(false);
-    const { data: insertedMsg, error } = await supabase.from('messages').insert([{ room_id: roomId, user_id: currentUser.id, content, is_stamp: false }]).select().single();
-    if (!error && insertedMsg) setMessages(prev => [...prev, { ...insertedMsg, profiles: myProfile }]);
+    
+    if (editingMessageId) {
+      const { data, error } = await supabase.from('messages').update({ content }).eq('id', editingMessageId).select().single();
+      if (!error && data) {
+        setMessages(prev => prev.map(m => m.id === editingMessageId ? { ...m, content: data.content } : m));
+        showToast("メッセージを編集しました");
+      }
+      setEditingMessageId(null);
+    } else {
+      const { data: insertedMsg, error } = await supabase.from('messages').insert([{ room_id: roomId, user_id: currentUser.id, content, is_stamp: false }]).select().single();
+      if (!error && insertedMsg) setMessages(prev => [...prev, { ...insertedMsg, profiles: myProfile }]);
+    }
   };
 
   const sendStamp = async (stamp: string) => {
@@ -309,7 +335,16 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const deleteMessage = async (id: string) => {
     if (!confirm("送信を取り消しますか？")) return;
     setMessages(prev => prev.filter(m => m.id !== id));
+    setActiveMessageId(null);
     await supabase.from('messages').delete().eq('id', id);
+  };
+
+  // 🌟 長押し処理
+  const handleTouchStartMsg = (id: string) => {
+    pressTimer.current = setTimeout(() => { setActiveMessageId(id); }, 500);
+  };
+  const handleTouchEndMsg = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
   };
 
   const toggleFollow = async (targetUserId: string) => {
@@ -386,9 +421,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const selectedStarunData = staruns.find(s => s.id === selectedStarunId);
 
   return (
-    <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
+    <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`} onClick={() => setActiveMessageId(null)}>
       
-      {/* カスタムToast通知 */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-4 fade-in duration-300 w-[90%] max-w-sm pointer-events-none">
           <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-3">
@@ -442,15 +476,32 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           return (
             <div key={m.id} className={`flex flex-col animate-in slide-in-from-bottom-2 fade-in duration-300 ${isMine ? 'items-end' : 'items-start'}`}>
               {!isMine && <span className="text-[10px] font-bold text-slate-400 mb-1.5 px-2">{displayName}</span>}
-              <div className={`flex items-end gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`flex items-end gap-2 relative ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
                 {m.is_stamp ? (
                   <div className="text-6xl py-1 filter drop-shadow-sm">{m.content}</div>
                 ) : (
-                  <div className={`max-w-[260px] p-4 rounded-[1.5rem] text-sm font-bold shadow-sm break-words whitespace-pre-wrap leading-relaxed ${isMine ? 'bg-indigo-600 text-white rounded-tr-sm' : (isDarkMode ? 'bg-[#1c1c1e] text-white border border-[#2c2c2e]' : 'bg-white text-slate-800 border border-slate-100') + ' rounded-tl-sm'}`}>
+                  <div 
+                    onTouchStart={() => handleTouchStartMsg(m.id)} 
+                    onTouchEnd={handleTouchEndMsg} 
+                    onTouchMove={handleTouchEndMsg}
+                    onContextMenu={(e) => { e.preventDefault(); setActiveMessageId(m.id); }}
+                    className={`max-w-[260px] p-4 rounded-[1.5rem] text-sm font-bold shadow-sm break-words whitespace-pre-wrap leading-relaxed select-none ${activeMessageId === m.id ? 'opacity-80 scale-[0.98]' : ''} transition-all ${isMine ? 'bg-indigo-600 text-white rounded-tr-sm' : (isDarkMode ? 'bg-[#1c1c1e] text-white border border-[#2c2c2e]' : 'bg-white text-slate-800 border border-slate-100') + ' rounded-tl-sm'}`}
+                  >
                     {m.content}
                   </div>
                 )}
-                {isMine && <button onClick={() => deleteMessage(m.id)} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors mb-1 shrink-0 bg-transparent rounded-full active:bg-rose-500/10"><Trash2 className="w-4 h-4" /></button>}
+
+                {/* 長押しメニュー */}
+                {activeMessageId === m.id && isMine && !m.is_stamp && (
+                  <div className="absolute top-[-40px] right-0 z-50 bg-white dark:bg-[#2c2c2e] shadow-xl rounded-xl border border-slate-100 dark:border-[#38383a] flex overflow-hidden animate-in zoom-in-95 duration-200">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingMessageId(m.id); setNewMessage(m.content); setActiveMessageId(null); }} className="px-4 py-2.5 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#38383a] transition-colors border-r dark:border-[#38383a]">
+                      <Edit2 className="w-3.5 h-3.5" /> 編集
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteMessage(m.id); }} className="px-4 py-2.5 flex items-center gap-1.5 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" /> 削除
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -459,6 +510,13 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* 入力エリア */}
       <div className={`shrink-0 z-40 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
+        {editingMessageId && (
+          <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 flex justify-between items-center text-xs font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="flex items-center gap-1.5"><Edit2 className="w-3.5 h-3.5" /> メッセージを編集中...</span>
+            <button onClick={() => { setEditingMessageId(null); setNewMessage(''); }} className="p-1 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors"><X className="w-4 h-4"/></button>
+          </div>
+        )}
+        
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showStamps ? 'max-h-24 opacity-100 border-b' : 'max-h-0 opacity-0 border-transparent'} ${isDarkMode ? 'bg-[#0a0a0a]/50 border-[#2c2c2e]' : 'bg-slate-50/50 border-slate-200'}`}>
           <div className="p-4 flex gap-6 overflow-x-auto no-scrollbar w-full items-center">
             {stampList.map(s => <button key={s} onClick={() => sendStamp(s)} className="text-4xl hover:scale-125 transition-transform shrink-0 active:scale-95">{s}</button>)}
