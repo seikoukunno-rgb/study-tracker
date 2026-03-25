@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -24,7 +24,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [showMembersModal, setShowMembersModal] = useState(false); 
   const [follows, setFollows] = useState<string[]>([]); 
 
-  // 🌟 ランキング＆タイムライン用State
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [rankingTab, setRankingTab] = useState<'ranking' | 'timeline'>('ranking');
   const [rankingPeriod, setRankingPeriod] = useState<'daily' | 'weekly'>('daily');
@@ -124,7 +123,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     initRoom();
   }, [roomId]);
 
-  // 🌟 ランキング・タイムラインのデータ取得処理
   const fetchStudyLogs = async () => {
     setIsLogsLoading(true);
     const memberIds = members.map(m => m.user_id);
@@ -178,6 +176,46 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     await supabase.from('messages').delete().eq('id', id);
   };
 
+  // 🌟 ルームの退出・削除処理
+  const handleLeaveOrDeleteRoom = async () => {
+    if (!room || !currentUser) return;
+    
+    // 自分自身が作成者かどうかを判定
+    const isHost = room.created_by === currentUser.id;
+    const confirmMessage = isHost 
+      ? "⚠️ あなたが作成したルームです。\n本当に「ルームごと削除」しますか？\n（参加者やメッセージも全て消去されます）"
+      : "このルームから「退出」しますか？";
+
+    if (!window.confirm(confirmMessage)) return;
+
+    if (isHost) {
+      // ルームごと削除 (DB側で CASCADE 設定があれば連動して消えます)
+      const { error } = await supabase.from('groups').delete().eq('id', roomId);
+      if (error) {
+        alert("削除に失敗しました: " + error.message);
+        return;
+      }
+    } else {
+      // 自分だけ退出する
+      const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', currentUser.id);
+      if (error) {
+        alert("退室に失敗しました: " + error.message);
+        return;
+      }
+      
+      // 退室メッセージを残す
+      await supabase.from('messages').insert([{
+        room_id: roomId,
+        user_id: currentUser.id,
+        content: `${myProfile?.display_name} が退室しました 🏃💨`,
+        is_system: true,
+        is_stamp: false
+      }]);
+    }
+
+    router.push('/rooms');
+  };
+
   const toggleFollow = async (targetUserId: string) => {
     if (!currentUser) return;
     const isFollowing = follows.includes(targetUserId);
@@ -194,7 +232,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, showStamps]);
 
-  // 🌟 アバター画像のフォールバック用コンポーネント（画像が割れる問題を解決）
   const AvatarImage = ({ url, name, className }: { url: string | null, name: string, className: string }) => {
     const [imgError, setImgError] = useState(false);
     const isBgClass = url?.startsWith('bg-');
@@ -209,32 +246,23 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     );
   };
 
-  // ランキング集計ロジック
   const getRankings = () => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     const aggregated: Record<string, { totalTime: number, name: string, avatarUrl: string | null, id: string }> = {};
 
     studyLogs.forEach(log => {
-      const isTarget = rankingPeriod === 'daily' 
-        ? log.studied_at === todayStr 
-        : new Date(log.created_at) >= weekAgo;
-
+      const isTarget = rankingPeriod === 'daily' ? log.studied_at === todayStr : new Date(log.created_at) >= weekAgo;
       if (isTarget) {
-        if (!aggregated[log.student_id]) {
-          aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
-        }
+        if (!aggregated[log.student_id]) aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
         aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
       }
     });
 
-    return Object.values(aggregated)
-      .filter(r => r.totalTime > 0)
-      .sort((a, b) => b.totalTime - a.totalTime);
+    return Object.values(aggregated).filter(r => r.totalTime > 0).sort((a, b) => b.totalTime - a.totalTime);
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
@@ -248,7 +276,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
       
-      {/* 🌟 トップバー */}
       <header className={`shrink-0 z-50 px-4 py-3 flex items-center justify-between border-b shadow-sm ${bgHeader}`}>
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/rooms')} className={`p-2.5 rounded-2xl transition-all flex items-center justify-center shrink-0 border shadow-sm active:scale-95 ${bgCard}`}>
@@ -260,8 +287,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         
-        {/* 🌟 ランキング＆メンバーボタン */}
-        <div className="flex items-center gap-2">
+        {/* 🌟 退出・削除ボタンを追加 */}
+        <div className="flex items-center gap-1.5">
           <button onClick={() => setShowRankingModal(true)} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a] text-amber-500' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
             <Trophy className="w-5 h-5" />
           </button>
@@ -269,10 +296,12 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             <Users className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}`} />
             <span className="text-xs font-black">{members.length}</span>
           </button>
+          <button onClick={handleLeaveOrDeleteRoom} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 text-rose-500 ${isDarkMode ? 'bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20' : 'bg-rose-50 border-rose-100 hover:bg-rose-100'}`}>
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
-      {/* メッセージエリア */}
       <div ref={scrollRef} className="flex-1 px-4 py-6 space-y-6 overflow-y-auto no-scrollbar scroll-smooth">
         {messages.map((m) => {
           if (m.is_system) {
@@ -306,7 +335,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         })}
       </div>
 
-      {/* 入力エリア */}
       <div className={`shrink-0 z-50 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showStamps ? 'max-h-24 opacity-100 border-b' : 'max-h-0 opacity-0 border-transparent'} ${isDarkMode ? 'bg-[#0a0a0a]/50 border-[#2c2c2e]' : 'bg-slate-50/50 border-slate-200'}`}>
           <div className="p-4 flex gap-6 overflow-x-auto no-scrollbar w-full items-center">
@@ -329,7 +357,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 🌟 メンバー一覧モーダル (画像割れ対応済) */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
@@ -376,14 +403,12 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 ランキング＆タイムラインモーダル */}
       {showRankingModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowRankingModal(false)}></div>
           <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 h-[85vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
             
-            {/* タブ切り替え */}
             <div className={`flex p-1.5 rounded-2xl mb-6 shrink-0 ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-100'}`}>
               <button onClick={() => setRankingTab('ranking')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'ranking' ? (isDarkMode ? 'bg-[#1c1c1e] text-amber-500 shadow-sm' : 'bg-white text-amber-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
                 <Trophy className="w-4 h-4" /> ランキング
@@ -397,7 +422,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
               <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
             ) : rankingTab === 'ranking' ? (
               <div className="flex flex-col h-full overflow-hidden">
-                {/* 日/週 切り替え */}
                 <div className="flex justify-center gap-4 mb-6 shrink-0">
                   <button onClick={() => setRankingPeriod('daily')} className={`px-5 py-2 rounded-full text-xs font-black transition-colors ${rankingPeriod === 'daily' ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-slate-100 text-slate-500')}`}>今日</button>
                   <button onClick={() => setRankingPeriod('weekly')} className={`px-5 py-2 rounded-full text-xs font-black transition-colors ${rankingPeriod === 'weekly' ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-slate-100 text-slate-500')}`}>直近7日間</button>
@@ -427,7 +451,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
               </div>
             ) : (
-              // 🌟 タイムライン
               <div className="overflow-y-auto space-y-4 px-2 pb-4 no-scrollbar">
                 {studyLogs.length === 0 ? (
                   <p className="text-center text-sm font-bold text-slate-400 py-10">まだ学習記録がありません</p>
