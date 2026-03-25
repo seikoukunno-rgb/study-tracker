@@ -27,7 +27,6 @@ function TimerContent() {
   const [memo, setMemo] = useState("");
   const [showSaveModal, setShowSaveModal] = useState(false);
   
-  // サイドバー開閉用のState
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [pdfList, setPdfList] = useState<string[]>([]);
@@ -39,19 +38,16 @@ function TimerContent() {
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
-  // 描画系のState
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser' | 'text'>('none');
   const [drawingColor, setDrawingColor] = useState<string>('#ef4444');
   const [penWidth, setPenWidth] = useState(3);
   const [markerWidth, setMarkerWidth] = useState(18);
   const [eraserWidth, setEraserWidth] = useState(30);
 
-  // メモ機能のState
   const [notes, setNotes] = useState<any[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [notePage, setNotePage] = useState(1);
   const [noteContent, setNoteContent] = useState("");
-  // 🌟 追加：編集中のメモIDを保持するState
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   const fetchMaterialPaths = useCallback(async () => {
@@ -110,17 +106,14 @@ function TimerContent() {
 
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
-  // 🌟 修正：メモの保存・更新ロジック
   const handleSaveNote = async () => {
     if (!noteContent.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return alert("ログインが必要です");
 
     if (editingNoteId) {
-      // 編集（UPDATE）の場合
       await supabase.from('notes').update({ page_number: notePage, content: noteContent }).eq('id', editingNoteId);
     } else {
-      // 新規（INSERT）の場合
       await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
     }
     
@@ -130,7 +123,6 @@ function TimerContent() {
     fetchNotes();
   };
 
-  // 🌟 追加：メモの削除ロジック
   const handleDeleteNote = async (noteId: string) => {
     if (!window.confirm("このメモを削除しますか？")) return;
     const { error } = await supabase.from('notes').delete().eq('id', noteId);
@@ -141,7 +133,6 @@ function TimerContent() {
     }
   };
 
-  // 🌟 追加：メモの編集開始ロジック
   const handleEditNote = (note: any) => {
     setIsAddingNote(true);
     setNotePage(note.page_number);
@@ -149,7 +140,6 @@ function TimerContent() {
     setEditingNoteId(note.id);
   };
 
-  // 🌟 追加：メモの編集キャンセルロジック
   const handleCancelNote = () => {
     setIsAddingNote(false);
     setNoteContent("");
@@ -240,29 +230,20 @@ function TimerContent() {
           `}>
             <div className="w-80 h-full bg-[#0d0d0f] shadow-2xl border-l border-white/10">
               <PdfSidebar 
-                seconds={seconds}
-                isRunning={isRunning}
-                setIsRunning={setIsRunning}
-                notes={notes}
-                isAddingNote={isAddingNote}
-                setIsAddingNote={setIsAddingNote}
-                notePage={notePage}
-                setNotePage={setNotePage}
-                noteContent={noteContent}
-                setNoteContent={setNoteContent}
-                handleSaveNote={handleSaveNote}
-                onNoteClick={handleNoteClick}
-                // 🌟 修正：追加されたPropsを全て渡す
-                handleDeleteNote={handleDeleteNote}
-                handleEditNote={handleEditNote}
-                handleCancelNote={handleCancelNote}
-                editingNoteId={editingNoteId}
+                seconds={seconds} isRunning={isRunning} setIsRunning={setIsRunning}
+                notes={notes} isAddingNote={isAddingNote} setIsAddingNote={setIsAddingNote}
+                notePage={notePage} setNotePage={setNotePage}
+                noteContent={noteContent} setNoteContent={setNoteContent}
+                handleSaveNote={handleSaveNote} handleDeleteNote={handleDeleteNote}
+                onNoteClick={handleNoteClick} handleEditNote={handleEditNote}
+                handleCancelNote={handleCancelNote} editingNoteId={editingNoteId}
+                // 🌟 追加：PDF切り替えデータを渡す
+                pdfList={pdfList} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex}
               />
             </div>
           </div>
         </div>
 
-        {/* セーブモーダル */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -285,7 +266,6 @@ function TimerContent() {
     );
   }
 
-  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」
   return (
     <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4 relative">
       <div className="absolute top-6 left-6">

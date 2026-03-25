@@ -1,7 +1,7 @@
 'use client';
 
 import { Dispatch, SetStateAction } from 'react'; 
-import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2 } from 'lucide-react'; // 🌟 Edit2を追加
+import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText } from 'lucide-react';
 
 type PdfSidebarProps = {
   seconds: number;
@@ -17,16 +17,20 @@ type PdfSidebarProps = {
   handleSaveNote: () => void;
   handleDeleteNote: (id: string) => void;
   onNoteClick: (pageNumber: number) => void;
-  // 🌟 追加：編集機能用のProps
   handleEditNote: (note: any) => void;
   handleCancelNote: () => void;
   editingNoteId: string | null;
+  // 🌟 追加：PDF切り替え用のProps
+  pdfList: string[];
+  currentIndex: number;
+  setCurrentIndex: Dispatch<SetStateAction<number>>;
 };
 
 export default function PdfSidebar({ 
   seconds, isRunning, setIsRunning,
   notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, 
-  handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId
+  handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId,
+  pdfList, currentIndex, setCurrentIndex
 }: PdfSidebarProps) {
   
   const formatTime = (totalSeconds: number) => {
@@ -38,12 +42,14 @@ export default function PdfSidebar({
   return (
     <aside className="w-full h-full flex flex-col relative z-10 overflow-y-auto no-scrollbar">
       <div className="p-6">
-        <div className="flex items-center gap-3 mb-6">
+        
+        {/* タイマー機能 */}
+        <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-indigo-500/20 rounded-lg"><Timer className="w-4 h-4 text-indigo-400" /></div>
           <h2 className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase">Study Timer</h2>
         </div>
         
-        <div className="bg-white/5 rounded-3xl p-6 border border-white/5 text-center shadow-inner mb-8">
+        <div className="bg-white/5 rounded-3xl p-6 border border-white/5 text-center shadow-inner mb-6">
           <div className="text-4xl font-black text-white mb-6 tracking-tighter tabular-nums">
             {formatTime(seconds)}
           </div>
@@ -54,6 +60,25 @@ export default function PdfSidebar({
             {isRunning ? <><Pause size={18} fill="currentColor"/> PAUSE</> : <><Play size={18} fill="currentColor"/> RESUME</>}
           </button>
         </div>
+
+        {/* 🌟 PDFファイル切り替え機能 */}
+        {pdfList && pdfList.length > 1 && (
+          <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/10 shadow-lg mb-8">
+            <label className="flex items-center gap-2 text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase mb-3">
+              <FileText className="w-3.5 h-3.5" /> Document Select
+            </label>
+            <select 
+              value={currentIndex}
+              onChange={(e) => setCurrentIndex(Number(e.target.value))}
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-xs font-bold text-slate-200 outline-none focus:border-indigo-500 transition-colors cursor-pointer appearance-none"
+            >
+              {pdfList.map((pdf, idx) => {
+                const name = pdf.split('/').pop()?.replace(/^\d+_/, '') || `PDF Document ${idx + 1}`;
+                return <option key={idx} value={idx}>{name}</option>;
+              })}
+            </select>
+          </div>
+        )}
 
         {/* メモ機能 */}
         <div className="flex items-center justify-between mb-4">
@@ -69,7 +94,6 @@ export default function PdfSidebar({
         {isAddingNote && (
           <div className="bg-[#2c2c2e] p-4 rounded-xl border border-indigo-500/50 mb-4 shadow-lg animate-in fade-in duration-200">
             <div className="flex justify-between items-center mb-3">
-              {/* 🌟 編集時はタイトルを変更 */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-indigo-400/70 font-black uppercase">{editingNoteId ? "メモを編集" : "新規メモ"}</span>
                 <input type="number" value={notePage} onChange={(e) => setNotePage(Number(e.target.value))} className="w-16 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs font-black text-indigo-400 outline-none" placeholder="Page" />
@@ -88,7 +112,10 @@ export default function PdfSidebar({
         <div className="space-y-2">
           {notes.map((note) => (
             <div key={note.id} className="relative w-full group animate-in fade-in duration-300">
-              <button onClick={() => onNoteClick(note.page_number)} className="w-full text-left p-4 rounded-xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-indigo-500/30 transition-all">
+              <button 
+                onClick={() => onNoteClick(note.page_number)} 
+                className="w-full text-left p-4 rounded-xl bg-black/20 hover:bg-black/40 border border-white/5 hover:border-indigo-500/30 active:scale-[0.98] transition-all cursor-pointer"
+              >
                 <div className="flex justify-between text-[10px] font-black mb-2 text-slate-500 pr-12">
                   <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">P.{note.page_number}</span>
                   <span>{new Date(note.created_at).toLocaleDateString()}</span>
@@ -96,16 +123,13 @@ export default function PdfSidebar({
                 <p className="text-xs font-bold leading-relaxed text-slate-300 line-clamp-3">{note.content}</p>
               </button>
 
-              {/* 🌟 アクションボタン群 (ホバーで出現) */}
               <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
-                {/* 編集ボタン */}
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleEditNote(note); }}
                   className="p-1.5 bg-black/60 text-indigo-400 hover:text-white hover:bg-indigo-500 rounded-md transition-all"
                 >
                   <Edit2 size={14} />
                 </button>
-                {/* 削除ボタン */}
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
                   className="p-1.5 bg-black/60 text-rose-500 hover:text-white hover:bg-rose-500 rounded-md transition-all"

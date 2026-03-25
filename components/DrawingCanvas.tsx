@@ -17,13 +17,11 @@ type DrawingCanvasProps = {
 
 type Point = { x: number; y: number };
 type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: number; points: Point[] };
-// 🌟 修正：fontSizeを保存できるようにTextData型を拡張
 type TextData = { text: string; x: number; y: number; width: number; height: number; color: string; fontSize?: number };
 
 export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eraserWidth, pageIndex, pdfId = 'default-pdf' }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  // 🌟 修正：textInputのStateにも fontSize を持たせる
   const [textInput, setTextInput] = useState<{ x: number; y: number; w: number; h: number; fontSize: number } | null>(null);
   const [textValue, setTextValue] = useState("");
 
@@ -61,11 +59,17 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   };
 
+  // 🌟 高画質化された描画エンジン
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
+    
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.scale(dpr, dpr); // 内部解像度に合わせてCSSピクセルを拡大
     
     pathsRef.current.forEach((path) => {
       if (path.points.length === 0) return;
@@ -97,25 +101,47 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     textsRef.current.forEach((t) => {
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
-      const size = t.fontSize || 20; // 🌟 過去のデータ用フォールバック
+      const size = t.fontSize || 20;
       ctx.font = `bold ${size}px sans-serif`;
       ctx.textBaseline = 'top';
       ctx.fillStyle = t.color;
       wrapText(ctx, t.text, t.x, t.y, t.width, size * 1.2); 
     });
+
+    ctx.restore();
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
+
+  // 🌟 初期化時に解像度を引き上げる処理
+  useEffect(() => {
+    const initCanvas = () => {
+      const canvas = canvasRef.current;
+      const parent = canvas?.parentElement;
+      if (canvas && parent) {
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = parent.clientWidth;
+        const cssHeight = parent.clientHeight;
+        
+        canvas.style.width = `${cssWidth}px`;
+        canvas.style.height = `${cssHeight}px`;
+        
+        canvas.width = cssWidth * dpr;
+        canvas.height = cssHeight * dpr;
+        redraw();
+      }
+    };
+    const timer = setTimeout(initCanvas, 300);
+    window.addEventListener('resize', initCanvas);
+    return () => { clearTimeout(timer); window.removeEventListener('resize', initCanvas); };
+  }, [redraw]);
 
   const saveAnnotations = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
     const currentData = { paths: [...pathsRef.current], texts: [...textsRef.current] };
-    const { error } = await supabase.from('annotations').upsert({
+    await supabase.from('annotations').upsert({
       user_id: user.id, pdf_id: pdfId, page_index: pageIndex,
       data: currentData, updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id, pdf_id, page_index' });
-
-    if (error) console.error("保存失敗:", error);
   }, [pdfId, pageIndex]);
 
   useEffect(() => {
@@ -148,7 +174,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     const pos = textInputRef.current;
     textValueRef.current = "";
     textInputRef.current = null;
-
     if (val.trim() && pos) {
       textsRef.current.push({ text: val, x: pos.x, y: pos.y, width: pos.w, height: pos.h, color, fontSize: pos.fontSize });
       redraw();
@@ -162,9 +187,8 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    const scale = transformContext.transformState.scale || 1;
+    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -198,7 +222,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         const t = textsRef.current[clickedTextIndex];
         textsRef.current.splice(clickedTextIndex, 1);
         redraw();
-        // 🌟 既存のサイズを引き継ぐ
         setTextInput({ x: t.x, y: t.y, w: t.width, h: t.height || 50, fontSize: t.fontSize || 20 });
         setTextValue(t.text);
         return;
@@ -334,7 +357,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             transformOrigin: 'top left',
           }}
         >
-          {/* 移動ハンドル */}
           <div 
             onMouseDown={handleMoveStart} onTouchStart={handleMoveStart}
             className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-3 py-1.5 cursor-move rounded-t-md flex items-center gap-1 shadow-md hover:bg-blue-400 active:bg-blue-600"
@@ -347,7 +369,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             onChange={(e) => setTextValue(e.target.value)}
             onBlur={() => { if (!isResizing.current) handleTextSubmit(); }}
             className="w-full h-full bg-transparent outline-none resize-none p-2 text-black font-bold leading-tight"
-            style={{ color, fontSize: `${textInput.fontSize}px` }} // 🌟 フォントサイズを適用
+            style={{ color, fontSize: `${textInput.fontSize}px` }}
             placeholder="文字を入力..."
           />
           
@@ -356,13 +378,11 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             className="absolute -right-3 -bottom-3 w-6 h-6 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
           />
 
-          {/* 🌟🌟 新規追加：画像にある「テキストサイズ変更＆削除ツールバー」 */}
           <div 
             className="absolute -bottom-14 left-0 bg-white shadow-xl border border-gray-200 rounded-lg flex items-center p-1.5 gap-1 z-50 text-gray-800"
             onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
           >
             <button
-              // onPointerDown + preventDefault で、Textareaからフォーカスが外れるのを防ぐ！
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); setTextInput(p => p ? { ...p, fontSize: Math.min(100, p.fontSize + 2) } : p); }}
               className="p-1.5 hover:bg-gray-100 rounded text-sm font-black flex items-center justify-center min-w-[32px] text-black"
             >
@@ -378,7 +398,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             <button
               onPointerDown={(e) => {
                 e.stopPropagation(); e.preventDefault();
-                // 🌟 ゴミ箱ボタン：保存せずに空っぽにして終わる（＝削除）
                 setTextInput(null);
                 setTextValue("");
                 saveAnnotations();
