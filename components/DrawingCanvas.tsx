@@ -102,12 +102,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // 🌟 修正1: 常に最新の paths と texts の状態をクローンして保存する最強の関数
   const saveAnnotations = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
-    // スナップショット（現在の最新状態）を作成
     const currentData = { 
       paths: [...pathsRef.current], 
       texts: [...textsRef.current] 
@@ -138,7 +136,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     loadAnnotations();
   }, [pageIndex, pdfId, redraw]);
 
-  // 🌟 Toolbarの「全消去」の合図を受信
   useEffect(() => {
     const handleClearCanvas = () => {
       pathsRef.current = [];
@@ -159,29 +156,42 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     if (val.trim() && pos) {
       textsRef.current.push({ text: val, x: pos.x, y: pos.y, width: pos.w, height: pos.h, color });
       redraw();
-      saveAnnotations(); // 🌟 保存を実行
+      saveAnnotations();
     }
     setTextInput(null);
     setTextValue("");
   }, [color, redraw, saveAnnotations]);
 
+
+  // 🌟🌟🌟 ここが「ズレ」を直すための完璧な計算ロジック 🌟🌟🌟
   const getCorrectedCoordinates = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
+    
+    // Canvasの「画面上の実際の大きさ」を取得（ZoomなどのCSSが反映された状態）
     const rect = canvas.getBoundingClientRect();
-    const scale = transformContext.transformState.scale || 1;
-    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+    
+    // Canvasの「内部的な解像度(px)」と「画面の大きさ」の比率を計算
+    // （これにより、Zoom倍率を無理やり計算しなくても、常に完璧に一致します！）
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    return { 
+      x: (clientX - rect.left) * scaleX, 
+      y: (clientY - rect.top) * scaleY 
+    };
   };
 
   const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isResizing.current) return;
     
-    // 🌟 書き始めた瞬間に Toolbar に「閉じて！」と合図を送る
     document.dispatchEvent(new Event('canvas-interact'));
+
+    // 🌟🌟🌟 早く動かしても線が途切れないように、ペンをCanvasに「ロックオン」する！
+    e.currentTarget.setPointerCapture(e.pointerId);
 
     const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
 
-    // 一度書いたテキストをクリックして再編集
     if (mode === 'text' || mode === 'none') {
       const clickedTextIndex = textsRef.current.findIndex(t => 
         x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + (t.height || 50)
@@ -217,20 +227,22 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     redraw();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // 🌟🌟🌟 書き終わったらペンのロックオンを解除する
+    e.currentTarget.releasePointerCapture(e.pointerId);
+
     if (!isDrawing) return;
     setIsDrawing(false);
     if (currentPathRef.current.length > 0) {
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
-      saveAnnotations(); // 🌟 保存を実行
+      saveAnnotations();
     }
   };
 
-  // 🌟 修正2: テキストの「移動」時のイベント伝播を停止
   const handleMoveStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // キャンバスにイベントが行かないようにする
+    e.stopPropagation();
     isResizing.current = true;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -250,21 +262,20 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     window.addEventListener('pointerup', stopMove);
   };
 
-  // 🌟 修正3: テキストの「サイズ変更」時のイベント伝播を停止
   const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // キャンバスにイベントが行かないようにする
+    e.stopPropagation();
     isResizing.current = true;
     const startX = e.clientX;
     const startY = e.clientY;
-    const startW = textInput?.w || 200;
-    const startH = textInput?.h || 50;
+    const startBoxX = textInput?.w || 200;
+    const startBoxY = textInput?.h || 50;
     const scale = transformContext.transformState.scale || 1;
 
     const doResize = (moveEvent: PointerEvent) => {
       setTextInput(prev => prev ? { 
         ...prev, 
-        w: Math.max(100, startW + (moveEvent.clientX - startX) / scale), 
-        h: Math.max(40, startH + (moveEvent.clientY - startY) / scale) 
+        w: Math.max(100, startBoxX + (moveEvent.clientX - startX) / scale), 
+        h: Math.max(40, startBoxY + (moveEvent.clientY - startY) / scale) 
       } : prev);
     };
     const stopResize = () => {
@@ -287,13 +298,13 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       {textInput && (
         <div 
           className="absolute z-20 border-2 border-dashed border-blue-500 bg-white/80 backdrop-blur-sm group"
-          onPointerDown={(e) => e.stopPropagation()} // 🌟 修正4: ボックス全体でもイベント伝播を停止
+          onPointerDown={(e) => e.stopPropagation()} 
           style={{ 
             left: textInput.x, top: textInput.y, width: textInput.w, height: textInput.h,
-            transformOrigin: 'top left', transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
+            transformOrigin: 'top left',
+            // 🌟 修正4：Zoomに合わせてテキストボックスの見た目も綺麗に一致させるよう変更
           }}
         >
-          {/* 移動ハンドル */}
           <div 
             onPointerDown={handleMoveStart}
             className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-2 py-1 cursor-move rounded-t-md flex items-center gap-1 shadow-md hover:bg-blue-400"
@@ -309,7 +320,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             style={{ color, fontSize: '20px' }}
             placeholder="文字を入力..."
           />
-          {/* リサイズハンドル */}
           <div 
             onPointerDown={handleResizeStart}
             className="absolute -right-2 -bottom-2 w-5 h-5 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
