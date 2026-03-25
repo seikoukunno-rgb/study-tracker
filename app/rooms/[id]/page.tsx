@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, X, UserPlus, UserMinus } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -21,8 +21,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [isLoading, setIsLoading] = useState(true);
   
   const [showStamps, setShowStamps] = useState(false);
-  const [showMembersModal, setShowMembersModal] = useState(false); // 🌟 メンバー一覧モーダル
-  const [follows, setFollows] = useState<string[]>([]); // 🌟 自分がフォローしている人のIDリスト
+  const [showMembersModal, setShowMembersModal] = useState(false); 
+  const [follows, setFollows] = useState<string[]>([]); 
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -43,30 +43,42 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       const myDisplayName = profile?.nickname || profile?.name || profile?.full_name || "ユーザー";
       setMyProfile({ ...profile, display_name: myDisplayName });
 
-      // 🌟 自分がフォローしている人のリストを取得
+      // フォロー情報の取得
       const { data: followData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
       if (followData) setFollows(followData.map(f => f.following_id));
 
-      // ルーム情報と全メンバー取得
+      // ルーム情報と全メンバー取得 (リレーションを明示的に指定)
       const { data: groupData } = await supabase.from('groups').select('*').eq('id', roomId).single();
-      const { data: membersData } = await supabase.from('group_members').select(`user_id, profiles:user_id ( full_name, name, nickname, avatar_url )`).eq('group_id', roomId);
+      const { data: membersData } = await supabase.from('group_members').select(`user_id, profiles ( full_name, name, nickname, avatar_url )`).eq('group_id', roomId);
       
       let currentMembers: any[] = membersData || [];
       const isMeInRoom = currentMembers.some(m => m.user_id === user.id);
+      
+      // 🌟 修正1: 「初めて」参加した1度目だけ、データベースにメッセージを記録する
       if (!isMeInRoom) {
         await supabase.from('group_members').insert([{ group_id: roomId, user_id: user.id }]);
+        
+        // 参加システムメッセージをDBに保存
+        await supabase.from('messages').insert([{
+          room_id: roomId,
+          user_id: user.id,
+          content: `${myDisplayName} が参加しました 👋`,
+          is_system: true,
+          is_stamp: false
+        }]);
+
         currentMembers = [...currentMembers, { user_id: user.id, profiles: profile }];
       }
 
       // メッセージ取得
-      const { data: msgs } = await supabase.from('messages').select(`*, profiles:user_id ( full_name, name, nickname, avatar_url )`).eq('room_id', roomId).order('created_at', { ascending: true });
+      const { data: msgs } = await supabase.from('messages').select(`*, profiles ( full_name, name, nickname, avatar_url )`).eq('room_id', roomId).order('created_at', { ascending: true });
 
       if (groupData) setRoom(groupData);
       setMembers(currentMembers);
       if (msgs) setMessages(msgs);
       setIsLoading(false);
 
-      // 🌟🌟🌟 Realtime Presence (参加検知) & Message Sync 🌟🌟🌟
+      // Realtime Presence (オンライン検知)
       const channel = supabase.channel(`room-${roomId}`, {
         config: { presence: { key: user.id } }
       });
@@ -77,17 +89,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           const onlineIds = Object.keys(newState);
           setActiveUsers(onlineIds);
         })
-        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-          // 誰かが入室した瞬間（自分以外ならシステムメッセージを追加）
-          if (key !== user.id) {
-            const joinedUserName = newPresences[0]?.name || "誰か";
-            setMessages(prev => [...prev, { 
-              id: `sys-join-${Date.now()}-${key}`, 
-              is_system: true, 
-              content: `${joinedUserName} が参加しました 👋` 
-            }]);
-          }
-        })
+        // 🌟 修正2: 開くたびにメッセージが出る問題を防ぐため、presence の join イベントでのメッセージ追加を削除しました
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, async (p) => {
           if (p.new.user_id === user.id) return;
           const { data: userData } = await supabase.from('profiles').select('full_name, name, nickname, avatar_url').eq('id', p.new.user_id).single();
@@ -111,7 +113,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     initRoom();
   }, [roomId]);
 
-  // メッセージ送信
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !currentUser) return;
@@ -131,7 +132,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // スタンプ送信
   const sendStamp = async (stamp: string) => {
     if (!currentUser) return;
     setShowStamps(false);
@@ -153,23 +153,19 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     await supabase.from('messages').delete().eq('id', id);
   };
 
-  // 🌟 フォロー機能
   const toggleFollow = async (targetUserId: string) => {
     if (!currentUser) return;
     const isFollowing = follows.includes(targetUserId);
 
     if (isFollowing) {
-      // アンフォロー
       setFollows(prev => prev.filter(id => id !== targetUserId));
       await supabase.from('follows').delete().eq('follower_id', currentUser.id).eq('following_id', targetUserId);
     } else {
-      // フォロー
       setFollows(prev => [...prev, targetUserId]);
       await supabase.from('follows').insert([{ follower_id: currentUser.id, following_id: targetUserId }]);
     }
   };
 
-  // 🌟 自動スクロール（一番下へ）
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -183,10 +179,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   if (isLoading) return <div className={`h-[100dvh] w-full flex items-center justify-center ${bgPage}`}><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   return (
-    // 🌟 【改善1】 flex-col と h-[100dvh] で画面全体にピタッと収め、入力欄を下に押しやる
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
       
-      {/* 🌟 ヘッダー */}
       <header className={`shrink-0 z-50 px-4 py-3 flex items-center justify-between border-b shadow-sm ${bgHeader}`}>
         <div className="flex items-center gap-3">
           <button 
@@ -201,7 +195,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         
-        {/* 🌟 【改善3】人数タップでメンバー一覧モーダルを表示 */}
         <button 
           onClick={() => setShowMembersModal(true)}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border shadow-sm transition-all active:scale-95 ${bgCard}`}
@@ -211,10 +204,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </button>
       </header>
 
-      {/* 🌟 メッセージエリア (flex-1 で余った空間をすべて埋める) */}
       <div ref={scrollRef} className="flex-1 px-4 py-6 space-y-6 overflow-y-auto no-scrollbar scroll-smooth">
         {messages.map((m) => {
-          // 🌟 【改善2】 システムメッセージ（参加通知など）の描画
           if (m.is_system) {
             return (
               <div key={m.id} className="flex justify-center w-full my-4">
@@ -246,16 +237,13 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         })}
       </div>
 
-      {/* 🌟 入力エリア (下部に固定・追従) */}
       <div className={`shrink-0 z-50 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
-        {/* スタンプパレット */}
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showStamps ? 'max-h-24 opacity-100 border-b' : 'max-h-0 opacity-0 border-transparent'} ${isDarkMode ? 'bg-[#0a0a0a]/50 border-[#2c2c2e]' : 'bg-slate-50/50 border-slate-200'}`}>
           <div className="p-4 flex gap-6 overflow-x-auto no-scrollbar w-full items-center">
             {stampList.map(s => <button key={s} onClick={() => sendStamp(s)} className="text-4xl hover:scale-125 transition-transform shrink-0 active:scale-95">{s}</button>)}
           </div>
         </div>
         
-        {/* テキスト入力フォーム */}
         <form onSubmit={sendMessage} className="p-3 pb-safe flex items-center gap-2 w-full">
           <button type="button" onClick={() => setShowStamps(!showStamps)} className={`p-3.5 rounded-2xl transition-all shrink-0 active:scale-95 ${showStamps ? 'bg-indigo-100 text-indigo-600 scale-110 shadow-sm' : (isDarkMode ? 'text-slate-400 hover:bg-[#2c2c2e]' : 'text-slate-400 hover:bg-slate-100')}`}>
             <Smile className="w-6 h-6" />
@@ -274,7 +262,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 🌟 【追加】メンバー一覧モーダル */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
@@ -284,7 +271,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
               <h2 className={`text-lg font-black flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                 <Users className="w-5 h-5 text-indigo-500" /> 参加メンバー
               </h2>
-              <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">{members.length}人</span>
+              <span className={`text-xs font-bold ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'} px-3 py-1 rounded-full`}>{members.length}人</span>
             </div>
 
             <div className="overflow-y-auto space-y-3 px-2 no-scrollbar">
@@ -308,7 +295,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                             <img src={member.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                           ) : displayName.charAt(0).toUpperCase()}
                         </div>
-                        {/* オンラインバッジ */}
                         {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-[#2c2c2e] rounded-full"></div>}
                       </div>
                       
@@ -320,7 +306,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                     </div>
 
-                    {/* フォローボタン */}
                     {!isMe && (
                       <button 
                         onClick={() => toggleFollow(member.user_id)}
