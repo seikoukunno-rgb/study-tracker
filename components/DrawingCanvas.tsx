@@ -24,7 +24,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   const [isDrawing, setIsDrawing] = useState(false);
   const [textInput, setTextInput] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [textValue, setTextValue] = useState("");
-  const [statusMsg, setStatusMsg] = useState<string>("");
 
   const transformContext = useTransformContext();
   const pathsRef = useRef<PathData[]>([]);
@@ -103,13 +102,13 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // 🌟 修正1：保存関数を useCallback で包み、常に最新の pdfId を使うようにする
+  // 🌟 修正1: 常に最新の paths と texts の状態をクローンして保存する最強の関数
   const saveAnnotations = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
-    // 現在の配列をコピーして確実に保存する
-    const dataToSave = { 
+    // スナップショット（現在の最新状態）を作成
+    const currentData = { 
       paths: [...pathsRef.current], 
       texts: [...textsRef.current] 
     };
@@ -118,13 +117,11 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       user_id: user.id, 
       pdf_id: pdfId, 
       page_index: pageIndex,
-      data: dataToSave,
+      data: currentData,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id, pdf_id, page_index' });
 
-    if (error) {
-      console.error("保存エラー:", error);
-    }
+    if (error) console.error("保存失敗:", error);
   }, [pdfId, pageIndex]);
 
   useEffect(() => {
@@ -141,7 +138,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     loadAnnotations();
   }, [pageIndex, pdfId, redraw]);
 
-  // 🌟 Toolbarの「全消去」を受信してDBからも消す
+  // 🌟 Toolbarの「全消去」の合図を受信
   useEffect(() => {
     const handleClearCanvas = () => {
       pathsRef.current = [];
@@ -153,17 +150,16 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     return () => document.removeEventListener('clear-canvas', handleClearCanvas);
   }, [redraw, saveAnnotations]);
 
-  // 🌟 修正2：テキスト確定時にも、確実に saveAnnotations を呼ぶ
   const handleTextSubmit = useCallback(() => {
     const val = textValueRef.current;
     const pos = textInputRef.current;
     textValueRef.current = "";
     textInputRef.current = null;
-    
+
     if (val.trim() && pos) {
       textsRef.current.push({ text: val, x: pos.x, y: pos.y, width: pos.w, height: pos.h, color });
       redraw();
-      saveAnnotations();
+      saveAnnotations(); // 🌟 保存を実行
     }
     setTextInput(null);
     setTextValue("");
@@ -177,30 +173,15 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
   };
 
-  const stopEvent = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation();
-  };
-
-  // 🌟 修正3：マウスとタッチイベントを確実に拾うように復元
-  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (isResizing.current) return;
     
-    // 書く瞬間に「パレットを閉じて！」と司令塔へシグナルを送る
+    // 🌟 書き始めた瞬間に Toolbar に「閉じて！」と合図を送る
     document.dispatchEvent(new Event('canvas-interact'));
 
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const { x, y } = getCorrectedCoordinates(clientX, clientY);
+    const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
 
-    if ('touches' in e) {
-      if (e.touches.length >= 2) return;
-      stopEvent(e);
-    } else {
-      stopEvent(e);
-    }
-
-    // テキストの再編集（クリックした文字をボックスに戻す）
+    // 一度書いたテキストをクリックして再編集
     if (mode === 'text' || mode === 'none') {
       const clickedTextIndex = textsRef.current.findIndex(t => 
         x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + (t.height || 50)
@@ -229,23 +210,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     redraw();
   };
 
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || mode === 'none' || mode === 'text') return;
-    if ('touches' in e) {
-      if (e.touches.length >= 2) { 
-        setIsDrawing(false); 
-        currentPathRef.current = []; 
-        redraw(); 
-        return; 
-      }
-      stopEvent(e);
-      if (e.cancelable) e.preventDefault();
-    } else {
-      stopEvent(e);
-    }
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const { x, y } = getCorrectedCoordinates(clientX, clientY);
+    const { x, y } = getCorrectedCoordinates(e.clientX, e.clientY);
     currentPathRef.current.push({ x, y });
     redraw();
   };
@@ -257,83 +224,70 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
       const width = mode === 'eraser' ? eraserWidth : (mode === 'marker' ? markerWidth : penWidth);
       pathsRef.current.push({ mode: mode as any, color, width, points: [...currentPathRef.current] });
       currentPathRef.current = [];
-      saveAnnotations(); // 🌟 ここで確実に保存！
+      saveAnnotations(); // 🌟 保存を実行
     }
   };
 
-  // 🌟 テキストの「移動」
-  const handleMoveStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
+  // 🌟 修正2: テキストの「移動」時のイベント伝播を停止
+  const handleMoveStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // キャンバスにイベントが行かないようにする
     isResizing.current = true;
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const startX = e.clientX;
+    const startY = e.clientY;
     const startBoxX = textInput?.x || 0;
     const startBoxY = textInput?.y || 0;
     const scale = transformContext.transformState.scale || 1;
 
-    const doMove = (moveEvent: MouseEvent | TouchEvent) => {
-      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
-      setTextInput(prev => prev ? { ...prev, x: startBoxX + (clientX - startX) / scale, y: startBoxY + (clientY - startY) / scale } : prev);
+    const doMove = (moveEvent: PointerEvent) => {
+      setTextInput(prev => prev ? { ...prev, x: startBoxX + (moveEvent.clientX - startX) / scale, y: startBoxY + (moveEvent.clientY - startY) / scale } : prev);
     };
     const stopMove = () => {
-      window.removeEventListener('mousemove', doMove);
-      window.removeEventListener('mouseup', stopMove);
-      window.removeEventListener('touchmove', doMove);
-      window.removeEventListener('touchend', stopMove);
+      window.removeEventListener('pointermove', doMove);
+      window.removeEventListener('pointerup', stopMove);
       setTimeout(() => { isResizing.current = false; }, 100);
     };
-    window.addEventListener('mousemove', doMove);
-    window.addEventListener('mouseup', stopMove);
-    window.addEventListener('touchmove', doMove);
-    window.addEventListener('touchend', stopMove);
+    window.addEventListener('pointermove', doMove);
+    window.addEventListener('pointerup', stopMove);
   };
 
-  // 🌟 テキストの「サイズ変更」
-  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
+  // 🌟 修正3: テキストの「サイズ変更」時のイベント伝播を停止
+  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // キャンバスにイベントが行かないようにする
     isResizing.current = true;
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const startX = e.clientX;
+    const startY = e.clientY;
     const startW = textInput?.w || 200;
     const startH = textInput?.h || 50;
     const scale = transformContext.transformState.scale || 1;
 
-    const doResize = (moveEvent: MouseEvent | TouchEvent) => {
-      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
+    const doResize = (moveEvent: PointerEvent) => {
       setTextInput(prev => prev ? { 
         ...prev, 
-        w: Math.max(100, startW + (clientX - startX) / scale), 
-        h: Math.max(40, startH + (clientY - startY) / scale) 
+        w: Math.max(100, startW + (moveEvent.clientX - startX) / scale), 
+        h: Math.max(40, startH + (moveEvent.clientY - startY) / scale) 
       } : prev);
     };
     const stopResize = () => {
-      window.removeEventListener('mousemove', doResize);
-      window.removeEventListener('mouseup', stopResize);
-      window.removeEventListener('touchmove', doResize);
-      window.addEventListener('touchend', stopResize);
-      setTimeout(() => { isResizing.current = false; }, 100); 
+      window.removeEventListener('pointermove', doResize);
+      window.removeEventListener('pointerup', stopResize);
+      setTimeout(() => { isResizing.current = false; }, 100);
     };
-    window.addEventListener('mousemove', doResize);
-    window.addEventListener('mouseup', stopResize);
-    window.addEventListener('touchmove', doResize);
-    window.addEventListener('touchend', stopResize);
+    window.addEventListener('pointermove', doResize);
+    window.addEventListener('pointerup', stopResize);
   };
 
   return (
     <>
       <canvas
         ref={canvasRef}
-        onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
-        onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
+        onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerLeave={stopDrawing}
         className={`absolute top-0 left-0 z-10 w-full h-full touch-none ${mode !== 'none' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
       />
       
       {textInput && (
         <div 
           className="absolute z-20 border-2 border-dashed border-blue-500 bg-white/80 backdrop-blur-sm group"
-          onMouseDown={stopEvent} onTouchStart={stopEvent}
+          onPointerDown={(e) => e.stopPropagation()} // 🌟 修正4: ボックス全体でもイベント伝播を停止
           style={{ 
             left: textInput.x, top: textInput.y, width: textInput.w, height: textInput.h,
             transformOrigin: 'top left', transform: `scale(${1 / (transformContext.transformState.scale || 1)})` 
@@ -341,7 +295,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         >
           {/* 移動ハンドル */}
           <div 
-            onMouseDown={handleMoveStart} onTouchStart={handleMoveStart}
+            onPointerDown={handleMoveStart}
             className="absolute -top-7 left-0 bg-blue-500 text-white text-xs px-2 py-1 cursor-move rounded-t-md flex items-center gap-1 shadow-md hover:bg-blue-400"
           >
             <Move size={12} /> 移動
@@ -357,8 +311,8 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
           />
           {/* リサイズハンドル */}
           <div 
-            onMouseDown={handleResizeStart} onTouchStart={handleResizeStart}
-            className="absolute -right-2 -bottom-2 w-4 h-4 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
+            onPointerDown={handleResizeStart}
+            className="absolute -right-2 -bottom-2 w-5 h-5 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
           />
         </div>
       )}
