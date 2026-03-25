@@ -216,12 +216,17 @@ function ReportContent() {
       const studentIds = Array.from(new Set(allRawLogs.map(l => l.student_id)));
       const materialIds = Array.from(new Set([...allRawLogs.map(l => l.material_id), ...(myLogsData || []).map(l => l.material_id)].filter(Boolean)));
 
-      const { data: profilesData } = await supabase.from('profiles').select('id, nickname, name, full_name, avatar_url').in('id', studentIds);
-      const { data: allMatsData } = await supabase.from('materials').select('id, title, image_url').in('id', materialIds);
+      const { data: profilesData } = await supabase.from('profiles').select('*').in('id', studentIds);
+      const { data: allMatsData } = await supabase.from('materials').select('*').in('id', materialIds);
 
       const profMap: Record<string, any> = {};
-      profilesData?.forEach(p => { profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || "ユーザー", avatar_url: p.avatar_url }; });
-
+      profilesData?.forEach(p => { 
+        profMap[p.id] = { 
+          ...p, 
+          display_name: p.nickname || p.name || p.full_name || p.username || p.display_name || "ユーザー", 
+          avatar_url: p.avatar_url 
+        }; 
+      });
       const matMap: Record<string, any> = {};
       allMatsData?.forEach(m => { matMap[m.id] = m; });
 
@@ -538,9 +543,9 @@ function ReportContent() {
     return m > 0 ? `${h}時間${m}分` : `${h}時間`;
   };
 
-  const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
+const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
     if (!minutes || minutes === 0) {
-      return <span className={`text-lg font-black ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>0分</span>;
+      return <span className={`text-lg font-black ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>0分</span>;
     }
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -549,16 +554,15 @@ function ReportContent() {
       <div className="flex items-baseline justify-end gap-1">
         {h > 0 && (
           <>
-            <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>{h}</span>
-            <span className={`text-sm font-bold mr-1 ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>時間</span>
+            <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-black'}`}>{h}</span>
+            <span className={`text-sm font-bold mr-1 ${isDarkMode ? 'text-indigo-400' : 'text-black'}`}>時間</span>
           </>
         )}
-        <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>{m}</span>
-        <span className={`text-sm font-bold ${isDarkMode ? 'text-indigo-400' : 'text-slate-900'}`}>分</span>
+        <span className={`text-2xl md:text-3xl font-black ${isDarkMode ? 'text-indigo-400' : 'text-black'}`}>{m}</span>
+        <span className={`text-sm font-bold ${isDarkMode ? 'text-indigo-400' : 'text-black'}`}>分</span>
       </div>
     );
   };
-
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
   const bgCard = isDarkMode ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-slate-100";
   const bgHeader = isDarkMode ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-slate-100";
@@ -845,35 +849,33 @@ function ReportContent() {
             ================================================================= */}
             <div className={`w-1/2 px-4 space-y-6 transition-all duration-300 ${activeTab === "record" ? "opacity-100 h-auto" : "opacity-0 h-0 overflow-hidden pointer-events-none"}`}>
               
-              <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
+<div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className={`text-[10px] font-black tracking-[0.2em] uppercase ${textSub}`}>Study Trend</h3>
+                  <h3 className={`text-[10px] font-black tracking-[0.2em] uppercase ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>Study Trend</h3>
                   <div className={`flex p-1 rounded-xl ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                    <button onClick={() => setChartRange("week")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "week" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>週</button>
-                    <button onClick={() => setChartRange("month")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "month" ? `${isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-indigo-600 shadow-sm'}` : textSub}`}>月</button>
+                    <button onClick={() => setChartRange("week")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "week" ? (isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-black shadow-sm') : (isDarkMode ? 'text-slate-400' : 'text-black')}`}>週</button>
+                    <button onClick={() => setChartRange("month")} className={`px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${chartRange === "month" ? (isDarkMode ? 'bg-slate-700 text-indigo-400' : 'bg-white text-black shadow-sm') : (isDarkMode ? 'text-slate-400' : 'text-black')}`}>月</button>
                   </div>
                 </div>
 
                 <div className="relative h-48 flex">
-                  {/* 🌟 修正: Y軸のテキストをライトモード時は黒（slate-900）にして視認性アップ */}
-                  <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-400' : 'text-slate-900'}`}>
+                  <div className={`absolute inset-0 flex flex-col justify-between pb-6 text-[10px] font-black z-0 pointer-events-none ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>
                     {[maxChartVal, Math.round(maxChartVal * 0.75), Math.round(maxChartVal * 0.5), Math.round(maxChartVal * 0.25), 0].map((val, idx) => (
                       <div key={idx} className="flex items-center w-full">
                         <span className="w-12 text-right pr-2 shrink-0">{formatTimeForChart(val)}</span>
-                        <div className={`flex-grow border-t border-dashed h-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}></div>
+                        <div className={`flex-grow border-t border-dashed h-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-300'}`}></div>
                       </div>
                     ))}
                   </div>
                   <div className="flex-1 flex items-end justify-between gap-2 ml-14 pb-6 relative z-10 h-full">
                     {chartData.map((data, i) => (
                       <div key={i} className="flex flex-col items-center flex-1 h-full justify-end relative">
-                        <div className={`w-full ${chartRange === "month" ? "max-w-[32px]" : "max-w-[20px]"} flex flex-col-reverse justify-start items-center h-full ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50/50'}`}>
+                        <div className={`w-full ${chartRange === "month" ? "max-w-[32px]" : "max-w-[20px]"} flex flex-col-reverse justify-start items-center h-full rounded-t-sm overflow-hidden ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-100'}`}>
                           {data.segments.map((seg: any, idx: number) => (
                             <div key={idx} className="w-full transition-all" style={{ height: `${seg.heightPercent}%`, backgroundColor: seg.color }}></div>
                           ))}
                         </div>
-                        {/* 🌟 修正: X軸の日付テキストもライトモード時は黒（slate-900）に */}
-                        <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-900'}`}>{data.date}</span>
+                        <span className={`text-[9px] font-black absolute -bottom-4 whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>{data.date}</span>
                       </div>
                     ))}
                   </div>
@@ -881,7 +883,7 @@ function ReportContent() {
               </div>
 
               <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-                <h3 className={`text-[10px] font-black mb-8 tracking-[0.2em] uppercase ${textSub}`}>Distribution</h3>
+                <h3 className={`text-[10px] font-black mb-8 tracking-[0.2em] uppercase ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>Distribution</h3>
                 <div className="flex flex-col items-center gap-8">
                   <div className={`w-44 h-44 rounded-full relative flex items-center justify-center border-4 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-slate-50'}`} style={{ background: `conic-gradient(${pieData.map((d, i) => {
                     const start = pieData.slice(0, i).reduce((s, x) => s + x.percentage * 3.6, 0);
@@ -895,14 +897,13 @@ function ReportContent() {
                   <div className="w-full space-y-3">
                     {pieData.map((d, i) => (
                       <div key={i} className="flex items-center justify-between text-xs font-black">
-                        <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></span><span className={`line-clamp-1 ${textMain}`}>{d.title}</span></div>
-                        <span className={textSub}>{Math.round(d.percentage)}%</span>
+                        <div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></span><span className={`line-clamp-1 ${isDarkMode ? 'text-white' : 'text-black'}`}>{d.title}</span></div>
+                        <span className={isDarkMode ? 'text-slate-400' : 'text-black'}>{Math.round(d.percentage)}%</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-
               <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
                 <h3 className={`text-sm font-black mb-4 flex items-center gap-2 ${textMain}`}>教材別の最終学習日</h3>
                 
@@ -1046,14 +1047,15 @@ function ReportContent() {
                 )}
               </div>
 
-              {getFilteredTimelineLogs().length === 0 ? (
+
+{getFilteredTimelineLogs().length === 0 ? (
                  <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
               ) : (
                 getFilteredTimelineLogs().map((log: any) => (
                   <div key={log.id} className="relative mb-6">
                     
                     {/* 🌟 自分の記録のみスワイプ削除可能 */}
-                    {log.student_id === currentUser?.id && (
+                    {log.student_id === myUserId && (
                       <div className={`absolute inset-0 rounded-[2.5rem] flex items-center justify-end pr-10 overflow-hidden transition-colors duration-300 ${swipingLogId === log.id && swipeOffset < -100 ? 'bg-rose-600' : 'bg-rose-500/40'}`}>
                         <div className={`flex flex-col items-center justify-center transition-all duration-300 ${swipingLogId === log.id ? 'opacity-100' : 'opacity-0'} ${swipeOffset < -100 ? 'scale-125' : 'scale-100'}`}>
                           <Trash2 className={`w-8 h-8 text-white mb-1 ${swipeOffset < -100 ? 'animate-bounce' : ''}`} />
@@ -1065,7 +1067,7 @@ function ReportContent() {
                     )}
 
                     <div 
-                      onTouchStart={(e) => { if (log.student_id === currentUser?.id) handleLogTouchStart(e, log.id); }}
+                      onTouchStart={(e) => { if (log.student_id === myUserId) handleLogTouchStart(e, log.id); }}
                       onTouchMove={handleLogTouchMove}
                       onTouchEnd={() => handleLogTouchEnd(log.id)}
                       style={{ 
@@ -1085,17 +1087,17 @@ function ReportContent() {
                             )}
                           </div>
                           <div className="flex flex-col">
-                            <span className={`font-black text-sm line-clamp-1 ${textMain}`}>
-                              {log.student_id === currentUser?.id ? "あなた" : (log.profiles?.display_name || "ユーザー")}
+                            <span className={`font-black text-sm line-clamp-1 ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                              {log.student_id === myUserId ? "あなた" : (log.profiles?.display_name || "ユーザー")}
                             </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <span className={`text-xs font-black mr-2 ${textSub}`}>{new Date(log.created_at).toLocaleDateString()}</span>
+                          <span className={`text-xs font-black mr-2 ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>{new Date(log.created_at).toLocaleDateString()}</span>
                           {/* 🌟 自分の記録のみ編集メニュー（...）を表示 */}
-                          {log.student_id === currentUser?.id && (
+                          {log.student_id === myUserId && (
                             <div className="relative">
-                              <button onClick={(e) => { e.stopPropagation(); setActiveEditMenu(activeEditMenu === log.id ? null : log.id); }} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                                                            <button onClick={(e) => { e.stopPropagation(); setActiveEditMenu(activeEditMenu === log.id ? null : log.id); }} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
                                 <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
                               </button>
                               
