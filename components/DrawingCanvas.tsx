@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTransformContext } from "react-zoom-pan-pinch";
 import { supabase } from '@/lib/supabase';
-import { Move, Trash2 } from 'lucide-react';
+import { Move, Trash2, Check } from 'lucide-react'; // 🌟 Check(確定ボタン)を追加
 
 type DrawingCanvasProps = {
   mode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
@@ -59,7 +59,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     });
   };
 
-  // 🌟 高画質化された描画エンジン
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -69,7 +68,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     
     const dpr = window.devicePixelRatio || 1;
     ctx.save();
-    ctx.scale(dpr, dpr); // 内部解像度に合わせてCSSピクセルを拡大
+    ctx.scale(dpr, dpr);
     
     pathsRef.current.forEach((path) => {
       if (path.points.length === 0) return;
@@ -111,7 +110,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     ctx.restore();
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
-  // 🌟 初期化時に解像度を引き上げる処理
   useEffect(() => {
     const initCanvas = () => {
       const canvas = canvasRef.current;
@@ -120,10 +118,8 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         const dpr = window.devicePixelRatio || 1;
         const cssWidth = parent.clientWidth;
         const cssHeight = parent.clientHeight;
-        
         canvas.style.width = `${cssWidth}px`;
         canvas.style.height = `${cssHeight}px`;
-        
         canvas.width = cssWidth * dpr;
         canvas.height = cssHeight * dpr;
         redraw();
@@ -187,8 +183,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scale = transformContext.transformState.scale || 1;
-    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -211,6 +208,16 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   };
 
   const initDraw = (clientX: number, clientY: number) => {
+    // 🌟 画面の別の場所をタッチした時、開いているテキストがあれば確定させる
+    if (textInputRef.current) {
+      if (textValueRef.current.trim()) {
+        handleTextSubmit();
+      } else {
+        setTextInput(null);
+        setTextValue("");
+      }
+    }
+
     const { x, y } = getCorrectedCoordinates(clientX, clientY);
 
     if (mode === 'text' || mode === 'none') {
@@ -218,7 +225,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         x >= t.x && x <= t.x + t.width && y >= t.y && y <= t.y + (t.height || 50)
       );
       if (clickedTextIndex !== -1) {
-        if (textInputRef.current && textValueRef.current.trim()) handleTextSubmit();
         const t = textsRef.current[clickedTextIndex];
         textsRef.current.splice(clickedTextIndex, 1);
         redraw();
@@ -229,7 +235,6 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     }
 
     if (mode === 'text') {
-      if (textInputRef.current && textValueRef.current.trim()) handleTextSubmit();
       setTextInput({ x, y, w: 200, h: 50, fontSize: 20 });
       setTextValue("");
       return;
@@ -367,7 +372,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
           <textarea
             autoFocus value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
-            onBlur={() => { if (!isResizing.current) handleTextSubmit(); }}
+            // 🌟 モバイルでのバグの原因だった onBlur を完全に削除！
             className="w-full h-full bg-transparent outline-none resize-none p-2 text-black font-bold leading-tight"
             style={{ color, fontSize: `${textInput.fontSize}px` }}
             placeholder="文字を入力..."
@@ -378,6 +383,7 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
             className="absolute -right-3 -bottom-3 w-6 h-6 bg-blue-500 rounded-full cursor-nwse-resize border-2 border-white shadow-md z-30 hover:scale-125 transition-transform"
           />
 
+          {/* ミニツールバー */}
           <div 
             className="absolute -bottom-14 left-0 bg-white shadow-xl border border-gray-200 rounded-lg flex items-center p-1.5 gap-1 z-50 text-gray-800"
             onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
@@ -406,6 +412,17 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
               className="p-1.5 hover:bg-red-50 hover:text-red-600 text-red-500 rounded flex items-center justify-center min-w-[32px] transition-colors"
             >
               <Trash2 size={16} />
+            </button>
+            <div className="w-[1px] h-5 bg-gray-300 mx-1" />
+            {/* 🌟 確定（保存）ボタンを追加！ */}
+            <button
+              onPointerDown={(e) => {
+                e.stopPropagation(); e.preventDefault();
+                handleTextSubmit();
+              }}
+              className="p-1.5 hover:bg-green-50 hover:text-green-600 text-green-500 rounded flex items-center justify-center min-w-[32px] transition-colors"
+            >
+              <Check size={16} />
             </button>
           </div>
         </div>

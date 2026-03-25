@@ -43,9 +43,15 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
     scrollToPage: (pageNumber: number) => {
       const node = pageRefs.current[pageNumber];
       if (node && transformRef.current) {
-        transformRef.current.zoomToElement(node, transformRef.current.state.scale, 300);
-      } else if (node) {
-        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // 🌟 修正：zoomToElement のバグを回避するため、自力でスクロール位置を計算！
+        const scale = transformRef.current.state.scale;
+        const currentX = transformRef.current.state.positionX;
+        
+        // 目的のページの上端までの距離(offsetTop)を取得し、スケールを掛けてマイナスにする事で、
+        // 画面の上端にピッタリと吸い付くように移動させます。
+        const targetY = -node.offsetTop * scale;
+        
+        transformRef.current.setTransform(currentX, targetY, scale, 300);
       }
     }
   }));
@@ -97,7 +103,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  {/* 🌟 修正：PdfViewer ではなく、DrawingCanvas を正しく呼び出します */}
+                  {/* 🌟 修正：DrawingCanvas を正しく呼び出します */}
                   <DrawingCanvas 
                     mode={drawingMode} 
                     color={drawingColor} 
