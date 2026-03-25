@@ -5,12 +5,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { 
   Play, Pause, RotateCcw, Save, ArrowLeft, 
-  BookOpen, CheckCircle2, PencilLine, X, Loader2, AlertCircle, FileText, Plus, Send, PenTool,
-  ChevronRight, ChevronLeft, Menu, Eraser, Highlighter
+  BookOpen, CheckCircle2, PencilLine, X, Loader2, AlertCircle
 } from "lucide-react";
 
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
-import PdfSidebar from "@/components/PdfSidebar"; // 🌟 追加
+import PdfSidebar from "@/components/PdfSidebar"; 
+import PdfToolbar from "@/components/PdfToolbar"; // 🌟 追加
 
 function TimerContent() {
   const searchParams = useSearchParams();
@@ -26,8 +26,6 @@ function TimerContent() {
   const [isSaved, setIsSaved] = useState(false);
   const [memo, setMemo] = useState("");
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isPillMinimized, setIsPillMinimized] = useState(false);
 
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,17 +36,12 @@ function TimerContent() {
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
-  // 🌟 修正1：drawingMode に 'text' を追加し、太さの状態（penWidth等）を追加
+  // 描画系のState
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser' | 'text'>('none');
   const [drawingColor, setDrawingColor] = useState<string>('#ef4444');
   const [penWidth, setPenWidth] = useState(3);
   const [markerWidth, setMarkerWidth] = useState(18);
   const [eraserWidth, setEraserWidth] = useState(30);
-
-  const [notes, setNotes] = useState<any[]>([]);
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [notePage, setNotePage] = useState(1);
-  const [noteContent, setNoteContent] = useState("");
 
   const fetchMaterialPaths = useCallback(async () => {
     if (!materialId) { setIsInitializing(false); return; }
@@ -98,22 +91,6 @@ function TimerContent() {
   useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
   useEffect(() => { fetchSignedUrl(); }, [fetchSignedUrl]);
 
-  const fetchNotes = useCallback(async () => {
-    if (!materialId) return;
-    const { data } = await supabase.from('notes').select('*').eq('pdf_id', materialId).order('page_number', { ascending: true });
-    if (data) setNotes(data);
-  }, [materialId]);
-
-  useEffect(() => { fetchNotes(); }, [fetchNotes]);
-
-  const handleSaveNote = async () => {
-    if (!noteContent.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return alert("ログインが必要です");
-    await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
-    setNoteContent(""); setIsAddingNote(false); fetchNotes();
-  };
-
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) interval = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -144,20 +121,23 @@ function TimerContent() {
     else { setIsSaved(true); setIsRunning(false); setShowSaveModal(false); setTimeout(() => router.push("/"), 1500); }
   };
 
-  // 🌟 追加：サイドバーから呼び出すページ遷移用
-  const handleNoteClick = (pageNumber: number) => {
-    pdfViewerRef.current?.scrollToPage(pageNumber);
-  };
-
   if (isInitializing) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
   if (pdfError) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
 
   if (pdfList.length > 0 && securePdfUrl) {
-    const currentFileName = pdfList[currentIndex].split('/').pop()?.replace(/^\d+_/, '') || `PDF ${currentIndex + 1}`;
-
     return (
       <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
+        
+        {/* 🌟 修正：上部中央のEdge風ツールバーを配置 */}
+        <PdfToolbar 
+          mode={drawingMode} setMode={setDrawingMode}
+          color={drawingColor} setColor={setDrawingColor}
+          penWidth={penWidth} setPenWidth={setPenWidth}
+          markerWidth={markerWidth} setMarkerWidth={setMarkerWidth}
+          eraserWidth={eraserWidth} setEraserWidth={setEraserWidth}
+        />
+
         <div className="flex-1 relative flex flex-col border-r border-[#2c2c2e]">
           <div className="absolute inset-0 z-0">
             <PdfViewer 
@@ -166,7 +146,6 @@ function TimerContent() {
               pdfId={`${materialId}-pdf-${currentIndex}`} 
               drawingMode={drawingMode} 
               drawingColor={drawingColor}
-              // 🌟 修正2：太さのPropも渡す
               penWidth={penWidth}
               markerWidth={markerWidth}
               eraserWidth={eraserWidth}
@@ -176,24 +155,10 @@ function TimerContent() {
           <button onClick={() => router.back()} className="absolute top-6 left-4 z-40 p-3 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60">
             <ArrowLeft className="w-5 h-5" />
           </button>
-
-          {/* 🌟 修正3：ここにあった「ツールバーポップアップ（古いdiv）」を削除しました。
-              代わりに下の PdfSidebar 内に統合された動くツールバーが表示されます。 */}
         </div>
 
-        {/* 🌟 修正4：PdfSidebar にすべての状態と操作関数を渡す */}
+        {/* 🌟 右サイドバーは純粋にタイマーのみを表示 */}
         <PdfSidebar 
-          onNoteClick={handleNoteClick}
-          drawingMode={drawingMode}
-          setDrawingMode={setDrawingMode}
-          drawingColor={drawingColor}
-          setDrawingColor={setDrawingColor}
-          penWidth={penWidth}
-          setPenWidth={setPenWidth}
-          markerWidth={markerWidth}
-          setMarkerWidth={setMarkerWidth}
-          eraserWidth={eraserWidth}
-          setEraserWidth={setEraserWidth}
           seconds={seconds}
           isRunning={isRunning}
           setIsRunning={setIsRunning}
