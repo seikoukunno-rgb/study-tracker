@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -24,24 +24,26 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [showMembersModal, setShowMembersModal] = useState(false); 
   const [follows, setFollows] = useState<string[]>([]); 
 
-  // 🌟 設定モーダル用State
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [editRoomName, setEditRoomName] = useState("");
   const [editRankingEnabled, setEditRankingEnabled] = useState(true);
 
-  // 🌟 ランキング・タイムライン用State
+  // 🌟 スタラン（ランキング機能）用State
   const [showRankingModal, setShowRankingModal] = useState(false);
+  const [staruns, setStaruns] = useState<any[]>([]);
+  const [selectedStarunId, setSelectedStarunId] = useState<string | null>(null);
+  const [isCreatingStarun, setIsCreatingStarun] = useState(false);
+  const [newStarunName, setNewStarunName] = useState("");
+  const [newStarunStart, setNewStarunStart] = useState("");
+  const [newStarunEnd, setNewStarunEnd] = useState("");
+  
   const [rankingTab, setRankingTab] = useState<'ranking' | 'timeline'>('ranking');
+  const [rankingPeriod, setRankingPeriod] = useState<'daily' | 'weekly' | 'total'>('total');
   const [studyLogs, setStudyLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
-  
-  // 期間と参加ステータス
-  const [rankingStartDate, setRankingStartDate] = useState<string>("");
-  const [rankingEndDate, setRankingEndDate] = useState<string>("");
   const [isParticipating, setIsParticipating] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-
   const stampList = ["👍", "🔥", "🎉", "👀", "🚀", "🙏", "💯", "✅", "💡", "😭"];
 
   useEffect(() => {
@@ -107,8 +109,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         setRoom(groupData);
         setEditRoomName(groupData.name);
         setEditRankingEnabled(groupData.is_ranking_enabled);
-        setRankingStartDate(groupData.ranking_start_date || "");
-        setRankingEndDate(groupData.ranking_end_date || "");
       }
       setMembers(finalMembers);
       setMessages(finalMessages);
@@ -143,92 +143,44 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     initRoom();
   }, [roomId]);
 
-  // 🌟 設定の更新
-  const saveRoomSettings = async () => {
-    if (!editRoomName.trim()) return;
-    const { error } = await supabase.from('groups').update({ 
-      name: editRoomName, 
-      is_ranking_enabled: editRankingEnabled 
-    }).eq('id', roomId);
-    
-    if (!error) {
-      setRoom({ ...room, name: editRoomName, is_ranking_enabled: editRankingEnabled });
-      alert("設定を保存しました！");
-    }
-  };
-
-  // 🌟 ランキング期間の更新
-  const saveRankingPeriod = async () => {
-    const { error } = await supabase.from('groups').update({ 
-      ranking_start_date: rankingStartDate || null, 
-      ranking_end_date: rankingEndDate || null 
-    }).eq('id', roomId);
-    
-    if (!error) {
-      setRoom({ ...room, ranking_start_date: rankingStartDate, ranking_end_date: rankingEndDate });
-      fetchStudyLogs(); // 期間が変わったので再取得
-      alert("ランキング期間を更新しました！");
-    }
-  };
-
-  // 🌟 ランキングに参加する
-  const handleJoinRanking = async () => {
-    if (!currentUser) return;
-    const { error } = await supabase.from('group_members').update({ is_ranking_participant: true }).eq('group_id', roomId).eq('user_id', currentUser.id);
-    if (!error) {
-      setIsParticipating(true);
-      setMembers(prev => prev.map(m => m.user_id === currentUser.id ? { ...m, is_ranking_participant: true } : m));
-      fetchStudyLogs();
-    }
-  };
-
-  // 🌟 メンバーの強制退出（キック）
-  const handleKickMember = async (userId: string) => {
-    if (!window.confirm("このメンバーをルームから退出させますか？")) return;
-    const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', userId);
-    if (!error) {
-      setMembers(prev => prev.filter(m => m.user_id !== userId));
-    }
-  };
-
-  // 🌟 退出・削除
-  const handleLeaveOrDeleteRoom = async () => {
-    if (!room || !currentUser) return;
-    const isHost = room.created_by === currentUser.id;
-    const confirmMessage = isHost 
-      ? "⚠️ あなたが作成したルームです。\n本当に「ルームごと削除」しますか？\n（参加者やメッセージも全て消去されます）"
-      : "このルームから「退出」しますか？";
-
-    if (!window.confirm(confirmMessage)) return;
-
-    if (isHost) {
-      await supabase.from('groups').delete().eq('id', roomId);
+  // 🌟 スタランのデータ取得
+  const fetchStaruns = async () => {
+    const { data } = await supabase.from('staruns').select('*').eq('group_id', roomId).order('start_date', { ascending: false });
+    if (data && data.length > 0) {
+      setStaruns(data);
+      // アクティブなスタランを自動選択（現在日付が含まれるもの、なければ最新のもの）
+      const now = new Date().toISOString().split('T')[0];
+      const active = data.find(s => s.start_date <= now && s.end_date >= now);
+      setSelectedStarunId(active ? active.id : data[0].id);
+      setIsCreatingStarun(false);
     } else {
-      await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', currentUser.id);
-      await supabase.from('messages').insert([{
-        room_id: roomId, user_id: currentUser.id, content: `${myProfile?.display_name} が退室しました 🏃💨`, is_system: true, is_stamp: false
-      }]);
+      setStaruns([]);
+      setIsCreatingStarun(true); // スタランが1つもない場合は作成画面を強制表示
     }
-    router.push('/rooms');
   };
 
-  const fetchStudyLogs = async () => {
+  useEffect(() => {
+    if (showRankingModal) fetchStaruns();
+  }, [showRankingModal]);
+
+  // 🌟 特定のスタランの学習ログを取得
+  const fetchStudyLogsForStarun = async () => {
+    if (!selectedStarunId) return;
     setIsLogsLoading(true);
-    // ランキング参加者のみ抽出
+
+    const targetStarun = staruns.find(s => s.id === selectedStarunId);
+    if (!targetStarun) { setIsLogsLoading(false); return; }
+
     const participatingIds = members.filter(m => m.is_ranking_participant).map(m => m.user_id);
     if (participatingIds.length === 0) { setStudyLogs([]); setIsLogsLoading(false); return; }
 
-    let query = supabase.from('study_logs').select(`
-      id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at,
-      profiles:student_id (nickname, name, full_name, avatar_url),
-      materials:material_id (title)
-    `).in('student_id', participatingIds).order('created_at', { ascending: false }).limit(200);
-
-    // 期間指定フィルター
-    if (rankingStartDate) query = query.gte('created_at', `${rankingStartDate}T00:00:00Z`);
-    if (rankingEndDate) query = query.lte('created_at', `${rankingEndDate}T23:59:59Z`);
-
-    const { data: logsData } = await query;
+    const { data: logsData } = await supabase
+      .from('study_logs')
+      .select(`id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at, profiles:student_id (nickname, name, full_name, avatar_url), materials:material_id (title)`)
+      .in('student_id', participatingIds)
+      .gte('created_at', `${targetStarun.start_date}T00:00:00Z`)
+      .lte('created_at', `${targetStarun.end_date}T23:59:59Z`)
+      .order('created_at', { ascending: false });
 
     if (logsData) {
       const formattedLogs = logsData.map((log: any) => ({
@@ -242,8 +194,72 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   useEffect(() => {
-    if (showRankingModal && isParticipating) fetchStudyLogs();
-  }, [showRankingModal, isParticipating]);
+    if (showRankingModal && !isCreatingStarun && isParticipating) fetchStudyLogsForStarun();
+  }, [selectedStarunId, isCreatingStarun, showRankingModal, isParticipating]);
+
+  // 🌟 スタラン新規開催
+  const handleCreateStarun = async () => {
+    if (!newStarunName.trim() || !newStarunStart || !newStarunEnd) return alert("全て入力してください");
+    if (newStarunStart > newStarunEnd) return alert("終了日は開始日以降に設定してください");
+
+    const { data, error } = await supabase.from('staruns').insert([{
+      group_id: roomId,
+      name: newStarunName,
+      start_date: newStarunStart,
+      end_date: newStarunEnd,
+      created_by: currentUser?.id
+    }]).select().single();
+
+    if (!error && data) {
+      setStaruns(prev => [data, ...prev].sort((a, b) => b.start_date.localeCompare(a.start_date)));
+      setSelectedStarunId(data.id);
+      setIsCreatingStarun(false);
+      setNewStarunName(""); setNewStarunStart(""); setNewStarunEnd("");
+      alert("新しいスタランを開催しました！");
+    } else {
+      alert("作成に失敗しました");
+    }
+  };
+
+  const saveRoomSettings = async () => {
+    if (!editRoomName.trim()) return;
+    const { error } = await supabase.from('groups').update({ name: editRoomName, is_ranking_enabled: editRankingEnabled }).eq('id', roomId);
+    if (!error) { setRoom({ ...room, name: editRoomName, is_ranking_enabled: editRankingEnabled }); alert("設定を保存しました！"); }
+  };
+
+  const handleJoinRanking = async () => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('group_members').update({ is_ranking_participant: true }).eq('group_id', roomId).eq('user_id', currentUser.id);
+    if (!error) {
+      setIsParticipating(true);
+      setMembers(prev => prev.map(m => m.user_id === currentUser.id ? { ...m, is_ranking_participant: true } : m));
+      fetchStudyLogsForStarun();
+    }
+  };
+
+  const handleKickMember = async (userId: string) => {
+    if (!window.confirm("このメンバーをルームから退出させますか？")) return;
+    const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', userId);
+    if (!error) setMembers(prev => prev.filter(m => m.user_id !== userId));
+  };
+
+  const handleLeaveOrDeleteRoom = async () => {
+    if (!room || !currentUser) return;
+    const isHost = room.created_by === currentUser.id;
+    const confirmMessage = isHost ? "⚠️ あなたが作成したルームです。\n本当に「ルームごと削除」しますか？\n（参加者やメッセージもデータベースから完全に消去されます）" : "このルームから「退出」しますか？";
+    if (!window.confirm(confirmMessage)) return;
+
+    if (isHost) {
+      const { error } = await supabase.from('groups').delete().eq('id', roomId);
+      if (error) { alert("ルームの削除に失敗しました（エラー: " + error.message + "）"); return; }
+      alert("ルームとすべての関連データを完全に削除しました！");
+    } else {
+      const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', currentUser.id);
+      if (error) { alert("退室に失敗しました: " + error.message); return; }
+      await supabase.from('messages').insert([{ room_id: roomId, user_id: currentUser.id, content: `${myProfile?.display_name} が退室しました 🏃💨`, is_system: true, is_stamp: false }]);
+    }
+    router.push('/rooms');
+  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,21 +302,31 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const AvatarImage = ({ url, name, className }: { url: string | null, name: string, className: string }) => {
     const [imgError, setImgError] = useState(false);
     const isBgClass = url?.startsWith('bg-');
-    if (url && !isBgClass && !imgError) {
-      return <img src={url} alt={name} className={className} onError={() => setImgError(true)} />;
-    }
-    return (
-      <div className={`${className} flex items-center justify-center font-black ${isBgClass ? url : (isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-500')}`}>
-        {name.charAt(0).toUpperCase()}
-      </div>
-    );
+    if (url && !isBgClass && !imgError) return <img src={url} alt={name} className={className} onError={() => setImgError(true)} />;
+    return <div className={`${className} flex items-center justify-center font-black ${isBgClass ? url : (isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-500')}`}>{name.charAt(0).toUpperCase()}</div>;
   };
 
   const getRankings = () => {
+    const targetStarun = staruns.find(s => s.id === selectedStarunId);
+    if (!targetStarun) return [];
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
     const aggregated: Record<string, { totalTime: number, name: string, avatarUrl: string | null, id: string }> = {};
+
     studyLogs.forEach(log => {
-      if (!aggregated[log.student_id]) aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
-      aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
+      let isTarget = false;
+      if (rankingPeriod === 'total') isTarget = true; // 取得時点でStarunの期間で絞り込まれているので全部対象
+      if (rankingPeriod === 'daily') isTarget = log.studied_at === todayStr;
+      if (rankingPeriod === 'weekly') isTarget = new Date(log.created_at) >= weekAgo;
+
+      if (isTarget) {
+        if (!aggregated[log.student_id]) aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
+        aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
+      }
     });
     return Object.values(aggregated).filter(r => r.totalTime > 0).sort((a, b) => b.totalTime - a.totalTime);
   };
@@ -308,11 +334,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
   const bgHeader = isDarkMode ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-slate-100";
   const bgCard = isDarkMode ? "bg-[#2c2c2e] border-[#38383a]" : "bg-white border-slate-100";
+  const textMain = isDarkMode ? "text-white" : "text-slate-800";
+  const textSub = isDarkMode ? "text-slate-400" : "text-slate-500";
 
   if (isLoading) return <div className={`h-[100dvh] w-full flex items-center justify-center ${bgPage}`}><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   const isHost = room?.created_by === currentUser?.id;
   const rankings = getRankings();
+  const selectedStarunData = staruns.find(s => s.id === selectedStarunId);
 
   return (
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
@@ -339,7 +368,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             <Users className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}`} />
             <span className="text-xs font-black">{members.length}</span>
           </button>
-          {/* 🌟 設定ボタン */}
           <button onClick={() => setShowSettingsModal(true)} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 text-slate-500 ${bgCard}`}>
             <Settings className="w-4 h-4" />
           </button>
@@ -358,10 +386,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             );
           }
-
           const isMine = m.user_id === currentUser?.id;
           const displayName = m.profiles?.display_name || "ユーザー";
-          
           return (
             <div key={m.id} className={`flex flex-col animate-in slide-in-from-bottom-2 fade-in duration-300 ${isMine ? 'items-end' : 'items-start'}`}>
               {!isMine && <span className="text-[10px] font-bold text-slate-400 mb-1.5 px-2">{displayName}</span>}
@@ -387,7 +413,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             {stampList.map(s => <button key={s} onClick={() => sendStamp(s)} className="text-4xl hover:scale-125 transition-transform shrink-0 active:scale-95">{s}</button>)}
           </div>
         </div>
-        
         <form onSubmit={sendMessage} className="p-3 pb-safe flex items-center gap-2 w-full">
           <button type="button" onClick={() => setShowStamps(!showStamps)} className={`p-3.5 rounded-2xl transition-all shrink-0 active:scale-95 ${showStamps ? 'bg-indigo-100 text-indigo-600 scale-110 shadow-sm' : (isDarkMode ? 'text-slate-400 hover:bg-[#2c2c2e]' : 'text-slate-400 hover:bg-slate-100')}`}>
             <Smile className="w-6 h-6" />
@@ -403,43 +428,34 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 🌟 設定モーダル */}
+      {/* 設定モーダル */}
       {showSettingsModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)}></div>
           <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
             <div className="flex justify-between items-center mb-6 shrink-0 px-2">
-              <h2 className={`text-lg font-black flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><Settings className="w-5 h-5 text-slate-500" /> ルーム設定</h2>
+              <h2 className={`text-lg font-black flex items-center gap-2 ${textMain}`}><Settings className="w-5 h-5 text-slate-500" /> ルーム設定</h2>
             </div>
-
             <div className="overflow-y-auto space-y-6 px-2 no-scrollbar">
               {isHost && (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-2xl border ${bgCard}`}>
-                    <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>ルーム名</label>
+                    <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>ルーム名</label>
                     <input type="text" value={editRoomName} onChange={e => setEditRoomName(e.target.value)} className={`w-full p-3 rounded-xl text-sm font-bold outline-none border transition-all ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'}`} />
                   </div>
-                  
                   <div className={`p-4 rounded-2xl border flex items-center justify-between ${bgCard}`}>
-                    <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ランキング機能を有効にする</span>
+                    <span className={`text-sm font-bold ${textMain}`}>ランキング機能を有効にする</span>
                     <input type="checkbox" checked={editRankingEnabled} onChange={e => setEditRankingEnabled(e.target.checked)} className="w-5 h-5 accent-indigo-600" />
                   </div>
-
-                  <button onClick={saveRoomSettings} className="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black active:scale-95 transition-all shadow-md">
-                    設定を保存する
-                  </button>
+                  <button onClick={saveRoomSettings} className="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black active:scale-95 transition-all shadow-md">設定を保存する</button>
                 </div>
               )}
-
               <div className="pt-4 border-t border-slate-200 dark:border-[#38383a]">
                 <button onClick={handleLeaveOrDeleteRoom} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl font-black text-rose-500 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 active:scale-95 transition-all">
-                  <LogOut className="w-5 h-5" />
-                  {isHost ? "このルームを削除する" : "ルームから退出する"}
+                  <LogOut className="w-5 h-5" /> {isHost ? "このルームを削除する" : "ルームから退出する"}
                 </button>
               </div>
-
-              {/* ホスト専用：メンバー管理 */}
               {isHost && (
                 <div className="pt-4">
                   <h3 className={`text-sm font-black mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>メンバー管理</h3>
@@ -448,11 +464,9 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                       <div key={m.user_id} className={`flex items-center justify-between p-3 rounded-xl border ${bgCard}`}>
                         <div className="flex items-center gap-3">
                           <AvatarImage url={m.profiles?.avatar_url} name={m.profiles?.display_name || "U"} className="w-8 h-8 rounded-full object-cover border shadow-sm" />
-                          <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{m.profiles?.display_name}</span>
+                          <span className={`text-sm font-bold ${textMain}`}>{m.profiles?.display_name}</span>
                         </div>
-                        {m.user_id !== currentUser?.id && (
-                          <button onClick={() => handleKickMember(m.user_id)} className="px-3 py-1.5 bg-rose-100 dark:bg-rose-500/20 text-rose-600 rounded-lg text-xs font-black active:scale-95">強制退出</button>
-                        )}
+                        {m.user_id !== currentUser?.id && <button onClick={() => handleKickMember(m.user_id)} className="px-3 py-1.5 bg-rose-100 dark:bg-rose-500/20 text-rose-600 rounded-lg text-xs font-black active:scale-95">強制退出</button>}
                       </div>
                     ))}
                   </div>
@@ -463,35 +477,30 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 メンバー一覧モーダル */}
+      {/* メンバー一覧モーダル */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
           <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
             <div className="flex justify-between items-center mb-6 shrink-0 px-2">
-              <h2 className={`text-lg font-black flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><Users className="w-5 h-5 text-indigo-500" /> 参加メンバー</h2>
+              <h2 className={`text-lg font-black flex items-center gap-2 ${textMain}`}><Users className="w-5 h-5 text-indigo-500" /> 参加メンバー</h2>
               <span className={`text-xs font-bold ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'} px-3 py-1 rounded-full`}>{members.length}人</span>
             </div>
-
             <div className="overflow-y-auto space-y-3 px-2 no-scrollbar">
               {members.map((member) => {
                 const isMe = member.user_id === currentUser?.id;
                 const isOnline = activeUsers.includes(member.user_id);
                 const isFollowing = follows.includes(member.user_id);
-                const displayName = member.profiles?.display_name || "ユーザー";
-
                 return (
                   <div key={member.user_id} className={`flex items-center justify-between p-4 rounded-[1.5rem] border transition-colors ${bgCard}`}>
                     <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => { if (!isMe) router.push(`/user/${member.user_id}`); }}>
                       <div className="relative">
-                        <AvatarImage url={member.profiles?.avatar_url} name={displayName} className="w-12 h-12 rounded-full overflow-hidden shrink-0 border shadow-sm object-cover" />
+                        <AvatarImage url={member.profiles?.avatar_url} name={member.profiles?.display_name || "U"} className="w-12 h-12 rounded-full overflow-hidden shrink-0 border shadow-sm object-cover" />
                         {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-[#2c2c2e] rounded-full"></div>}
                       </div>
                       <div className="flex flex-col">
-                        <span className={`text-sm font-black line-clamp-1 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                          {displayName} {isMe && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}
-                        </span>
+                        <span className={`text-sm font-black line-clamp-1 ${textMain}`}>{member.profiles?.display_name} {isMe && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}</span>
                         {isOnline && <span className="text-[10px] font-bold text-emerald-500 mt-0.5 tracking-wider">ONLINE</span>}
                       </div>
                     </div>
@@ -508,117 +517,173 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 本格ランキングモーダル */}
+      {/* 🌟 究極の「スタラン」モーダル（横スクロール型・1タップ表示） */}
       {showRankingModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowRankingModal(false)}></div>
-          <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
-            <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-4 shrink-0"></div>
+          <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-300 h-[92vh] flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-50'}`}>
             
-            <div className={`flex p-1.5 rounded-2xl mb-4 shrink-0 ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-100'}`}>
-              <button onClick={() => setRankingTab('ranking')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'ranking' ? (isDarkMode ? 'bg-[#1c1c1e] text-amber-500 shadow-sm' : 'bg-white text-amber-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
-                <Trophy className="w-4 h-4" /> ランキング
-              </button>
-              <button onClick={() => setRankingTab('timeline')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'timeline' ? (isDarkMode ? 'bg-[#1c1c1e] text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
-                <History className="w-4 h-4" /> タイムライン
-              </button>
-            </div>
-
-            {/* ランキング期間設定（ホスト用） */}
-            {isHost && rankingTab === 'ranking' && (
-              <div className={`p-3 rounded-2xl border mb-4 flex items-center gap-2 shrink-0 ${bgCard}`}>
-                <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-                <input type="date" value={rankingStartDate} onChange={e => setRankingStartDate(e.target.value)} className={`text-xs font-bold outline-none bg-transparent ${isDarkMode ? 'text-white' : 'text-slate-800'}`} />
-                <span className="text-slate-400 font-black">~</span>
-                <input type="date" value={rankingEndDate} onChange={e => setRankingEndDate(e.target.value)} className={`text-xs font-bold outline-none bg-transparent ${isDarkMode ? 'text-white' : 'text-slate-800'}`} />
-                <button onClick={saveRankingPeriod} className="ml-auto px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black active:scale-95">設定</button>
-              </div>
-            )}
-
-            {!isHost && rankingTab === 'ranking' && (rankingStartDate || rankingEndDate) && (
-              <div className="text-center mb-4 text-xs font-black text-indigo-500 bg-indigo-500/10 py-2 rounded-xl shrink-0">
-                集計期間: {rankingStartDate || '開始前'} 〜 {rankingEndDate || '終了未定'}
-              </div>
-            )}
-
-            {/* 参加ボタン（未参加の場合） */}
-            {!isParticipating && rankingTab === 'ranking' ? (
-              <div className="flex-1 flex flex-col items-center justify-center px-4">
-                <Trophy className="w-16 h-16 text-amber-500 mb-4 opacity-50" />
-                <h3 className={`text-lg font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ランキングに参加しよう！</h3>
-                <p className="text-sm font-bold text-slate-500 text-center mb-8">期間中の学習時間が集計され、<br/>メンバーと切磋琢磨できます。</p>
-                <button onClick={handleJoinRanking} className="w-full bg-amber-500 text-white py-4 rounded-2xl font-black shadow-lg shadow-amber-500/30 flex justify-center items-center gap-2 active:scale-95 transition-transform">
-                  <Play className="w-5 h-5 fill-current" /> ランキングに参加する
-                </button>
-              </div>
-            ) : isLogsLoading ? (
-              <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
-            ) : rankingTab === 'ranking' ? (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="overflow-y-auto space-y-3 px-2 pb-4 no-scrollbar">
-                  {rankings.length === 0 ? (
-                    <p className="text-center text-sm font-bold text-slate-400 py-10">まだ学習記録がありません</p>
-                  ) : (
-                    rankings.map((rank, index) => {
-                      const isTop3 = index < 3;
-                      const badgeColors = ['bg-amber-400', 'bg-slate-300', 'bg-orange-400'];
-                      return (
-                        <div key={rank.id} className={`flex items-center p-4 rounded-[1.5rem] border ${isTop3 ? (isDarkMode ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200') : bgCard}`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 mr-4 ${isTop3 ? badgeColors[index] + ' text-white shadow-md' : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500')}`}>
-                            {index + 1}
-                          </div>
-                          <AvatarImage url={rank.avatarUrl} name={rank.name} className="w-10 h-10 rounded-full shrink-0 mr-4 object-cover border shadow-sm" />
-                          <div className="flex-1">
-                            <p className={`text-sm font-black line-clamp-1 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{rank.name} {rank.id === currentUser?.id && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}</p>
-                            <p className={`text-xs font-bold mt-0.5 flex items-center gap-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}><Clock className="w-3 h-3"/> {Math.floor(rank.totalTime / 60)}h {rank.totalTime % 60}m</p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-y-auto space-y-4 px-2 pb-4 no-scrollbar">
-                {studyLogs.length === 0 ? (
-                  <p className="text-center text-sm font-bold text-slate-400 py-10">まだタイムラインがありません</p>
-                ) : (
-                  studyLogs.map((log) => {
-                    const timeAgo = (dateStr: string) => {
-                      const mins = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 60000);
-                      if (mins < 60) return `${mins}分前`;
-                      if (mins < 1440) return `${Math.floor(mins / 60)}時間前`;
-                      return `${Math.floor(mins / 1440)}日前`;
-                    };
-                    return (
-                      <div key={log.id} className={`p-4 rounded-[1.5rem] border ${bgCard}`}>
-                        <div className="flex items-center gap-3 mb-3">
-                          <AvatarImage url={log.avatar_url} name={log.display_name} className="w-8 h-8 rounded-full object-cover shrink-0" />
-                          <div className="flex-1">
-                            <p className={`text-xs font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{log.display_name}</p>
-                            <p className="text-[10px] font-bold text-slate-400">{timeAgo(log.created_at)}</p>
-                          </div>
-                          <div className="px-2.5 py-1 bg-indigo-500/10 text-indigo-500 rounded-lg text-[10px] font-black flex items-center gap-1">
-                            <Flame className="w-3 h-3" /> {log.duration_minutes}m
-                          </div>
-                        </div>
-                        {log.materials?.title && (
-                          <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg w-fit max-w-full">
-                            <BookOpen className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{log.materials.title}</span>
-                          </div>
-                        )}
-                        {log.thoughts && (
-                          <p className={`text-sm font-bold leading-relaxed whitespace-pre-wrap ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                            {log.thoughts}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })
+            {/* 上部ヘッダー（ドラッグハンドル＆スタランリスト） */}
+            <div className={`pt-6 pb-3 px-4 shadow-sm z-10 shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-b border-[#2c2c2e]' : 'bg-white border-b border-slate-100'}`}>
+              <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-4"></div>
+              <h2 className={`text-lg font-black flex items-center gap-2 mb-4 ${textMain}`}><Trophy className="w-5 h-5 text-amber-500" /> スタラン (Study Ranking)</h2>
+              
+              {/* スワイプ可能なスタラン・タブ */}
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                {staruns.map((st) => (
+                  <button 
+                    key={st.id} 
+                    onClick={() => { setSelectedStarunId(st.id); setIsCreatingStarun(false); }}
+                    className={`px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all border flex items-center gap-1.5 shadow-sm active:scale-95 ${selectedStarunId === st.id && !isCreatingStarun ? (isDarkMode ? 'bg-indigo-600 text-white border-transparent' : 'bg-indigo-600 text-white border-transparent') : (isDarkMode ? 'bg-[#2c2c2e] text-slate-300 border-[#38383a]' : 'bg-white text-slate-600 border-slate-200')}`}
+                  >
+                    <Flag className={`w-3.5 h-3.5 ${selectedStarunId === st.id && !isCreatingStarun ? 'text-white' : 'text-indigo-500'}`} />
+                    {st.name}
+                  </button>
+                ))}
+                {isHost && (
+                  <button 
+                    onClick={() => setIsCreatingStarun(true)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all border border-dashed flex items-center gap-1 shadow-sm active:scale-95 ${isCreatingStarun ? (isDarkMode ? 'bg-indigo-600 text-white border-transparent' : 'bg-indigo-600 text-white border-transparent') : (isDarkMode ? 'bg-transparent text-indigo-400 border-indigo-500/50' : 'bg-transparent text-indigo-600 border-indigo-300')}`}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> 新規開催
+                  </button>
                 )}
               </div>
-            )}
+            </div>
+
+            {/* モーダルボディ */}
+            <div className="flex-1 overflow-y-auto px-4 py-6">
+              
+              {/* === パターン1: 新規作成画面 === */}
+              {isCreatingStarun ? (
+                <div className={`p-6 rounded-[2rem] shadow-sm border ${bgCard}`}>
+                  <h3 className={`text-base font-black mb-6 ${textMain}`}>新しいスタランを開催</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>イベント名</label>
+                      <input type="text" value={newStarunName} onChange={e => setNewStarunName(e.target.value)} placeholder="例：春の猛勉強カップ" className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'}`} />
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>開始日</label>
+                        <input type="date" value={newStarunStart} onChange={e => setNewStarunStart(e.target.value)} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>終了日</label>
+                        <input type="date" value={newStarunEnd} onChange={e => setNewStarunEnd(e.target.value)} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'}`} />
+                      </div>
+                    </div>
+                    <button onClick={handleCreateStarun} className="w-full bg-indigo-600 text-white mt-4 py-4 rounded-2xl font-black shadow-lg shadow-indigo-500/20 active:scale-95 transition-all">開催する</button>
+                  </div>
+                </div>
+              ) : staruns.length === 0 ? (
+                // === パターン2: スタランがまだ1つもない場合 ===
+                <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                  <Trophy className={`w-16 h-16 mb-4 opacity-50 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                  <p className={`text-lg font-black mb-2 ${textMain}`}>まだスタランがありません</p>
+                  <p className={`text-sm font-bold mb-8 ${textSub}`}>ホストがイベントを作成すると、<br/>ここにランキングが表示されます。</p>
+                  {isHost && <button onClick={() => setIsCreatingStarun(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg active:scale-95">最初のスタランを開催する</button>}
+                </div>
+              ) : (
+                // === パターン3: 通常のランキング表示画面 ===
+                <div className="flex flex-col h-full">
+                  {/* ランキング ⇔ タイムライン切り替えタブ */}
+                  <div className={`flex p-1.5 rounded-[1.5rem] mb-6 shrink-0 shadow-inner ${isDarkMode ? 'bg-[#0a0a0a]' : 'bg-slate-200/50'}`}>
+                    <button onClick={() => setRankingTab('ranking')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'ranking' ? (isDarkMode ? 'bg-[#2c2c2e] text-amber-500 shadow-sm' : 'bg-white text-amber-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
+                      <Trophy className="w-4 h-4" /> ランキング
+                    </button>
+                    <button onClick={() => setRankingTab('timeline')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'timeline' ? (isDarkMode ? 'bg-[#2c2c2e] text-indigo-400 shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
+                      <History className="w-4 h-4" /> タイムライン
+                    </button>
+                  </div>
+
+                  {/* 選択中のイベント情報バー */}
+                  <div className={`flex items-center justify-between p-3 rounded-xl mb-6 border ${bgCard}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-500" />
+                      <span className={`text-xs font-black ${textMain}`}>{selectedStarunData?.start_date.replace(/-/g, '/')} 〜 {selectedStarunData?.end_date.replace(/-/g, '/')}</span>
+                    </div>
+                    {isParticipating ? (
+                      <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-md">参加中</span>
+                    ) : (
+                      <button onClick={handleJoinRanking} className="text-[10px] font-black text-white bg-indigo-600 px-3 py-1.5 rounded-lg active:scale-95 shadow-sm">参加する</button>
+                    )}
+                  </div>
+
+                  {/* 未参加ならブロック */}
+                  {!isParticipating ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                      <Trophy className={`w-12 h-12 mb-3 opacity-30 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`} />
+                      <p className={`text-sm font-bold ${textSub}`}>ランキングとタイムラインを見るには、<br/>右上の「参加する」ボタンを押してください。</p>
+                    </div>
+                  ) : isLogsLoading ? (
+                    <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
+                  ) : rankingTab === 'ranking' ? (
+                    <div className="flex flex-col h-full overflow-hidden">
+                      <div className="flex justify-center gap-2 mb-6 shrink-0">
+                        <button onClick={() => setRankingPeriod('daily')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors ${rankingPeriod === 'daily' ? 'bg-slate-800 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-white border text-slate-500')}`}>今日</button>
+                        <button onClick={() => setRankingPeriod('weekly')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors ${rankingPeriod === 'weekly' ? 'bg-slate-800 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-white border text-slate-500')}`}>今週</button>
+                        <button onClick={() => setRankingPeriod('total')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors ${rankingPeriod === 'total' ? 'bg-indigo-600 text-white shadow-sm' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-white border text-slate-500')}`}>総合(全期間)</button>
+                      </div>
+
+                      <div className="space-y-3 pb-24">
+                        {rankings.length === 0 ? (
+                          <p className={`text-center text-sm font-bold py-10 ${textSub}`}>まだ記録がありません</p>
+                        ) : (
+                          rankings.map((rank, index) => {
+                            const isTop3 = index < 3;
+                            const badgeColors = ['bg-amber-400', 'bg-slate-300', 'bg-orange-400'];
+                            return (
+                              <div key={rank.id} className={`flex items-center p-4 rounded-[1.5rem] border ${isTop3 ? (isDarkMode ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200') : bgCard}`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 mr-4 ${isTop3 ? badgeColors[index] + ' text-white shadow-md' : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500')}`}>{index + 1}</div>
+                                <AvatarImage url={rank.avatarUrl} name={rank.name} className="w-10 h-10 rounded-full shrink-0 mr-4 object-cover border shadow-sm" />
+                                <div className="flex-1">
+                                  <p className={`text-sm font-black line-clamp-1 ${textMain}`}>{rank.name} {rank.id === currentUser?.id && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}</p>
+                                  <p className={`text-xs font-bold mt-0.5 flex items-center gap-1 ${textSub}`}><Clock className="w-3 h-3"/> {Math.floor(rank.totalTime / 60)}h {rank.totalTime % 60}m</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 pb-24">
+                      {studyLogs.length === 0 ? (
+                        <p className={`text-center text-sm font-bold py-10 ${textSub}`}>まだタイムラインがありません</p>
+                      ) : (
+                        studyLogs.map((log) => {
+                          const timeAgo = (dateStr: string) => {
+                            const mins = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 60000);
+                            if (mins < 60) return `${mins}分前`;
+                            if (mins < 1440) return `${Math.floor(mins / 60)}時間前`;
+                            return `${Math.floor(mins / 1440)}日前`;
+                          };
+                          return (
+                            <div key={log.id} className={`p-4 rounded-[1.5rem] border ${bgCard}`}>
+                              <div className="flex items-center gap-3 mb-3">
+                                <AvatarImage url={log.avatar_url} name={log.display_name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                                <div className="flex-1">
+                                  <p className={`text-xs font-black ${textMain}`}>{log.display_name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">{timeAgo(log.created_at)}</p>
+                                </div>
+                                <div className="px-2.5 py-1 bg-indigo-500/10 text-indigo-500 rounded-lg text-[10px] font-black flex items-center gap-1"><Flame className="w-3 h-3" /> {log.duration_minutes}m</div>
+                              </div>
+                              {log.materials?.title && (
+                                <div className={`flex items-center gap-1.5 mb-2 text-[10px] font-bold px-2.5 py-1.5 rounded-lg w-fit max-w-full ${isDarkMode ? 'bg-[#1c1c1e] text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                                  <BookOpen className="w-3 h-3 shrink-0" /><span className="truncate">{log.materials.title}</span>
+                                </div>
+                              )}
+                              {log.thoughts && <p className={`text-sm font-bold leading-relaxed whitespace-pre-wrap ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>{log.thoughts}</p>}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
