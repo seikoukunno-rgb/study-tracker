@@ -14,7 +14,6 @@ type PdfToolbarProps = {
   setMarkerWidth: Dispatch<SetStateAction<number>>;
   eraserWidth: number;
   setEraserWidth: Dispatch<SetStateAction<number>>;
-  // 🌟 タイマーとサイドバーの制御を追加
   seconds: number;
   isRunning: boolean;
   setIsRunning: Dispatch<SetStateAction<boolean>>;
@@ -32,18 +31,26 @@ export default function PdfToolbar({
   const currentWidth = mode === 'marker' ? markerWidth : (mode === 'eraser' ? eraserWidth : penWidth);
   const setWidth = mode === 'marker' ? setMarkerWidth : (mode === 'eraser' ? setEraserWidth : setPenWidth);
 
-  // 🌟 書き始め（バーの外をクリック）を検知してパレットを自動で閉じる魔法のコード
+  // 🌟 パレットを自動で閉じるロジック
   useEffect(() => {
+    // ツールバーの外をクリックした時
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
         setShowPalette(false);
       }
     };
+    
+    // 🌟 PDF上で「書き始めた」という合図を受け取った時
+    const handleCanvasInteract = () => setShowPalette(false);
+
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('canvas-interact', handleCanvasInteract);
+    
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('canvas-interact', handleCanvasInteract);
     };
   }, []);
 
@@ -69,9 +76,7 @@ export default function PdfToolbar({
   return (
     <div ref={toolbarRef} className="w-full h-12 bg-[#1c1c1e] border-b border-white/10 flex items-center justify-between px-2 shadow-md relative z-[100] select-none">
       
-      {/* 左側：サイドバーメニューと基本ツール */}
       <div className="flex items-center gap-1 h-full">
-        {/* 🌟 サイドバーを出す3本線 */}
         <button onClick={() => setIsSidebarOpen(prev => !prev)} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-md transition-colors mr-2">
           <Menu size={20} />
         </button>
@@ -97,13 +102,11 @@ export default function PdfToolbar({
           {mode === 'eraser' && <ChevronDown size={12} className="opacity-50" />}
         </button>
 
-        {/* テキストツールも残しておきます */}
         <button onClick={() => handleToolClick('text')} className={`p-2 rounded-md transition-colors ${mode === 'text' ? 'bg-white/10 text-indigo-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
           <Type size={18} />
         </button>
       </div>
 
-      {/* 右側：タイマー */}
       <div className="flex items-center h-full pr-2">
         <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
           {isRunning ? <Play className="w-4 h-4 text-indigo-400 fill-current animate-pulse" /> : <Pause className="w-4 h-4 text-amber-400 fill-current" />}
@@ -113,7 +116,6 @@ export default function PdfToolbar({
         </button>
       </div>
 
-      {/* 🌟 ツールバーの真下に張り付く詳細パレット */}
       {showPalette && (mode === 'pen' || mode === 'marker' || mode === 'eraser') && (
         <div className="absolute top-12 left-12 bg-[#1c1c1e] border border-white/10 border-t-0 p-4 rounded-b-2xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200 w-64 origin-top">
           <div className="flex justify-between items-center mb-3">
