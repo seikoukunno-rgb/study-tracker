@@ -28,7 +28,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [editRoomName, setEditRoomName] = useState("");
   const [editRankingEnabled, setEditRankingEnabled] = useState(true);
 
-  // 🌟 スタラン用State
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [staruns, setStaruns] = useState<any[]>([]);
   const [selectedStarunId, setSelectedStarunId] = useState<string | null>(null);
@@ -43,17 +42,13 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isParticipating, setIsParticipating] = useState(false);
 
-  // 🌟 カスタムToast用State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // 🌟 モーダルのスワイプダウン（下スライドで閉じる）用State
   const [modalDragY, setModalDragY] = useState(0);
   const modalTouchStartY = useRef<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stampList = ["👍", "🔥", "🎉", "👀", "🚀", "🙏", "💯", "✅", "💡", "😭"];
 
-  // カスタムToastを表示する関数
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -174,7 +169,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (showRankingModal) fetchStaruns();
   }, [showRankingModal]);
 
-  // 🌟 期間内の学習ログだけを最適化して取得する処理
+  // 🌟 コスト削減＆日本時間(JST)を考慮した最適化クエリ
   const fetchStudyLogsForStarun = async () => {
     if (!selectedStarunId) return;
     setIsLogsLoading(true);
@@ -185,8 +180,11 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     const participatingIds = members.filter(m => m.is_ranking_participant).map(m => m.user_id);
     if (participatingIds.length === 0) { setStudyLogs([]); setIsLogsLoading(false); return; }
 
-    // 🌟 最適化：thoughts（感想）を除外し、画像URL等の必要最小限のカラムのみを取得。
-    // 日付指定も00:00:00から23:59:59までを正確に取得
+    // 日本時間（JST）の 00:00:00 〜 23:59:59 で正確に絞り込む (+09:00 指定)
+    const startTime = `${targetStarun.start_date}T00:00:00+09:00`;
+    const endTime = `${targetStarun.end_date}T23:59:59+09:00`;
+
+    // 🌟 最適化: thoughts（感想）を除外し、画像URLと時間だけを取得してデータ通信量を極限まで削減
     const { data: logsData } = await supabase
       .from('study_logs')
       .select(`
@@ -195,8 +193,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         materials:material_id (title, image_url)
       `)
       .in('student_id', participatingIds)
-      .gte('created_at', `${targetStarun.start_date}T00:00:00`)
-      .lte('created_at', `${targetStarun.end_date}T23:59:59`)
+      .gte('created_at', startTime)
+      .lte('created_at', endTime)
       .order('created_at', { ascending: false });
 
     if (logsData) {
@@ -314,24 +312,15 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, showStamps]);
 
-  // 🌟 モーダルのスワイプダウン処理
-  const handleModalTouchStart = (e: React.TouchEvent) => {
-    modalTouchStartY.current = e.touches[0].clientY;
-  };
-  
+  const handleModalTouchStart = (e: React.TouchEvent) => { modalTouchStartY.current = e.touches[0].clientY; };
   const handleModalTouchMove = (e: React.TouchEvent) => {
     if (modalTouchStartY.current === null) return;
     const currentY = e.touches[0].clientY;
     const diff = currentY - modalTouchStartY.current;
-    if (diff > 0) { // 下方向へのスワイプのみ許可
-      setModalDragY(diff);
-    }
+    if (diff > 0) setModalDragY(diff);
   };
-  
   const handleModalTouchEnd = (closeFunction: () => void) => {
-    if (modalDragY > 100) { // 100px以上下げたら閉じる
-      closeFunction();
-    }
+    if (modalDragY > 100) closeFunction();
     setModalDragY(0);
     modalTouchStartY.current = null;
   };
@@ -383,7 +372,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
       
-      {/* 🌟 カスタムToast通知 */}
+      {/* カスタムToast通知 */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-4 fade-in duration-300 w-[90%] max-w-sm pointer-events-none">
           <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-3">
@@ -474,26 +463,25 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
-      {/* 🌟 設定モーダル (スワイプで閉じる対応) */}
+      {/* 設定モーダル */}
       {showSettingsModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)}></div>
           <div 
             style={{ transform: `translateY(${modalDragY}px)`, transition: modalTouchStartY.current ? 'none' : 'transform 0.3s ease-out' }}
-            className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+            className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] shadow-2xl h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
           >
-            {/* スワイプ判定エリア (ヘッダー部分全体を広く) */}
             <div 
-              className="pt-2 pb-6 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+              className="pt-5 pb-4 shrink-0 cursor-grab active:cursor-grabbing touch-none"
               onTouchStart={handleModalTouchStart} onTouchMove={handleModalTouchMove} onTouchEnd={() => handleModalTouchEnd(() => setShowSettingsModal(false))}
             >
               <div className="w-16 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6"></div>
-              <div className="flex justify-between items-center px-2">
+              <div className="flex justify-between items-center px-6">
                 <h2 className={`text-lg font-black flex items-center gap-2 ${textMain}`}><Settings className="w-5 h-5 text-slate-500" /> ルーム設定</h2>
               </div>
             </div>
 
-            <div className="overflow-y-auto space-y-6 px-2 no-scrollbar">
+            <div className="overflow-y-auto space-y-6 px-6 pb-12 no-scrollbar">
               {isHost && (
                 <div className="space-y-4">
                   <div className={`p-4 rounded-2xl border ${bgCard}`}>
@@ -533,26 +521,26 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 メンバー一覧モーダル (スワイプで閉じる対応) */}
+      {/* メンバー一覧モーダル */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
           <div 
             style={{ transform: `translateY(${modalDragY}px)`, transition: modalTouchStartY.current ? 'none' : 'transform 0.3s ease-out' }}
-            className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl h-[85vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
+            className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] shadow-2xl h-[85vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}
           >
             <div 
-              className="pt-2 pb-6 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+              className="pt-5 pb-4 shrink-0 cursor-grab active:cursor-grabbing touch-none"
               onTouchStart={handleModalTouchStart} onTouchMove={handleModalTouchMove} onTouchEnd={() => handleModalTouchEnd(() => setShowMembersModal(false))}
             >
               <div className="w-16 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6"></div>
-              <div className="flex justify-between items-center px-2">
+              <div className="flex justify-between items-center px-6">
                 <h2 className={`text-lg font-black flex items-center gap-2 ${textMain}`}><Users className="w-5 h-5 text-indigo-500" /> 参加メンバー</h2>
                 <span className={`text-xs font-bold ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'} px-3 py-1 rounded-full`}>{members.length}人</span>
               </div>
             </div>
             
-            <div className="overflow-y-auto space-y-3 px-2 no-scrollbar">
+            <div className="overflow-y-auto space-y-3 px-6 pb-12 no-scrollbar">
               {members.map((member) => {
                 const isMe = member.user_id === currentUser?.id;
                 const isOnline = activeUsers.includes(member.user_id);
@@ -584,7 +572,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
-      {/* 🌟 究極の「スタラン」モーダル（スワイプで閉じる対応） */}
+      {/* 🌟 Study Run モーダル */}
       {showRankingModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowRankingModal(false)}></div>
@@ -593,9 +581,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] shadow-2xl h-[92vh] flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-50'}`}
           >
             
-            {/* 上部ヘッダー (ドラッグで閉じる対応) */}
             <div 
-              className={`pt-4 pb-3 px-4 shadow-sm z-10 shrink-0 touch-none cursor-grab active:cursor-grabbing ${isDarkMode ? 'bg-[#1c1c1e] border-b border-[#2c2c2e]' : 'bg-white border-b border-slate-100'}`}
+              className={`pt-5 pb-3 px-4 shadow-sm z-10 shrink-0 touch-none cursor-grab active:cursor-grabbing ${isDarkMode ? 'bg-[#1c1c1e] border-b border-[#2c2c2e]' : 'bg-white border-b border-slate-100'}`}
               onTouchStart={handleModalTouchStart} onTouchMove={handleModalTouchMove} onTouchEnd={() => handleModalTouchEnd(() => setShowRankingModal(false))}
             >
               <div className="w-16 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-5"></div>
@@ -733,7 +720,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                                 </div>
                                 <div className="px-2.5 py-1 bg-amber-500/10 text-amber-500 rounded-lg text-[10px] font-black flex items-center gap-1"><Flame className="w-3 h-3" /> {log.duration_minutes}m</div>
                               </div>
-                              {/* 🌟 修正：アイコン（image_url）を優先表示し、ない場合はBookOpenアイコン */}
                               {log.materials?.title && (
                                 <div className={`flex items-center gap-2 mb-2 text-[10px] font-bold px-3 py-2 rounded-xl w-fit max-w-full ${isDarkMode ? 'bg-[#1c1c1e] text-slate-300 border border-[#2c2c2e]' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
                                   {log.materials?.image_url ? (
