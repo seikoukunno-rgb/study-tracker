@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
-import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut } from "lucide-react";
+import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play } from "lucide-react";
 
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -24,11 +24,21 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [showMembersModal, setShowMembersModal] = useState(false); 
   const [follows, setFollows] = useState<string[]>([]); 
 
+  // 🌟 設定モーダル用State
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [editRoomName, setEditRoomName] = useState("");
+  const [editRankingEnabled, setEditRankingEnabled] = useState(true);
+
+  // 🌟 ランキング・タイムライン用State
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [rankingTab, setRankingTab] = useState<'ranking' | 'timeline'>('ranking');
-  const [rankingPeriod, setRankingPeriod] = useState<'daily' | 'weekly'>('daily');
   const [studyLogs, setStudyLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
+  
+  // 期間と参加ステータス
+  const [rankingStartDate, setRankingStartDate] = useState<string>("");
+  const [rankingEndDate, setRankingEndDate] = useState<string>("");
+  const [isParticipating, setIsParticipating] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -48,35 +58,34 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
       if (followData) setFollows(followData.map(f => f.following_id));
 
       const { data: groupData } = await supabase.from('groups').select('*').eq('id', roomId).single();
-      const { data: membersData } = await supabase.from('group_members').select('user_id').eq('group_id', roomId);
+      const { data: membersData } = await supabase.from('group_members').select('user_id, is_ranking_participant').eq('group_id', roomId);
       const { data: msgsData } = await supabase.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: true });
 
-      let currentMemberIds = membersData ? membersData.map(m => m.user_id) : [];
+      let currentMembersInfo = membersData || [];
       let currentMsgsData = msgsData || [];
 
       const { data: myProf } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       const myDisplayName = myProf?.nickname || myProf?.name || myProf?.full_name || "ユーザー";
       setMyProfile({ ...myProf, display_name: myDisplayName });
 
-      if (!currentMemberIds.includes(user.id)) {
+      let myMemberInfo = currentMembersInfo.find(m => m.user_id === user.id);
+
+      if (!myMemberInfo) {
         await supabase.from('group_members').insert([{ group_id: roomId, user_id: user.id }]);
-        currentMemberIds.push(user.id);
+        currentMembersInfo.push({ user_id: user.id, is_ranking_participant: false });
+        myMemberInfo = { user_id: user.id, is_ranking_participant: false };
         
         await supabase.from('messages').insert([{
-          room_id: roomId,
-          user_id: user.id,
-          content: `${myDisplayName} が参加しました 👋`,
-          is_system: true,
-          is_stamp: false
+          room_id: roomId, user_id: user.id, content: `${myDisplayName} が参加しました 👋`, is_system: true, is_stamp: false
         }]);
 
         const { data: newMsgsData } = await supabase.from('messages').select('*').eq('room_id', roomId).order('created_at', { ascending: true });
-        if (newMsgsData) {
-          currentMsgsData = newMsgsData;
-        }
+        if (newMsgsData) currentMsgsData = newMsgsData;
       }
 
-      const allUserIds = Array.from(new Set([...currentMemberIds, ...currentMsgsData.map(m => m.user_id)]));
+      setIsParticipating(myMemberInfo?.is_ranking_participant || false);
+
+      const allUserIds = Array.from(new Set([...currentMembersInfo.map(m=>m.user_id), ...currentMsgsData.map(m => m.user_id)]));
       const { data: profilesData } = await supabase.from('profiles').select('*').in('id', allUserIds);
 
       const profileMap: Record<string, any> = {};
@@ -86,10 +95,21 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         });
       }
 
-      const finalMembers = currentMemberIds.map(id => ({ user_id: id, profiles: profileMap[id] || { display_name: "ユーザー" } }));
+      const finalMembers = currentMembersInfo.map(info => ({ 
+        user_id: info.user_id, 
+        is_ranking_participant: info.is_ranking_participant,
+        profiles: profileMap[info.user_id] || { display_name: "ユーザー" } 
+      }));
+      
       const finalMessages = currentMsgsData.map(m => ({ ...m, profiles: profileMap[m.user_id] || { display_name: "ユーザー" } }));
 
-      if (groupData) setRoom(groupData);
+      if (groupData) {
+        setRoom(groupData);
+        setEditRoomName(groupData.name);
+        setEditRankingEnabled(groupData.is_ranking_enabled);
+        setRankingStartDate(groupData.ranking_start_date || "");
+        setRankingEndDate(groupData.ranking_end_date || "");
+      }
       setMembers(finalMembers);
       setMessages(finalMessages);
       setIsLoading(false);
@@ -123,21 +143,92 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     initRoom();
   }, [roomId]);
 
+  // 🌟 設定の更新
+  const saveRoomSettings = async () => {
+    if (!editRoomName.trim()) return;
+    const { error } = await supabase.from('groups').update({ 
+      name: editRoomName, 
+      is_ranking_enabled: editRankingEnabled 
+    }).eq('id', roomId);
+    
+    if (!error) {
+      setRoom({ ...room, name: editRoomName, is_ranking_enabled: editRankingEnabled });
+      alert("設定を保存しました！");
+    }
+  };
+
+  // 🌟 ランキング期間の更新
+  const saveRankingPeriod = async () => {
+    const { error } = await supabase.from('groups').update({ 
+      ranking_start_date: rankingStartDate || null, 
+      ranking_end_date: rankingEndDate || null 
+    }).eq('id', roomId);
+    
+    if (!error) {
+      setRoom({ ...room, ranking_start_date: rankingStartDate, ranking_end_date: rankingEndDate });
+      fetchStudyLogs(); // 期間が変わったので再取得
+      alert("ランキング期間を更新しました！");
+    }
+  };
+
+  // 🌟 ランキングに参加する
+  const handleJoinRanking = async () => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('group_members').update({ is_ranking_participant: true }).eq('group_id', roomId).eq('user_id', currentUser.id);
+    if (!error) {
+      setIsParticipating(true);
+      setMembers(prev => prev.map(m => m.user_id === currentUser.id ? { ...m, is_ranking_participant: true } : m));
+      fetchStudyLogs();
+    }
+  };
+
+  // 🌟 メンバーの強制退出（キック）
+  const handleKickMember = async (userId: string) => {
+    if (!window.confirm("このメンバーをルームから退出させますか？")) return;
+    const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', userId);
+    if (!error) {
+      setMembers(prev => prev.filter(m => m.user_id !== userId));
+    }
+  };
+
+  // 🌟 退出・削除
+  const handleLeaveOrDeleteRoom = async () => {
+    if (!room || !currentUser) return;
+    const isHost = room.created_by === currentUser.id;
+    const confirmMessage = isHost 
+      ? "⚠️ あなたが作成したルームです。\n本当に「ルームごと削除」しますか？\n（参加者やメッセージも全て消去されます）"
+      : "このルームから「退出」しますか？";
+
+    if (!window.confirm(confirmMessage)) return;
+
+    if (isHost) {
+      await supabase.from('groups').delete().eq('id', roomId);
+    } else {
+      await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', currentUser.id);
+      await supabase.from('messages').insert([{
+        room_id: roomId, user_id: currentUser.id, content: `${myProfile?.display_name} が退室しました 🏃💨`, is_system: true, is_stamp: false
+      }]);
+    }
+    router.push('/rooms');
+  };
+
   const fetchStudyLogs = async () => {
     setIsLogsLoading(true);
-    const memberIds = members.map(m => m.user_id);
-    if (memberIds.length === 0) { setIsLogsLoading(false); return; }
+    // ランキング参加者のみ抽出
+    const participatingIds = members.filter(m => m.is_ranking_participant).map(m => m.user_id);
+    if (participatingIds.length === 0) { setStudyLogs([]); setIsLogsLoading(false); return; }
 
-    const { data: logsData } = await supabase
-      .from('study_logs')
-      .select(`
-        id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at,
-        profiles:student_id (nickname, name, full_name, avatar_url),
-        materials:material_id (title)
-      `)
-      .in('student_id', memberIds)
-      .order('created_at', { ascending: false })
-      .limit(100);
+    let query = supabase.from('study_logs').select(`
+      id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at,
+      profiles:student_id (nickname, name, full_name, avatar_url),
+      materials:material_id (title)
+    `).in('student_id', participatingIds).order('created_at', { ascending: false }).limit(200);
+
+    // 期間指定フィルター
+    if (rankingStartDate) query = query.gte('created_at', `${rankingStartDate}T00:00:00Z`);
+    if (rankingEndDate) query = query.lte('created_at', `${rankingEndDate}T23:59:59Z`);
+
+    const { data: logsData } = await query;
 
     if (logsData) {
       const formattedLogs = logsData.map((log: any) => ({
@@ -151,8 +242,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   useEffect(() => {
-    if (showRankingModal) fetchStudyLogs();
-  }, [showRankingModal]);
+    if (showRankingModal && isParticipating) fetchStudyLogs();
+  }, [showRankingModal, isParticipating]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,46 +267,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     await supabase.from('messages').delete().eq('id', id);
   };
 
-  // 🌟 ルームの退出・削除処理
-  const handleLeaveOrDeleteRoom = async () => {
-    if (!room || !currentUser) return;
-    
-    // 自分自身が作成者かどうかを判定
-    const isHost = room.created_by === currentUser.id;
-    const confirmMessage = isHost 
-      ? "⚠️ あなたが作成したルームです。\n本当に「ルームごと削除」しますか？\n（参加者やメッセージも全て消去されます）"
-      : "このルームから「退出」しますか？";
-
-    if (!window.confirm(confirmMessage)) return;
-
-    if (isHost) {
-      // ルームごと削除 (DB側で CASCADE 設定があれば連動して消えます)
-      const { error } = await supabase.from('groups').delete().eq('id', roomId);
-      if (error) {
-        alert("削除に失敗しました: " + error.message);
-        return;
-      }
-    } else {
-      // 自分だけ退出する
-      const { error } = await supabase.from('group_members').delete().eq('group_id', roomId).eq('user_id', currentUser.id);
-      if (error) {
-        alert("退室に失敗しました: " + error.message);
-        return;
-      }
-      
-      // 退室メッセージを残す
-      await supabase.from('messages').insert([{
-        room_id: roomId,
-        user_id: currentUser.id,
-        content: `${myProfile?.display_name} が退室しました 🏃💨`,
-        is_system: true,
-        is_stamp: false
-      }]);
-    }
-
-    router.push('/rooms');
-  };
-
   const toggleFollow = async (targetUserId: string) => {
     if (!currentUser) return;
     const isFollowing = follows.includes(targetUserId);
@@ -235,7 +286,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const AvatarImage = ({ url, name, className }: { url: string | null, name: string, className: string }) => {
     const [imgError, setImgError] = useState(false);
     const isBgClass = url?.startsWith('bg-');
-    
     if (url && !isBgClass && !imgError) {
       return <img src={url} alt={name} className={className} onError={() => setImgError(true)} />;
     }
@@ -247,21 +297,11 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const getRankings = () => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
     const aggregated: Record<string, { totalTime: number, name: string, avatarUrl: string | null, id: string }> = {};
-
     studyLogs.forEach(log => {
-      const isTarget = rankingPeriod === 'daily' ? log.studied_at === todayStr : new Date(log.created_at) >= weekAgo;
-      if (isTarget) {
-        if (!aggregated[log.student_id]) aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
-        aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
-      }
+      if (!aggregated[log.student_id]) aggregated[log.student_id] = { totalTime: 0, name: log.display_name, avatarUrl: log.avatar_url, id: log.student_id };
+      aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
     });
-
     return Object.values(aggregated).filter(r => r.totalTime > 0).sort((a, b) => b.totalTime - a.totalTime);
   };
 
@@ -271,12 +311,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
 
   if (isLoading) return <div className={`h-[100dvh] w-full flex items-center justify-center ${bgPage}`}><Loader2 className="animate-spin text-indigo-500" /></div>;
 
+  const isHost = room?.created_by === currentUser?.id;
   const rankings = getRankings();
 
   return (
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`}>
       
-      <header className={`shrink-0 z-50 px-4 py-3 flex items-center justify-between border-b shadow-sm ${bgHeader}`}>
+      {/* 🌟 ヘッダー */}
+      <header className={`shrink-0 z-40 px-4 py-3 flex items-center justify-between border-b shadow-sm ${bgHeader}`}>
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/rooms')} className={`p-2.5 rounded-2xl transition-all flex items-center justify-center shrink-0 border shadow-sm active:scale-95 ${bgCard}`}>
             <ChevronLeft className="w-5 h-5 text-slate-500" />
@@ -287,21 +329,24 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
         
-        {/* 🌟 退出・削除ボタンを追加 */}
         <div className="flex items-center gap-1.5">
-          <button onClick={() => setShowRankingModal(true)} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a] text-amber-500' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
-            <Trophy className="w-5 h-5" />
-          </button>
+          {room?.is_ranking_enabled && (
+            <button onClick={() => setShowRankingModal(true)} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a] text-amber-500' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
+              <Trophy className="w-5 h-5" />
+            </button>
+          )}
           <button onClick={() => setShowMembersModal(true)} className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border shadow-sm transition-all active:scale-95 ${bgCard}`}>
             <Users className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}`} />
             <span className="text-xs font-black">{members.length}</span>
           </button>
-          <button onClick={handleLeaveOrDeleteRoom} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 text-rose-500 ${isDarkMode ? 'bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20' : 'bg-rose-50 border-rose-100 hover:bg-rose-100'}`}>
-            <LogOut className="w-4 h-4" />
+          {/* 🌟 設定ボタン */}
+          <button onClick={() => setShowSettingsModal(true)} className={`p-2.5 rounded-xl border shadow-sm transition-all active:scale-95 text-slate-500 ${bgCard}`}>
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
 
+      {/* メッセージエリア */}
       <div ref={scrollRef} className="flex-1 px-4 py-6 space-y-6 overflow-y-auto no-scrollbar scroll-smooth">
         {messages.map((m) => {
           if (m.is_system) {
@@ -335,7 +380,8 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         })}
       </div>
 
-      <div className={`shrink-0 z-50 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
+      {/* 入力エリア */}
+      <div className={`shrink-0 z-40 flex flex-col border-t shadow-[0_-10px_30px_rgba(0,0,0,0.05)] ${bgHeader}`}>
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showStamps ? 'max-h-24 opacity-100 border-b' : 'max-h-0 opacity-0 border-transparent'} ${isDarkMode ? 'bg-[#0a0a0a]/50 border-[#2c2c2e]' : 'bg-slate-50/50 border-slate-200'}`}>
           <div className="p-4 flex gap-6 overflow-x-auto no-scrollbar w-full items-center">
             {stampList.map(s => <button key={s} onClick={() => sendStamp(s)} className="text-4xl hover:scale-125 transition-transform shrink-0 active:scale-95">{s}</button>)}
@@ -357,6 +403,67 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </form>
       </div>
 
+      {/* 🌟 設定モーダル */}
+      {showSettingsModal && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)}></div>
+          <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
+            <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
+            <div className="flex justify-between items-center mb-6 shrink-0 px-2">
+              <h2 className={`text-lg font-black flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}><Settings className="w-5 h-5 text-slate-500" /> ルーム設定</h2>
+            </div>
+
+            <div className="overflow-y-auto space-y-6 px-2 no-scrollbar">
+              {isHost && (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-2xl border ${bgCard}`}>
+                    <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>ルーム名</label>
+                    <input type="text" value={editRoomName} onChange={e => setEditRoomName(e.target.value)} className={`w-full p-3 rounded-xl text-sm font-bold outline-none border transition-all ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-indigo-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'}`} />
+                  </div>
+                  
+                  <div className={`p-4 rounded-2xl border flex items-center justify-between ${bgCard}`}>
+                    <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ランキング機能を有効にする</span>
+                    <input type="checkbox" checked={editRankingEnabled} onChange={e => setEditRankingEnabled(e.target.checked)} className="w-5 h-5 accent-indigo-600" />
+                  </div>
+
+                  <button onClick={saveRoomSettings} className="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black active:scale-95 transition-all shadow-md">
+                    設定を保存する
+                  </button>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-slate-200 dark:border-[#38383a]">
+                <button onClick={handleLeaveOrDeleteRoom} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl font-black text-rose-500 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 active:scale-95 transition-all">
+                  <LogOut className="w-5 h-5" />
+                  {isHost ? "このルームを削除する" : "ルームから退出する"}
+                </button>
+              </div>
+
+              {/* ホスト専用：メンバー管理 */}
+              {isHost && (
+                <div className="pt-4">
+                  <h3 className={`text-sm font-black mb-3 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>メンバー管理</h3>
+                  <div className="space-y-2">
+                    {members.map(m => (
+                      <div key={m.user_id} className={`flex items-center justify-between p-3 rounded-xl border ${bgCard}`}>
+                        <div className="flex items-center gap-3">
+                          <AvatarImage url={m.profiles?.avatar_url} name={m.profiles?.display_name || "U"} className="w-8 h-8 rounded-full object-cover border shadow-sm" />
+                          <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{m.profiles?.display_name}</span>
+                        </div>
+                        {m.user_id !== currentUser?.id && (
+                          <button onClick={() => handleKickMember(m.user_id)} className="px-3 py-1.5 bg-rose-100 dark:bg-rose-500/20 text-rose-600 rounded-lg text-xs font-black active:scale-95">強制退出</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 🌟 メンバー一覧モーダル */}
       {showMembersModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowMembersModal(false)}></div>
@@ -381,7 +488,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                         <AvatarImage url={member.profiles?.avatar_url} name={displayName} className="w-12 h-12 rounded-full overflow-hidden shrink-0 border shadow-sm object-cover" />
                         {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-[#2c2c2e] rounded-full"></div>}
                       </div>
-                      
                       <div className="flex flex-col">
                         <span className={`text-sm font-black line-clamp-1 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                           {displayName} {isMe && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}
@@ -389,7 +495,6 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                         {isOnline && <span className="text-[10px] font-bold text-emerald-500 mt-0.5 tracking-wider">ONLINE</span>}
                       </div>
                     </div>
-
                     {!isMe && (
                       <button onClick={() => toggleFollow(member.user_id)} className={`p-2.5 rounded-xl flex items-center justify-center shrink-0 transition-all active:scale-90 shadow-sm ${isFollowing ? (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500') : 'bg-indigo-600 text-white shadow-indigo-600/20'}`}>
                         {isFollowing ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
@@ -403,13 +508,14 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         </>
       )}
 
+      {/* 🌟 本格ランキングモーダル */}
       {showRankingModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] animate-in fade-in duration-200" onClick={() => setShowRankingModal(false)}></div>
-          <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 h-[85vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
-            <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
+          <div className={`fixed bottom-0 left-0 right-0 z-[101] rounded-t-[2.5rem] p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 h-[90vh] flex flex-col ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
+            <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-4 shrink-0"></div>
             
-            <div className={`flex p-1.5 rounded-2xl mb-6 shrink-0 ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-100'}`}>
+            <div className={`flex p-1.5 rounded-2xl mb-4 shrink-0 ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-100'}`}>
               <button onClick={() => setRankingTab('ranking')} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${rankingTab === 'ranking' ? (isDarkMode ? 'bg-[#1c1c1e] text-amber-500 shadow-sm' : 'bg-white text-amber-600 shadow-sm') : 'text-slate-400 hover:text-slate-500'}`}>
                 <Trophy className="w-4 h-4" /> ランキング
               </button>
@@ -418,15 +524,37 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
               </button>
             </div>
 
-            {isLogsLoading ? (
+            {/* ランキング期間設定（ホスト用） */}
+            {isHost && rankingTab === 'ranking' && (
+              <div className={`p-3 rounded-2xl border mb-4 flex items-center gap-2 shrink-0 ${bgCard}`}>
+                <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                <input type="date" value={rankingStartDate} onChange={e => setRankingStartDate(e.target.value)} className={`text-xs font-bold outline-none bg-transparent ${isDarkMode ? 'text-white' : 'text-slate-800'}`} />
+                <span className="text-slate-400 font-black">~</span>
+                <input type="date" value={rankingEndDate} onChange={e => setRankingEndDate(e.target.value)} className={`text-xs font-bold outline-none bg-transparent ${isDarkMode ? 'text-white' : 'text-slate-800'}`} />
+                <button onClick={saveRankingPeriod} className="ml-auto px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black active:scale-95">設定</button>
+              </div>
+            )}
+
+            {!isHost && rankingTab === 'ranking' && (rankingStartDate || rankingEndDate) && (
+              <div className="text-center mb-4 text-xs font-black text-indigo-500 bg-indigo-500/10 py-2 rounded-xl shrink-0">
+                集計期間: {rankingStartDate || '開始前'} 〜 {rankingEndDate || '終了未定'}
+              </div>
+            )}
+
+            {/* 参加ボタン（未参加の場合） */}
+            {!isParticipating && rankingTab === 'ranking' ? (
+              <div className="flex-1 flex flex-col items-center justify-center px-4">
+                <Trophy className="w-16 h-16 text-amber-500 mb-4 opacity-50" />
+                <h3 className={`text-lg font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>ランキングに参加しよう！</h3>
+                <p className="text-sm font-bold text-slate-500 text-center mb-8">期間中の学習時間が集計され、<br/>メンバーと切磋琢磨できます。</p>
+                <button onClick={handleJoinRanking} className="w-full bg-amber-500 text-white py-4 rounded-2xl font-black shadow-lg shadow-amber-500/30 flex justify-center items-center gap-2 active:scale-95 transition-transform">
+                  <Play className="w-5 h-5 fill-current" /> ランキングに参加する
+                </button>
+              </div>
+            ) : isLogsLoading ? (
               <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
             ) : rankingTab === 'ranking' ? (
               <div className="flex flex-col h-full overflow-hidden">
-                <div className="flex justify-center gap-4 mb-6 shrink-0">
-                  <button onClick={() => setRankingPeriod('daily')} className={`px-5 py-2 rounded-full text-xs font-black transition-colors ${rankingPeriod === 'daily' ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-slate-100 text-slate-500')}`}>今日</button>
-                  <button onClick={() => setRankingPeriod('weekly')} className={`px-5 py-2 rounded-full text-xs font-black transition-colors ${rankingPeriod === 'weekly' ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-[#2c2c2e] text-slate-400' : 'bg-slate-100 text-slate-500')}`}>直近7日間</button>
-                </div>
-
                 <div className="overflow-y-auto space-y-3 px-2 pb-4 no-scrollbar">
                   {rankings.length === 0 ? (
                     <p className="text-center text-sm font-bold text-slate-400 py-10">まだ学習記録がありません</p>
@@ -441,7 +569,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                           </div>
                           <AvatarImage url={rank.avatarUrl} name={rank.name} className="w-10 h-10 rounded-full shrink-0 mr-4 object-cover border shadow-sm" />
                           <div className="flex-1">
-                            <p className={`text-sm font-black line-clamp-1 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{rank.name}</p>
+                            <p className={`text-sm font-black line-clamp-1 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{rank.name} {rank.id === currentUser?.id && <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded ml-2">あなた</span>}</p>
                             <p className={`text-xs font-bold mt-0.5 flex items-center gap-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}><Clock className="w-3 h-3"/> {Math.floor(rank.totalTime / 60)}h {rank.totalTime % 60}m</p>
                           </div>
                         </div>
@@ -453,7 +581,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             ) : (
               <div className="overflow-y-auto space-y-4 px-2 pb-4 no-scrollbar">
                 {studyLogs.length === 0 ? (
-                  <p className="text-center text-sm font-bold text-slate-400 py-10">まだ学習記録がありません</p>
+                  <p className="text-center text-sm font-bold text-slate-400 py-10">まだタイムラインがありません</p>
                 ) : (
                   studyLogs.map((log) => {
                     const timeAgo = (dateStr: string) => {
