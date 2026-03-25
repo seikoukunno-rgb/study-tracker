@@ -10,7 +10,7 @@ import {
 
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
 import PdfSidebar from "@/components/PdfSidebar"; 
-import PdfToolbar from "@/components/PdfToolbar"; // 🌟 追加
+import PdfToolbar from "@/components/PdfToolbar";
 
 function TimerContent() {
   const searchParams = useSearchParams();
@@ -26,6 +26,9 @@ function TimerContent() {
   const [isSaved, setIsSaved] = useState(false);
   const [memo, setMemo] = useState("");
   const [showSaveModal, setShowSaveModal] = useState(false);
+  
+  // 🌟 サイドバー開閉用のState
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -42,6 +45,11 @@ function TimerContent() {
   const [penWidth, setPenWidth] = useState(3);
   const [markerWidth, setMarkerWidth] = useState(18);
   const [eraserWidth, setEraserWidth] = useState(30);
+
+  const [notes, setNotes] = useState<any[]>([]);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [notePage, setNotePage] = useState(1);
+  const [noteContent, setNoteContent] = useState("");
 
   const fetchMaterialPaths = useCallback(async () => {
     if (!materialId) { setIsInitializing(false); return; }
@@ -91,6 +99,22 @@ function TimerContent() {
   useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
   useEffect(() => { fetchSignedUrl(); }, [fetchSignedUrl]);
 
+  const fetchNotes = useCallback(async () => {
+    if (!materialId) return;
+    const { data } = await supabase.from('notes').select('*').eq('pdf_id', materialId).order('page_number', { ascending: true });
+    if (data) setNotes(data);
+  }, [materialId]);
+
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+
+  const handleSaveNote = async () => {
+    if (!noteContent.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert("ログインが必要です");
+    await supabase.from('notes').insert([{ user_id: user.id, pdf_id: materialId, page_number: notePage, content: noteContent }]);
+    setNoteContent(""); setIsAddingNote(false); fetchNotes();
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isRunning) interval = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -121,25 +145,35 @@ function TimerContent() {
     else { setIsSaved(true); setIsRunning(false); setShowSaveModal(false); setTimeout(() => router.push("/"), 1500); }
   };
 
+  const handleNoteClick = (pageNumber: number) => {
+    pdfViewerRef.current?.scrollToPage(pageNumber);
+  };
+
   if (isInitializing) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
   if (pdfError) return <div className="h-[100dvh] w-full bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (
-      <div className="flex h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
+      // 🌟 修正1: flex-col を使って、上から「ツールバー」「PDF領域」の縦並びにする
+      <div className="flex flex-col h-[100dvh] w-full bg-[#0a0a0a] overflow-hidden text-white font-sans relative">
         
-        {/* 🌟 修正：上部中央のEdge風ツールバーを配置 */}
+        {/* 🌟 修正2: ツールバーに setIsSidebarOpen を渡す */}
         <PdfToolbar 
           mode={drawingMode} setMode={setDrawingMode}
           color={drawingColor} setColor={setDrawingColor}
           penWidth={penWidth} setPenWidth={setPenWidth}
           markerWidth={markerWidth} setMarkerWidth={setMarkerWidth}
           eraserWidth={eraserWidth} setEraserWidth={setEraserWidth}
+          seconds={seconds} isRunning={isRunning} setIsRunning={setIsRunning}
+          setIsSidebarOpen={setIsSidebarOpen}
         />
 
-        <div className="flex-1 relative flex flex-col border-r border-[#2c2c2e]">
-          <div className="absolute inset-0 z-0">
+        {/* 🌟 修正3: ツールバーの下の領域。PDFとサイドバーを横並びにするコンテナ */}
+        <div className="flex-1 flex overflow-hidden relative">
+          
+          {/* メインのPDF表示エリア */}
+          <div className="flex-1 relative border-r border-[#2c2c2e]">
             <PdfViewer 
               ref={pdfViewerRef} 
               pdfUrl={securePdfUrl} 
@@ -150,20 +184,38 @@ function TimerContent() {
               markerWidth={markerWidth}
               eraserWidth={eraserWidth}
             />
+
+            <button onClick={() => router.back()} className="absolute top-4 left-4 z-40 p-2.5 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
           </div>
 
-          <button onClick={() => router.back()} className="absolute top-6 left-4 z-40 p-3 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {/* 🌟 修正4: サイドバーの開閉アニメーションとオーバーレイ背景 */}
+          {/* サイドバーが開いている時の暗転背景 */}
+          {isSidebarOpen && (
+            <div 
+              className="absolute inset-0 bg-black/50 z-40 md:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+          )}
+
+          {/* サイドバー本体（右からスライドイン） */}
+          <div className={`
+            absolute top-0 right-0 h-full z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+            ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+          `}>
+            {/* PdfSidebarコンポーネントの中の hidden lg:flex を無効化するため、ラッパーで囲む */}
+            <div className="w-80 h-full bg-[#0d0d0f] shadow-2xl border-l border-white/10">
+              <PdfSidebar 
+                seconds={seconds}
+                isRunning={isRunning}
+                setIsRunning={setIsRunning}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* 🌟 右サイドバーは純粋にタイマーのみを表示 */}
-        <PdfSidebar 
-          seconds={seconds}
-          isRunning={isRunning}
-          setIsRunning={setIsRunning}
-        />
-
+        {/* セーブモーダル */}
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
@@ -186,6 +238,7 @@ function TimerContent() {
     );
   }
 
+  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」
   return (
     <div className="min-h-[100dvh] bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4 relative">
       <div className="absolute top-6 left-6">

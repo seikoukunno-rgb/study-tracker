@@ -1,49 +1,139 @@
-// components/PdfToolbar.tsx
 'use client';
 
-import { Pen, Highlighter, Eraser, Type, ChevronDown, MousePointer2 } from 'lucide-react';
+import { PenTool, Highlighter, Eraser, Type, MousePointer2, ChevronDown, Menu, Play, Pause } from 'lucide-react';
+import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react';
 
-export default function PdfToolbar({ 
-  mode, setMode, color, setColor, penWidth, setPenWidth, markerWidth, setMarkerWidth, eraserWidth, setEraserWidth 
-}: any) {
-  
-  // 今選んでいるツールの太さを取得
+type PdfToolbarProps = {
+  mode: 'none' | 'pen' | 'marker' | 'eraser' | 'text';
+  setMode: Dispatch<SetStateAction<'none' | 'pen' | 'marker' | 'eraser' | 'text'>>;
+  color: string;
+  setColor: Dispatch<SetStateAction<string>>;
+  penWidth: number;
+  setPenWidth: Dispatch<SetStateAction<number>>;
+  markerWidth: number;
+  setMarkerWidth: Dispatch<SetStateAction<number>>;
+  eraserWidth: number;
+  setEraserWidth: Dispatch<SetStateAction<number>>;
+  // 🌟 タイマーとサイドバーの制御を追加
+  seconds: number;
+  isRunning: boolean;
+  setIsRunning: Dispatch<SetStateAction<boolean>>;
+  setIsSidebarOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+export default function PdfToolbar({
+  mode, setMode, color, setColor,
+  penWidth, setPenWidth, markerWidth, setMarkerWidth, eraserWidth, setEraserWidth,
+  seconds, isRunning, setIsRunning, setIsSidebarOpen
+}: PdfToolbarProps) {
+  const [showPalette, setShowPalette] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
   const currentWidth = mode === 'marker' ? markerWidth : (mode === 'eraser' ? eraserWidth : penWidth);
   const setWidth = mode === 'marker' ? setMarkerWidth : (mode === 'eraser' ? setEraserWidth : setPenWidth);
 
+  // 🌟 書き始め（バーの外をクリック）を検知してパレットを自動で閉じる魔法のコード
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
+        setShowPalette(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, []);
+
+  const handleToolClick = (selectedMode: 'none' | 'pen' | 'marker' | 'eraser' | 'text') => {
+    if (mode === selectedMode && (selectedMode === 'pen' || selectedMode === 'marker' || selectedMode === 'eraser')) {
+      setShowPalette(!showPalette);
+    } else {
+      setMode(selectedMode);
+      if (selectedMode === 'pen' || selectedMode === 'marker' || selectedMode === 'eraser') {
+        setShowPalette(true);
+      } else {
+        setShowPalette(false);
+      }
+    }
+  };
+
+  const formatTime = (totalSeconds: number) => {
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2">
-      {/* メインツールバー */}
-      <div className="bg-[#1c1c1e]/90 backdrop-blur-xl border border-white/10 p-1 rounded-xl flex items-center gap-1 shadow-2xl">
-        <button onClick={() => setMode('none')} className={`p-2 rounded-lg transition-colors ${mode === 'none' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}><MousePointer2 size={18} /></button>
-        <div className="w-[1px] h-4 bg-white/10 mx-1" />
-        <button onClick={() => setMode('pen')} className={`p-2 rounded-lg transition-colors ${mode === 'pen' ? 'bg-white/10 text-indigo-400' : 'text-white/40 hover:text-white'}`}><Pen size={18} /></button>
-        <button onClick={() => setMode('marker')} className={`p-2 rounded-lg transition-colors ${mode === 'marker' ? 'bg-white/10 text-yellow-400' : 'text-white/40 hover:text-white'}`}><Highlighter size={18} /></button>
-        <button onClick={() => setMode('eraser')} className={`p-2 rounded-lg transition-colors ${mode === 'eraser' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}><Eraser size={18} /></button>
-        <button onClick={() => setMode('text')} className={`p-2 rounded-lg transition-colors ${mode === 'text' ? 'bg-white/10 text-indigo-400' : 'text-white/40 hover:text-white'}`}><Type size={18} /></button>
+    <div ref={toolbarRef} className="w-full h-12 bg-[#1c1c1e] border-b border-white/10 flex items-center justify-between px-2 shadow-md relative z-[100] select-none">
+      
+      {/* 左側：サイドバーメニューと基本ツール */}
+      <div className="flex items-center gap-1 h-full">
+        {/* 🌟 サイドバーを出す3本線 */}
+        <button onClick={() => setIsSidebarOpen(prev => !prev)} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-md transition-colors mr-2">
+          <Menu size={20} />
+        </button>
+
+        <button onClick={() => handleToolClick('none')} className={`p-2 rounded-md transition-colors ${mode === 'none' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <MousePointer2 size={18} />
+        </button>
+        
+        <div className="w-[1px] h-5 bg-white/10 mx-1" />
+        
+        <button onClick={() => handleToolClick('pen')} className={`p-2 rounded-md transition-colors flex items-center gap-1 ${mode === 'pen' ? 'bg-white/10 text-indigo-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <PenTool size={18} />
+          {mode === 'pen' && <ChevronDown size={12} className="opacity-50" />}
+        </button>
+        
+        <button onClick={() => handleToolClick('marker')} className={`p-2 rounded-md transition-colors flex items-center gap-1 ${mode === 'marker' ? 'bg-white/10 text-yellow-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Highlighter size={18} />
+          {mode === 'marker' && <ChevronDown size={12} className="opacity-50" />}
+        </button>
+
+        <button onClick={() => handleToolClick('eraser')} className={`p-2 rounded-md transition-colors flex items-center gap-1 ${mode === 'eraser' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Eraser size={18} />
+          {mode === 'eraser' && <ChevronDown size={12} className="opacity-50" />}
+        </button>
+
+        {/* テキストツールも残しておきます */}
+        <button onClick={() => handleToolClick('text')} className={`p-2 rounded-md transition-colors ${mode === 'text' ? 'bg-white/10 text-indigo-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Type size={18} />
+        </button>
       </div>
 
-      {/* 🌟 展開パレット（ツールが選択されている時だけ表示） */}
-      {mode !== 'none' && (
-        <div className="bg-[#1c1c1e]/95 backdrop-blur-2xl border border-white/10 p-4 rounded-2xl shadow-2xl animate-in fade-in zoom-in duration-200 w-64 origin-top">
+      {/* 右側：タイマー */}
+      <div className="flex items-center h-full pr-2">
+        <button onClick={() => setIsRunning(!isRunning)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 rounded-md transition-colors">
+          {isRunning ? <Play className="w-4 h-4 text-indigo-400 fill-current animate-pulse" /> : <Pause className="w-4 h-4 text-amber-400 fill-current" />}
+          <span className="text-white font-black font-mono text-base tracking-wider w-12 text-center">
+            {formatTime(seconds)}
+          </span>
+        </button>
+      </div>
+
+      {/* 🌟 ツールバーの真下に張り付く詳細パレット */}
+      {showPalette && (mode === 'pen' || mode === 'marker' || mode === 'eraser') && (
+        <div className="absolute top-12 left-12 bg-[#1c1c1e] border border-white/10 border-t-0 p-4 rounded-b-2xl shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200 w-64 origin-top">
           <div className="flex justify-between items-center mb-3">
             <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">太さ</span>
             <span className="text-[10px] font-black text-indigo-400">{currentWidth}px</span>
           </div>
           <input 
-            type="range" min="1" max="50" value={currentWidth} 
+            type="range" min="1" max={mode === 'eraser' ? "100" : "50"} value={currentWidth} 
             onChange={(e) => setWidth(Number(e.target.value))}
-            className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 mb-6"
+            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 mb-5"
           />
           
           {mode !== 'eraser' && (
             <>
-              <div className="text-[10px] font-black text-white/40 mb-3 uppercase tracking-widest">カラーパレット</div>
+              <div className="text-[10px] font-black text-white/40 mb-3 uppercase tracking-widest">カラー</div>
               <div className="grid grid-cols-5 gap-3">
                 {['#000000', '#ef4444', '#3b82f6', '#22c55e', '#eab308'].map((c) => (
                   <button 
                     key={c} onClick={() => setColor(c)}
-                    className={`w-6 h-6 rounded-full border-2 transition-transform ${color === c ? 'border-white scale-125 shadow-lg shadow-white/20' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                    className={`w-7 h-7 rounded-full border-2 transition-transform ${color === c ? 'border-white scale-110 shadow-lg shadow-white/20' : 'border-transparent opacity-50 hover:opacity-100'}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
