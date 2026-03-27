@@ -1,24 +1,47 @@
 import { createClient } from '../utils/supabase/server';
-import { redirect } from 'next/navigation';
-import { toggleAdminRole } from '../actions/admin'; // 相対パスに変更して安全に
+// redirect を使わないため削除しました
+import { toggleAdminRole } from '../actions/admin';
 import { Users, Shield, Activity } from 'lucide-react';
 
 export default async function AdminPage() {
   const supabase = await createClient();
   
-  // 1. ログインユーザーの取得と権限チェック
+  // 1. ログインユーザーの取得
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  
+  // 🚨 探知機1：ユーザー情報がない場合
+  if (!user) {
+    return (
+      <div className="p-20 text-center">
+        <h1 className="text-3xl font-black text-red-500 mb-4">🚨 エラー：未ログイン判定</h1>
+        <p className="text-slate-700">サーバー側にログインのクッキーが届いていません。</p>
+      </div>
+    );
+  }
 
+  // 2. プロフィールの取得
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .single();
 
-  if (profile?.role !== 'admin') redirect('/');
+  // 🚨 探知機2：管理者ではない（またはデータが取れていない）場合
+  if (profile?.role !== 'admin') {
+    return (
+      <div className="p-20 text-center">
+        <h1 className="text-3xl font-black text-red-500 mb-4">🚨 エラー：管理者権限なし</h1>
+        <p className="text-slate-700 font-bold mb-2">あなたのID: {user.id}</p>
+        <p className="text-slate-700 font-bold">
+          DBから取得したrole: <span className="text-blue-600">{profile?.role || 'null（取得失敗）'}</span>
+        </p>
+      </div>
+    );
+  }
 
-  // 2. データの取得（並行処理で高速化）
+  // --------------------------------------------------------
+  // ここから下は元のコードと同じ（データ取得とUI表示）です
+  // --------------------------------------------------------
   const [
     { data: allUsers },
     { count: totalUsers },
@@ -96,7 +119,7 @@ export default async function AdminPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {u.id !== user.id && (
+                    {u.id !== user?.id && (
                       <form action={async () => {
                         'use server'
                         await toggleAdminRole(u.id, u.role === 'admin' ? 'user' : 'admin');
