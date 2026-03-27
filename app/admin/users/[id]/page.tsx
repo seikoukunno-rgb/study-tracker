@@ -10,81 +10,62 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
   const { data: { user: currentUser } } = await supabase.auth.getUser();
   if (!currentUser) redirect('/login');
-
-  const { data: requesterProfile } = await supabase.from('profiles').select('role').eq('id', currentUser.id).single();
-  if (requesterProfile?.role !== 'admin') redirect('/');
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', currentUser.id).single();
+  if (profile?.role !== 'admin') redirect('/');
 
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 🌟 無敵のデータ取得関数（user_id が無ければ student_id を自動で探す）
-  const fetchSafely = async (table: string) => {
-    let res = await supabase.from(table).select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(30);
-    if (res.error && res.error.message.includes('does not exist')) {
-      res = await supabase.from(table).select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+  // 🌟 改良：教材名を取得するために materials テーブルと結合して取得
+  const fetchStudyData = async (table: string) => {
+    // まず普通に取得（materialsテーブルとの結合を試みる）
+    let res = await supabase
+      .from(table)
+      .select('*, materials(name, title)') // 🌟 教材テーブルから名前を結合
+      .eq('user_id', targetUserId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    // user_id がない場合は student_id で再試行
+    if (res.error && res.error.message.includes('user_id')) {
+      res = await supabase
+        .from(table)
+        .select('*, materials(name, title)')
+        .eq('student_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(50);
     }
     return res;
   };
 
-  // 4つのテーブルから並行して安全にデータ取得
   const [logsRes, recordsRes, calRes, matRes] = await Promise.all([
-    fetchSafely('study_logs'),
-    fetchSafely('study_records'),
-    fetchSafely('calendar_events'),
-    fetchSafely('materials')
+    fetchStudyData('study_logs'),
+    fetchStudyData('study_records'),
+    supabase.from('calendar_events').select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }),
+    supabase.from('materials').select('*').eq('user_id', targetUserId)
   ]);
 
-  // study_logs と study_records のデータを合体
   const studyRecords = [...(logsRes.data || []), ...(recordsRes.data || [])];
-  
-  // エラー文言の整理
-  let studyErrorMsg = null;
-  if (logsRes.error && recordsRes.error) studyErrorMsg = `${logsRes.error.message} / ${recordsRes.error.message}`;
 
-  // グループとメッセージ
-  const { data: groupMembers, error: groupError } = await supabase.from('group_members').select('group_id').eq('user_id', targetUserId);
+  // グループ情報の取得
+  const { data: groupMembers } = await supabase.from('group_members').select('group_id').eq('user_id', targetUserId);
   let groupsWithMessages: any[] = [];
-  
   if (groupMembers && groupMembers.length > 0) {
-    const groupIds = groupMembers.map(gm => gm.group_id);
-    const { data: groups } = await supabase.from('groups').select('*').in('id', groupIds);
-    
-    if (groups) {
-      groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        const { data: messages, error: msgError } = await supabase
-          .from('messages')
-          .select('id, content, created_at, user_id') 
-          .eq('group_id', group.id)
-          .order('created_at', { ascending: false })
-          .limit(20);
-          
-        return { 
-          ...group, 
-          messages: messages || [],
-          msgError: msgError?.message
-        };
-      }));
-    }
+    const { data: groups } = await supabase.from('groups').select('*').in('id', groupMembers.map(gm => gm.group_id));
+    groupsWithMessages = groups || [];
   }
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-20">
       <div className="mb-6">
-        <a href="/admin" className="text-slate-500 hover:text-white flex items-center gap-2 text-sm font-bold transition-colors w-fit">
-          <ArrowLeft className="w-4 h-4" /> ダッシュボードに戻る
-        </a>
+        <a href="/admin" className="text-slate-500 hover:text-white flex items-center gap-2 text-sm font-bold transition-colors w-fit"><ArrowLeft className="w-4 h-4" /> 戻る</a>
       </div>
-
       <UserDetailClient 
         userProfile={userProfile}
         studyRecords={studyRecords}
-        studyError={studyErrorMsg}
         calendarEvents={calRes.data}
-        calendarError={calRes.error?.message}
         materials={matRes.data}
-        materialsError={matRes.error?.message}
         groupsWithMessages={groupsWithMessages}
-        groupError={groupError?.message}
         targetUserId={targetUserId}
       />
     </div>
