@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { User, Clock, BookOpen, Users, MessageSquare, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon } from 'lucide-react';
+// 🌟 修正: 凡例(Legend)にパーセンテージを渡すため、古い書き方のCellを復活させます
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
@@ -16,17 +17,22 @@ export default function UserDetailClient({
   const getPieChartData = () => {
     if (!studyRecords || studyRecords.length === 0) return [];
     const dataMap: Record<string, number> = {};
+    let totalMinutes = 0;
     studyRecords.forEach((record: any) => {
       const title = record.title || record.name || 'タイトルなし';
-      dataMap[title] = (dataMap[title] || 0) + (record.duration_minutes || 0);
+      const minutes = record.duration_minutes || 0; // 時間がない場合は0分としてカウント
+      dataMap[title] = (dataMap[title] || 0) + minutes;
+      totalMinutes += minutes;
     });
     
     const sortedData = Object.keys(dataMap)
       .map(key => ({ name: key, value: dataMap[key] }))
       .sort((a, b) => b.value - a.value);
 
+    // 🌟 修正: パーセンテージをデータに持たせる
     return sortedData.map((entry, index) => ({
       ...entry,
+      percentage: totalMinutes > 0 ? (entry.value / totalMinutes * 100).toFixed(1) : 0, 
       fill: COLORS[index % COLORS.length]
     }));
   };
@@ -36,19 +42,25 @@ export default function UserDetailClient({
     <div className="space-y-6">
       {/* 📊 円グラフ */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] p-6">
-        <h3 className="text-sm font-bold text-slate-500 mb-4 flex items-center gap-2"><PieChartIcon className="w-4 h-4 text-emerald-500" /> 学習割合 (時間)</h3>
+        <h3 className="text-sm font-bold text-slate-500 mb-4 flex items-center gap-2"><PieChartIcon className="w-4 h-4 text-emerald-500" /> 学習割合 (時間トータル)</h3>
         {pieData.length > 0 ? (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" />
+                {/* 🌟 修正: 凡例表示のため<Cell>ループを Pie の子要素として復活 */}
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {pieData.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderColor: '#2c2c2e', borderRadius: '8px', color: '#fff' }} formatter={(value: any) => [`${value} 分`, '学習時間']} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                {/* 🌟 修正: 凡例(Legend)にパーセンテージを追加 */}
+                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} formatter={(value: any, entry: any) => `${value} (${entry.payload.percentage}%)`} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="h-32 flex items-center justify-center text-xs text-slate-400">データがありません</div>
+          <div className="h-32 flex items-center justify-center text-xs text-slate-400">学習記録がありません</div>
         )}
       </div>
 
@@ -133,7 +145,6 @@ export default function UserDetailClient({
               </summary>
               <div className="p-4 border-t border-slate-100 dark:border-[#38383a] bg-white dark:bg-[#1c1c1e] max-h-[400px] overflow-y-auto flex flex-col-reverse gap-3">
                 
-                {/* 🌟 もしメッセージ取得自体にエラーがあれば表示 */}
                 {group.msgError ? (
                   <div className="text-xs text-red-500 font-mono py-4">🚨 メッセージ取得エラー:<br/>{group.msgError}</div>
                 ) : group.messages.length > 0 ? (
@@ -141,6 +152,8 @@ export default function UserDetailClient({
                     const isTargetUser = msg.user_id === targetUserId;
                     return (
                       <div key={msg.id} className={`flex flex-col max-w-[85%] ${isTargetUser ? 'self-end items-end' : 'self-start items-start'}`}>
+                        {/* 🌟 profiles結合データを利用してニックネームを表示 */}
+                        <span className="text-[10px] text-slate-400 mb-1">{msg.profiles?.nickname || '不明なユーザー'}</span>
                         <div className={`px-4 py-2 rounded-2xl text-sm ${isTargetUser ? 'bg-indigo-500 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-[#2c2c2e] text-slate-800 dark:text-white rounded-bl-sm'}`}>
                           {msg.content}
                         </div>
