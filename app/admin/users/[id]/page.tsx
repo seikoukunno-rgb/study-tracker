@@ -2,9 +2,10 @@ import { createClient } from '../../../utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { Shield, ArrowLeft, Calendar, User, Target } from 'lucide-react';
 
-export default async function UserDetailPage({ params }: { params: { id: string } }) {
+export default async function UserDetailPage({ params }: { params: Promise<{ id: string }> }) { // 🌟 型を Promise で囲む
   const supabase = await createClient();
-  const targetUserId = params.id;
+  const resolvedParams = await params; // 🌟 await で中身を取り出す
+  const targetUserId = resolvedParams.id;
 
   // 1. 【防衛ライン】アクセスしてきた本人が管理者かチェック
   const { data: { user: currentUser } } = await supabase.auth.getUser();
