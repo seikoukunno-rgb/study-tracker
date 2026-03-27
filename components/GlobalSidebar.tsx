@@ -62,6 +62,7 @@ const [isAdmin, setIsAdmin] = useState(false); // ←これを追加！
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     if (profile) {
+      console.log("🌟 現在のプロフィールデータ:", profile);
       setUserName(profile.nickname || profile.name || "ユーザー");
       const rawAvatar = profile.avatar_url || "";
       if (rawAvatar.startsWith("bg-")) setUserColor(rawAvatar);
