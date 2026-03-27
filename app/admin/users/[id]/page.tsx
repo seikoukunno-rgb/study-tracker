@@ -17,15 +17,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 1. 学習記録
+  // 1. 学習記録 (study_records)
   const { data: studyRecords, error: studyError } = await supabase
     .from('study_records')
     .select('*')
-    .eq('user_id', targetUserId)
+    .eq('user_id', targetUserId) // ※もしここもエラーになるなら 'student_id' に変えてください
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 2. カレンダー予定 🌟 student_id に修正！
+  // 2. カレンダー予定
   const { data: calendarEvents, error: calendarError } = await supabase
     .from('calendar_events')
     .select('*')
@@ -33,11 +33,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 3. 教材
+  // 3. 教材 (materials) 🌟 エラー解消のため student_id に変更！
   const { data: materials, error: materialsError } = await supabase
     .from('materials')
     .select('*')
-    .eq('user_id', targetUserId)
+    .eq('student_id', targetUserId) 
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -55,7 +55,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        // 🌟 結合エラーを防ぐため、一旦 profiles() を外してシンプルに取得
         const { data: messages, error: msgError } = await supabase
           .from('messages')
           .select('*')
@@ -66,13 +65,12 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         return { 
           ...group, 
           messages: messages || [],
-          msgError: msgError?.message // メッセージ取得エラーがあれば記録
+          msgError: msgError?.message
         };
       }));
     }
   }
 
-  // エラーオブジェクトを文字列にしてクライアントに渡す
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-20">
       <div className="mb-6">
