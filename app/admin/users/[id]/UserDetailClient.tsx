@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { User, Clock, BookOpen, Users, MessageSquare, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon } from 'lucide-react';
-// 🌟 修正1: Cellは非推奨のため不要です
-import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
 
@@ -22,7 +21,6 @@ export default function UserDetailClient({
       dataMap[title] = (dataMap[title] || 0) + (record.duration_minutes || 0);
     });
     
-    // 🌟 修正2: <Cell> タグを使わず、ここで直接「色（fill）」のデータを持たせる
     const sortedData = Object.keys(dataMap)
       .map(key => ({ name: key, value: dataMap[key] }))
       .sort((a, b) => b.value - a.value);
@@ -43,7 +41,6 @@ export default function UserDetailClient({
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                {/* 🌟 修正3: 中身を空にして <Pie ... /> だけで閉じる */}
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" />
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderColor: '#2c2c2e', borderRadius: '8px', color: '#fff' }} formatter={(value: any) => [`${value} 分`, '学習時間']} />
                 <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
@@ -58,7 +55,7 @@ export default function UserDetailClient({
       {/* 📝 履歴リスト */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
         {studyError ? (
-          <div className="p-4 text-xs text-red-500">※study_recordsの取得エラー: カラム名(user_id等)を確認してください。</div>
+          <div className="p-4 text-xs text-red-500 font-mono">🚨 study_recordsエラー:<br/>{studyError}</div>
         ) : studyRecords && studyRecords.length > 0 ? (
           <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
             {studyRecords.map((record: any) => (
@@ -82,7 +79,7 @@ export default function UserDetailClient({
            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> カレンダー登録予定</h3>
         </div>
         {calendarError ? (
-          <div className="p-4 text-xs text-red-500">※calendar_eventsの取得エラー</div>
+          <div className="p-4 text-xs text-red-500 font-mono">🚨 calendar_eventsエラー:<br/>{calendarError}</div>
         ) : calendarEvents && calendarEvents.length > 0 ? (
           <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
             {calendarEvents.map((ev: any) => (
@@ -102,7 +99,7 @@ export default function UserDetailClient({
   const MaterialSection = () => (
     <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
       {materialsError ? (
-        <div className="p-4 text-xs text-red-500">※materialsの取得エラー: カラム名(user_id等)を確認してください。</div>
+        <div className="p-4 text-xs text-red-500 font-mono">🚨 materialsエラー:<br/>{materialsError}</div>
       ) : materials && materials.length > 0 ? (
         <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-96 overflow-y-auto">
           {materials.map((mat: any) => (
@@ -121,7 +118,7 @@ export default function UserDetailClient({
   const GroupSection = () => (
     <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden p-2">
       {groupError ? (
-        <div className="p-4 text-xs text-red-500">※グループ情報の取得エラー</div>
+        <div className="p-4 text-xs text-red-500 font-mono">🚨 groupsエラー:<br/>{groupError}</div>
       ) : groupsWithMessages.length > 0 ? (
         <div className="space-y-2">
           {groupsWithMessages.map((group: any) => (
@@ -135,12 +132,15 @@ export default function UserDetailClient({
                 <span className="text-xs text-slate-400 hidden group-open:block">閉じる ▲</span>
               </summary>
               <div className="p-4 border-t border-slate-100 dark:border-[#38383a] bg-white dark:bg-[#1c1c1e] max-h-[400px] overflow-y-auto flex flex-col-reverse gap-3">
-                {group.messages.length > 0 ? (
+                
+                {/* 🌟 もしメッセージ取得自体にエラーがあれば表示 */}
+                {group.msgError ? (
+                  <div className="text-xs text-red-500 font-mono py-4">🚨 メッセージ取得エラー:<br/>{group.msgError}</div>
+                ) : group.messages.length > 0 ? (
                   group.messages.map((msg: any) => {
                     const isTargetUser = msg.user_id === targetUserId;
                     return (
                       <div key={msg.id} className={`flex flex-col max-w-[85%] ${isTargetUser ? 'self-end items-end' : 'self-start items-start'}`}>
-                        <span className="text-[10px] text-slate-400 mb-1">{msg.profiles?.nickname || '不明なユーザー'}</span>
                         <div className={`px-4 py-2 rounded-2xl text-sm ${isTargetUser ? 'bg-indigo-500 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-[#2c2c2e] text-slate-800 dark:text-white rounded-bl-sm'}`}>
                           {msg.content}
                         </div>

@@ -17,7 +17,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 1. 学習記録の取得 (study_records)
+  // 1. 学習記録
   const { data: studyRecords, error: studyError } = await supabase
     .from('study_records')
     .select('*')
@@ -25,15 +25,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 2. カレンダー予定の取得 (calendar_events) 🌟新規追加
+  // 2. カレンダー予定 🌟 student_id に修正！
   const { data: calendarEvents, error: calendarError } = await supabase
     .from('calendar_events')
     .select('*')
-    .eq('user_id', targetUserId) // ※もしカラム名がstudent_idなら適宜変更してください
+    .eq('student_id', targetUserId) 
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 3. 教材の取得 (materials)
+  // 3. 教材
   const { data: materials, error: materialsError } = await supabase
     .from('materials')
     .select('*')
@@ -41,7 +41,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 4. グループ（旧ルーム）とメッセージの取得 (groups, group_members, messages) 🌟名前を修正
+  // 4. グループとメッセージ
   const { data: groupMembers, error: groupError } = await supabase
     .from('group_members')
     .select('group_id')
@@ -55,17 +55,24 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        const { data: messages } = await supabase
-          .from('messages') // 🌟 messagesテーブルから取得
-          .select('id, content, created_at, user_id, profiles(nickname)')
+        // 🌟 結合エラーを防ぐため、一旦 profiles() を外してシンプルに取得
+        const { data: messages, error: msgError } = await supabase
+          .from('messages')
+          .select('*')
           .eq('group_id', group.id)
           .order('created_at', { ascending: false })
           .limit(20);
-        return { ...group, messages: messages || [] };
+          
+        return { 
+          ...group, 
+          messages: messages || [],
+          msgError: msgError?.message // メッセージ取得エラーがあれば記録
+        };
       }));
     }
   }
 
+  // エラーオブジェクトを文字列にしてクライアントに渡す
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-20">
       <div className="mb-6">
@@ -77,13 +84,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       <UserDetailClient 
         userProfile={userProfile}
         studyRecords={studyRecords}
-        studyError={studyError}
-        calendarEvents={calendarEvents}  // 🌟 新規追加
-        calendarError={calendarError}    // 🌟 新規追加
+        studyError={studyError?.message}
+        calendarEvents={calendarEvents}
+        calendarError={calendarError?.message}
         materials={materials}
-        materialsError={materialsError}
-        groupsWithMessages={groupsWithMessages} // 🌟 修正
-        groupError={groupError}                 // 🌟 修正
+        materialsError={materialsError?.message}
+        groupsWithMessages={groupsWithMessages}
+        groupError={groupError?.message}
         targetUserId={targetUserId}
       />
     </div>
