@@ -33,7 +33,7 @@ export default async function AdminPage() {
     { data: todayStudyRecords },
     { data: recentLogs }
   ] = await Promise.all([
-    supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+    supabase.from('profiles').select('*'),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', `${todayStr}T00:00:00Z`),
     supabase.from('activity_logs').select('*', { count: 'exact', head: true }).eq('active_date', todayStr),
