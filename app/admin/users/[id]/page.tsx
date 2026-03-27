@@ -17,11 +17,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 🌟 1. 学習記録 (study_logs と study_records の両方を取得する無敵の構え)
-  const { data: studyLogsData } = await supabase.from('study_logs').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(30);
-  const { data: studyRecordsData } = await supabase.from('study_records').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+  // 1. 学習記録 (study_logs と study_records)
+  // 🌟 user_id ではなく student_id に変更！
+  const { data: studyLogsData } = await supabase.from('study_logs').select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+  const { data: studyRecordsData, error: studyError } = await supabase.from('study_records').select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
   
-  // 取得した2つのデータを合体させます
   const studyRecords = [...(studyLogsData || []), ...(studyRecordsData || [])];
 
   // 2. カレンダー予定
@@ -32,11 +32,12 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // 3. 教材 (materials) 🌟 エラーが消えたので user_id に戻します
+  // 3. 教材 (materials) 
+  // 🌟 エラー文の通り、user_id ではなく student_id に変更！
   const { data: materials, error: materialsError } = await supabase
     .from('materials')
     .select('*')
-    .eq('user_id', targetUserId) 
+    .eq('student_id', targetUserId) 
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -44,7 +45,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: groupMembers, error: groupError } = await supabase
     .from('group_members')
     .select('group_id')
-    .eq('user_id', targetUserId);
+    .eq('user_id', targetUserId); // group_membersはエラーが出ていないのでそのまま
     
   let groupsWithMessages: any[] = [];
   
@@ -54,10 +55,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        // 🌟 RLSの壁が壊れたので、メッセージと投稿者名を取得
+        // 🌟 パニックエラーを防ぐため、「profiles(nickname)」を外してシンプルに取得
         const { data: messages, error: msgError } = await supabase
           .from('messages')
-          .select('id, content, created_at, user_id, profiles(nickname)')
+          .select('id, content, created_at, user_id') 
           .eq('group_id', group.id)
           .order('created_at', { ascending: false })
           .limit(20);
@@ -82,7 +83,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       <UserDetailClient 
         userProfile={userProfile}
         studyRecords={studyRecords}
-        studyError={null}
+        studyError={studyError?.message}
         calendarEvents={calendarEvents}
         calendarError={calendarError?.message}
         materials={materials}
