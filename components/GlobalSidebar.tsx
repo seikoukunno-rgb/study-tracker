@@ -60,7 +60,7 @@ const [isAdmin, setIsAdmin] = useState(false); // ←これを追加！
 
     setMyUserId(user.id);
 
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('*, role').eq('id', user.id).single();
     if (profile) {
       console.log("🌟 現在のプロフィールデータ:", profile);
       setUserName(profile.nickname || profile.name || "ユーザー");
