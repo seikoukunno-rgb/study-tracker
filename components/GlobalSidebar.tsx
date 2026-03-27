@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation"; 
 import { supabase } from "../lib/supabase";
-import { User, X, QrCode, Moon, Sun, Bell, PenLine, Share2, Trash2 } from "lucide-react";
+import { User, X, QrCode, Moon, Sun, Bell, PenLine, Share2, Trash2, Shield 
+ } from "lucide-react";
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function GlobalSidebar() {
@@ -21,7 +22,7 @@ export default function GlobalSidebar() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showGlobalReminders, setShowGlobalReminders] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-
+const [isAdmin, setIsAdmin] = useState(false); // ←これを追加！
   const [sidebarOffset, setSidebarOffset] = useState(0);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const sidebarStartX = useRef<number | null>(null);
@@ -65,6 +66,8 @@ export default function GlobalSidebar() {
       const rawAvatar = profile.avatar_url || "";
       if (rawAvatar.startsWith("bg-")) setUserColor(rawAvatar);
       else if (rawAvatar.trim() !== "") setUserAvatar(rawAvatar);
+      // 🌟 追加：データベースのroleが 'admin' なら true にする
+      setIsAdmin(profile.role === 'admin');
     }
 
     const { count: followers } = await supabase
@@ -273,6 +276,24 @@ export default function GlobalSidebar() {
                 <span className={`text-sm font-black ${textMain}`}>アプリをシェアする</span>
               </div>
             </button>
+            {/* 🌟 ここから追加：管理者専用メニュー */}
+            {isAdmin && (
+              <>
+                <div className="text-[10px] font-black text-red-500/70 mb-2 mt-6 tracking-[0.2em] uppercase px-2">Owner Dashboard</div>
+                <button 
+                  onClick={() => { setShowProfileMenu(false); router.push('/admin'); }} 
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group border ${isDarkMode ? 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20' : 'bg-red-50 hover:bg-red-100 border-red-200'}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-red-100 dark:bg-red-500/20 rounded-xl text-red-600 dark:text-red-400">
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <span className={`text-sm font-black text-red-600 dark:text-red-400`}>管理者ダッシュボード</span>
+                  </div>
+                </button>
+              </>
+            )}
+            {/* 🌟 追加ここまで */}
         </div> 
       </div> 
 
