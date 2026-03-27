@@ -30,7 +30,8 @@ export default async function AdminPage() {
     { count: totalUsers },
     { count: adminUsers }
   ] = await Promise.all([
-    supabase.from('profiles').select('id, nickname, role, email').order('created_at', { ascending: false }),
+    // 👇 emailを削り、安全にすべて（*）を取得する形に変更
+    supabase.from('profiles').select('*').order('created_at', { ascending: false }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin')
   ]);
