@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, UserPlus, Clock, BarChart3, TrendingUp, Search, ChevronLeft, ChevronRight, CalendarDays, Flame } from 'lucide-react';
+import { Users, UserPlus, Clock, BarChart3, TrendingUp, Search, ChevronLeft, ChevronRight, CalendarDays, Flame, ArrowUpDown } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function DashboardClient({ 
@@ -9,22 +9,30 @@ export default function DashboardClient({
 }: any) {
   // --- 状態管理 ---
   const [activeView, setActiveView] = useState<'overview' | 'users' | 'chart'>('overview');
-  const [chartType, setChartType] = useState<'DAU' | 'MAU'>('DAU');
+  const [chartType, setChartType] = useState<'DAU' | 'MAU' | 'NewUsers'>('DAU'); // 🌟 NewUsersを追加
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState<'newest' | 'totalDays' | 'maxConsecutive'>('newest'); // 🌟 並び替え用の状態
   const usersPerPage = 100;
 
-  // --- 検索とページ分け ---
-  const filteredUsers = allUsers?.filter((u: any) => 
+  // --- 並び替え（ソート）と検索 ---
+  const sortedUsers = [...(allUsers || [])].sort((a: any, b: any) => {
+    if (sortOrder === 'totalDays') return (b.total_active_days || 0) - (a.total_active_days || 0);
+    if (sortOrder === 'maxConsecutive') return (b.max_consecutive_days || 0) - (a.max_consecutive_days || 0);
+    // newest (新しい順)
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+
+  const filteredUsers = sortedUsers.filter((u: any) => 
     u.nickname?.toLowerCase().includes(searchQuery.toLowerCase()) || 
     u.id.includes(searchQuery)
-  ) || [];
+  );
   
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
 
   // --- カードクリック処理 ---
-  const handleCardClick = (type: 'users' | 'DAU' | 'MAU') => {
+  const handleCardClick = (type: 'users' | 'DAU' | 'MAU' | 'NewUsers') => {
     if (type === 'users') {
       setActiveView('users');
       setCurrentPage(1);
@@ -34,11 +42,16 @@ export default function DashboardClient({
     }
   };
 
+  // グラフの色を出し分ける
+  const getChartColor = () => {
+    if (chartType === 'DAU') return '#10b981';
+    if (chartType === 'MAU') return '#6366f1';
+    return '#f59e0b'; // NewUsers (Amber)
+  };
+
   return (
     <div>
-      {/* =========================================
-          1. KPIカード（クリック可能）
-          ========================================= */}
+      {/* 1. KPIカード */}
       <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 tracking-widest uppercase mb-4">1. Active Users <span className="text-xs font-normal ml-2 text-blue-500">(Click cards to see details)</span></h2>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div onClick={() => handleCardClick('users')} className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] cursor-pointer hover:border-blue-500 transition-all transform hover:-translate-y-1">
@@ -53,16 +66,12 @@ export default function DashboardClient({
           <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400"><BarChart3 className="w-5 h-5 text-indigo-500" /><h3 className="text-xs font-bold">MAU (今月のログイン)</h3></div>
           <p className="text-3xl font-black text-slate-800 dark:text-white">{mauCount}</p>
         </div>
-        <div className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e]">
+        <div onClick={() => handleCardClick('NewUsers')} className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] cursor-pointer hover:border-amber-500 transition-all transform hover:-translate-y-1">
           <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400"><UserPlus className="w-5 h-5 text-amber-500" /><h3 className="text-xs font-bold">今日の新規登録</h3></div>
           <p className="text-3xl font-black text-slate-800 dark:text-white">{newUsersToday}</p>
         </div>
       </div>
 
-      {/* =========================================
-          2. 動的表示エリア（グラフ または ユーザーリスト）
-          ========================================= */}
-      
       {/* --- グラフ表示 --- */}
       {activeView === 'chart' && (
         <div className="bg-white dark:bg-[#1c1c1e] shadow-sm rounded-2xl border border-slate-100 dark:border-[#2c2c2e] p-6 mb-8 animate-in fade-in slide-in-from-bottom-4">
@@ -80,7 +89,7 @@ export default function DashboardClient({
                 <XAxis dataKey="date" stroke="#888" fontSize={12} tickMargin={10} />
                 <YAxis stroke="#888" fontSize={12} allowDecimals={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderColor: '#2c2c2e', borderRadius: '8px', color: '#fff' }} />
-                <Line type="monotone" dataKey={chartType} stroke={chartType === 'DAU' ? '#10b981' : '#6366f1'} strokeWidth={3} dot={{ r: 4, fill: '#1c1c1e', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey={chartType} stroke={getChartColor()} strokeWidth={3} dot={{ r: 4, fill: '#1c1c1e', strokeWidth: 2 }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -91,10 +100,27 @@ export default function DashboardClient({
       {activeView === 'users' && (
         <div className="bg-white dark:bg-[#1c1c1e] shadow-sm rounded-2xl border border-slate-100 dark:border-[#2c2c2e] overflow-hidden mb-8 animate-in fade-in slide-in-from-bottom-4">
           <div className="p-6 border-b border-slate-100 dark:border-[#2c2c2e] flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-white">ユーザー一覧 ({filteredUsers.length}人)</h2>
-              <button onClick={() => setActiveView('overview')} className="text-xs font-bold px-3 py-1 bg-slate-100 dark:bg-[#2c2c2e] text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-[#38383a] transition-colors">閉じる ✕</button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full md:w-auto">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white">ユーザー一覧 ({filteredUsers.length}人)</h2>
+                <button onClick={() => setActiveView('overview')} className="text-xs font-bold px-3 py-1 bg-slate-100 dark:bg-[#2c2c2e] text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-[#38383a] transition-colors">閉じる ✕</button>
+              </div>
+              
+              {/* 🌟 並び替えドロップダウン */}
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#2c2c2e]/50 px-3 py-2 rounded-xl border border-slate-200 dark:border-[#38383a]">
+                <ArrowUpDown className="w-4 h-4 text-slate-400" />
+                <select 
+                  value={sortOrder} 
+                  onChange={(e) => { setSortOrder(e.target.value as any); setCurrentPage(1); }}
+                  className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+                >
+                  <option value="newest">登録が新しい順</option>
+                  <option value="totalDays">合計利用日数が多い順</option>
+                  <option value="maxConsecutive">最大連続日数が多い順</option>
+                </select>
+              </div>
             </div>
+
             {/* 検索バー */}
             <div className="relative w-full md:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -174,9 +200,7 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* =========================================
-          3. エンゲージメントセクション（常に表示）
-          ========================================= */}
+      {/* 3. エンゲージメントセクション */}
       <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 tracking-widest uppercase mb-4 mt-8">2. Engagement & Retention</h2>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
         <div className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] col-span-2">
@@ -185,18 +209,6 @@ export default function DashboardClient({
             <span className="text-xs font-bold bg-orange-500/10 text-orange-500 px-2 py-1 rounded">記録数: {totalStudyRecordsToday}件</span>
           </div>
           <p className="text-4xl font-black text-slate-800 dark:text-white">{totalStudyMinutesToday} <span className="text-lg font-medium text-slate-400">分</span></p>
-        </div>
-        
-        <div className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e]">
-          <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400"><Users className="w-5 h-5 text-pink-500" /><h3 className="text-xs font-bold">Day 3 定着率</h3></div>
-          <p className="text-3xl font-black text-slate-800 dark:text-white">-- <span className="text-lg font-medium text-slate-400">%</span></p>
-          <p className="text-[10px] text-slate-400 mt-2">データ蓄積中...</p>
-        </div>
-
-        <div className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e]">
-          <div className="flex items-center gap-3 mb-2 text-slate-500 dark:text-slate-400"><Users className="w-5 h-5 text-rose-500" /><h3 className="text-xs font-bold">Day 7 定着率</h3></div>
-          <p className="text-3xl font-black text-slate-800 dark:text-white">-- <span className="text-lg font-medium text-slate-400">%</span></p>
-          <p className="text-[10px] text-slate-400 mt-2">データ蓄積中...</p>
         </div>
       </div>
     </div>
