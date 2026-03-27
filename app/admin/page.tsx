@@ -1,5 +1,5 @@
 import { createClient } from '../utils/supabase/server';
-// redirect を使わないため削除しました
+import { redirect } from 'next/navigation'; // 🌟 redirect を復活させました
 import { toggleAdminRole } from '../actions/admin';
 import { Users, Shield, Activity } from 'lucide-react';
 
@@ -9,15 +9,8 @@ export default async function AdminPage() {
   // 1. ログインユーザーの取得
   const { data: { user } } = await supabase.auth.getUser();
   
-  // 🚨 探知機1：ユーザー情報がない場合
-  if (!user) {
-    return (
-      <div className="p-20 text-center">
-        <h1 className="text-3xl font-black text-red-500 mb-4">🚨 エラー：未ログイン判定</h1>
-        <p className="text-slate-700">サーバー側にログインのクッキーが届いていません。</p>
-      </div>
-    );
-  }
+  // 🌟 修正1：未ログインならログイン画面へ自然に流す
+  if (!user) redirect('/login');
 
   // 2. プロフィールの取得
   const { data: profile } = await supabase
@@ -26,21 +19,11 @@ export default async function AdminPage() {
     .eq('id', user.id)
     .single();
 
-  // 🚨 探知機2：管理者ではない（またはデータが取れていない）場合
-  if (profile?.role !== 'admin') {
-    return (
-      <div className="p-20 text-center">
-        <h1 className="text-3xl font-black text-red-500 mb-4">🚨 エラー：管理者権限なし</h1>
-        <p className="text-slate-700 font-bold mb-2">あなたのID: {user.id}</p>
-        <p className="text-slate-700 font-bold">
-          DBから取得したrole: <span className="text-blue-600">{profile?.role || 'null（取得失敗）'}</span>
-        </p>
-      </div>
-    );
-  }
+  // 🌟 修正2：管理者でなければトップページ（マイ本棚）へ自然に弾き返す
+  if (profile?.role !== 'admin') redirect('/');
 
   // --------------------------------------------------------
-  // ここから下は元のコードと同じ（データ取得とUI表示）です
+  // データ取得とUI表示
   // --------------------------------------------------------
   const [
     { data: allUsers },
@@ -104,6 +87,8 @@ export default async function AdminPage() {
                 <th className="px-6 py-4 text-left text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">ユーザー</th>
                 <th className="px-6 py-4 text-left text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">権限</th>
                 <th className="px-6 py-4 text-left text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">操作</th>
+                {/* 🌟 修正3：詳細列の見出しを追加 */}
+                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">詳細</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#2c2c2e]">
@@ -129,6 +114,15 @@ export default async function AdminPage() {
                         </button>
                       </form>
                     )}
+                  </td>
+                  {/* 🌟 修正4：詳細ページへのリンクボタンを追加 */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <a 
+                      href={`/admin/users/${u.id}`} 
+                      className="text-sm font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                    >
+                      詳細を見る ➔
+                    </a>
                   </td>
                 </tr>
               ))}
