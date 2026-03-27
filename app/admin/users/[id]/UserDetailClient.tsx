@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { User, Clock, BookOpen, Users, MessageSquare, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon } from 'lucide-react';
-// 🌟 修正: 凡例(Legend)にパーセンテージを渡すため、古い書き方のCellを復活させます
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
@@ -13,14 +12,17 @@ export default function UserDetailClient({
   const [viewMode, setViewMode] = useState<'grid' | 'tabs'>('tabs');
   const [activeTab, setActiveTab] = useState<'study' | 'materials' | 'groups'>('study');
 
-  // --- 📊 円グラフ用のデータ集計 ---
+  // --- 🌟 改善: 円グラフ用のデータ集計（列名の総当り） ---
   const getPieChartData = () => {
     if (!studyRecords || studyRecords.length === 0) return [];
     const dataMap: Record<string, number> = {};
     let totalMinutes = 0;
+    
     studyRecords.forEach((record: any) => {
-      const title = record.title || record.name || 'タイトルなし';
-      const minutes = record.duration_minutes || 0; // 時間がない場合は0分としてカウント
+      // データベースの列名が何であっても拾えるように総当り
+      const title = record.title || record.name || record.subject || record.content || 'タイトルなし';
+      const minutes = Number(record.duration_minutes || record.duration || record.time || record.study_time || record.minutes || 0); 
+      
       dataMap[title] = (dataMap[title] || 0) + minutes;
       totalMinutes += minutes;
     });
@@ -29,10 +31,9 @@ export default function UserDetailClient({
       .map(key => ({ name: key, value: dataMap[key] }))
       .sort((a, b) => b.value - a.value);
 
-    // 🌟 修正: パーセンテージをデータに持たせる
     return sortedData.map((entry, index) => ({
       ...entry,
-      percentage: totalMinutes > 0 ? (entry.value / totalMinutes * 100).toFixed(1) : 0, 
+      percentage: totalMinutes > 0 ? ((entry.value / totalMinutes) * 100).toFixed(1) : 0, 
       fill: COLORS[index % COLORS.length]
     }));
   };
@@ -47,14 +48,12 @@ export default function UserDetailClient({
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                {/* 🌟 修正: 凡例表示のため<Cell>ループを Pie の子要素として復活 */}
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                   {pieData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderColor: '#2c2c2e', borderRadius: '8px', color: '#fff' }} formatter={(value: any) => [`${value} 分`, '学習時間']} />
-                {/* 🌟 修正: 凡例(Legend)にパーセンテージを追加 */}
                 <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} formatter={(value: any, entry: any) => `${value} (${entry.payload.percentage}%)`} />
               </PieChart>
             </ResponsiveContainer>
@@ -70,15 +69,19 @@ export default function UserDetailClient({
           <div className="p-4 text-xs text-red-500 font-mono">🚨 study_recordsエラー:<br/>{studyError}</div>
         ) : studyRecords && studyRecords.length > 0 ? (
           <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
-            {studyRecords.map((record: any) => (
-              <li key={record.id} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30">
-                <div className="flex justify-between items-center mb-1">
-                  <p className="text-sm font-bold text-slate-800 dark:text-white line-clamp-1">{record.title || record.name || 'タイトルなし'}</p>
-                  <span className="text-xs font-bold text-indigo-500">{record.duration_minutes || 0} 分</span>
-                </div>
-                <p className="text-[10px] text-slate-400 font-mono">{new Date(record.created_at).toLocaleString('ja-JP')}</p>
-              </li>
-            ))}
+            {studyRecords.map((record: any) => {
+              const title = record.title || record.name || record.subject || record.content || 'タイトルなし';
+              const minutes = Number(record.duration_minutes || record.duration || record.time || record.study_time || record.minutes || 0); 
+              return (
+                <li key={record.id} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-sm font-bold text-slate-800 dark:text-white line-clamp-1">{title}</p>
+                    <span className="text-xs font-bold text-indigo-500">{minutes} 分</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono">{new Date(record.created_at).toLocaleString('ja-JP')}</p>
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <div className="p-8 text-center text-slate-400 text-sm font-bold">学習記録がありません</div>
@@ -152,8 +155,7 @@ export default function UserDetailClient({
                     const isTargetUser = msg.user_id === targetUserId;
                     return (
                       <div key={msg.id} className={`flex flex-col max-w-[85%] ${isTargetUser ? 'self-end items-end' : 'self-start items-start'}`}>
-                        {/* 🌟 profiles結合データを利用してニックネームを表示 */}
-                        <span className="text-[10px] text-slate-400 mb-1">{msg.profiles?.nickname || '不明なユーザー'}</span>
+                        <span className="text-[10px] text-slate-400 mb-1">ユーザー</span>
                         <div className={`px-4 py-2 rounded-2xl text-sm ${isTargetUser ? 'bg-indigo-500 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-[#2c2c2e] text-slate-800 dark:text-white rounded-bl-sm'}`}>
                           {msg.content}
                         </div>

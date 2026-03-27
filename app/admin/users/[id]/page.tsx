@@ -17,36 +17,32 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 1. 学習記録 (study_logs と study_records)
-  // 🌟 user_id ではなく student_id に変更！
-  const { data: studyLogsData } = await supabase.from('study_logs').select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
-  const { data: studyRecordsData, error: studyError } = await supabase.from('study_records').select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+  // 🌟 無敵のデータ取得関数（user_id が無ければ student_id を自動で探す）
+  const fetchSafely = async (table: string) => {
+    let res = await supabase.from(table).select('*').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+    if (res.error && res.error.message.includes('does not exist')) {
+      res = await supabase.from(table).select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(30);
+    }
+    return res;
+  };
+
+  // 4つのテーブルから並行して安全にデータ取得
+  const [logsRes, recordsRes, calRes, matRes] = await Promise.all([
+    fetchSafely('study_logs'),
+    fetchSafely('study_records'),
+    fetchSafely('calendar_events'),
+    fetchSafely('materials')
+  ]);
+
+  // study_logs と study_records のデータを合体
+  const studyRecords = [...(logsRes.data || []), ...(recordsRes.data || [])];
   
-  const studyRecords = [...(studyLogsData || []), ...(studyRecordsData || [])];
+  // エラー文言の整理
+  let studyErrorMsg = null;
+  if (logsRes.error && recordsRes.error) studyErrorMsg = `${logsRes.error.message} / ${recordsRes.error.message}`;
 
-  // 2. カレンダー予定
-  const { data: calendarEvents, error: calendarError } = await supabase
-    .from('calendar_events')
-    .select('*')
-    .eq('student_id', targetUserId) 
-    .order('created_at', { ascending: false })
-    .limit(30);
-
-  // 3. 教材 (materials) 
-  // 🌟 エラー文の通り、user_id ではなく student_id に変更！
-  const { data: materials, error: materialsError } = await supabase
-    .from('materials')
-    .select('*')
-    .eq('student_id', targetUserId) 
-    .order('created_at', { ascending: false })
-    .limit(30);
-
-  // 4. グループとメッセージ
-  const { data: groupMembers, error: groupError } = await supabase
-    .from('group_members')
-    .select('group_id')
-    .eq('user_id', targetUserId); // group_membersはエラーが出ていないのでそのまま
-    
+  // グループとメッセージ
+  const { data: groupMembers, error: groupError } = await supabase.from('group_members').select('group_id').eq('user_id', targetUserId);
   let groupsWithMessages: any[] = [];
   
   if (groupMembers && groupMembers.length > 0) {
@@ -55,7 +51,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        // 🌟 パニックエラーを防ぐため、「profiles(nickname)」を外してシンプルに取得
         const { data: messages, error: msgError } = await supabase
           .from('messages')
           .select('id, content, created_at, user_id') 
@@ -83,11 +78,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       <UserDetailClient 
         userProfile={userProfile}
         studyRecords={studyRecords}
-        studyError={studyError?.message}
-        calendarEvents={calendarEvents}
-        calendarError={calendarError?.message}
-        materials={materials}
-        materialsError={materialsError?.message}
+        studyError={studyErrorMsg}
+        calendarEvents={calRes.data}
+        calendarError={calRes.error?.message}
+        materials={matRes.data}
+        materialsError={matRes.error?.message}
         groupsWithMessages={groupsWithMessages}
         groupError={groupError?.message}
         targetUserId={targetUserId}
