@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { User, Settings, Loader2, LogOut, CheckCircle2, Flame, Trophy, Clock, ChevronRight, Star, QrCode, Share2, X, Menu, Search, GraduationCap, Briefcase, PencilLine } from "lucide-react";
+import { User, Settings, Loader2, LogOut, CheckCircle2, Flame, Clock, ChevronRight, Star, QrCode, Share2, X, Menu, Search, GraduationCap, Briefcase } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-// 🌟 レベル計算ファイルをインポート
 import { calculateLevel, getLevelStartMinutes, getNextLevelMinutes } from "../../lib/levels";
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -13,7 +12,6 @@ const AVATAR_COLORS = [
   "bg-amber-500", "bg-rose-500", "bg-purple-500"
 ];
 
-// 🌟 爆速検索用大学リスト（オンボーディング画面と同じ、自由に追加可能）
 const UNIVERSITIES = [
   "東京大学", "京都大学", "大阪大学", "北海道大学", "東北大学", "名古屋大学", "九州大学",
   "筑波大学", "神戸大学", "横浜国立大学", "千葉大学", "広島大学", "岡山大学", "金沢大学", "熊本大学",
@@ -26,10 +24,9 @@ const UNIVERSITIES = [
   "成蹊大学", "成城大学", "明治学院大学", "國學院大学", "武蔵大学", "獨協大学",
   "芝浦工業大学", "東京電機大学", "工学院大学", "豊洲工業大学", "大阪工業大学",
   "南山大学", "中京大学", "名城大学", "愛知大学", "福岡大学", "西南学院大学",
-  "専門学校", "短大" // 自由に追加してください
+  "専門学校", "短大"
 ];
 
-// 🌟 プロフィールのサブ情報（大学や職業）を綺麗に整形する関数（既存）
 const getSubProfileText = (profile: any) => {
   if (!profile) return '';
   if (profile.user_type === 'student') {
@@ -47,21 +44,13 @@ export default function MyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [userEmail, setUserEmail] = useState("");
-  
-  // 🌟 ダークモード用のステート
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // プロフィール編集用ステート（全属性に拡張）
   const [nickname, setNickname] = useState("");
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
-  const [fullProfile, setFullProfile] = useState<any>(null); // 所属バッジ用
+  const [fullProfile, setFullProfile] = useState<any>(null); 
 
-  // 🌟 新規：姓名ステート（保存はreal_nameに結合）
-  const [lastName, setLastName] = useState("");
-  const [firstName, setFirstName] = useState("");
-  // カナはオンボーディングで無視されていたため、マイページでも無視します（不整合防止）
-  
-  // 🌟 新規：属性ステート
+  // 属性ステート
   const [age, setAge] = useState("");
   const [userType, setUserType] = useState('student');
   const [university, setUniversity] = useState("");
@@ -69,36 +58,26 @@ export default function MyPage() {
   const [occupation, setOccupation] = useState("");
 
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // 学習統計データ
   const [stats, setStats] = useState({ totalMinutes: 0, streak: 0 });
   
-  // QRコード/シェア、大学サジェスト
+  // モーダル管理用ステート
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false); // 🌟 編集モーダル用
   const [showUniDropdown, setShowUniDropdown] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState("");
 
-  // ==========================================
-  // 🌟 共通サイドバー呼び出し処理 (極限までシンプル化)
-  // ==========================================
+  // サイドバー管理
   const sidebarStartX = useRef<number | null>(null);
-
-  const handleEdgeTouchStart = (e: React.TouchEvent) => { 
-    sidebarStartX.current = e.touches[0].clientX; 
-  };
+  const handleEdgeTouchStart = (e: React.TouchEvent) => { sidebarStartX.current = e.touches[0].clientX; };
   const handleEdgeTouchMove = (e: React.TouchEvent) => { 
     if (sidebarStartX.current === null) return;
-    const diffX = e.touches[0].clientX - sidebarStartX.current;
-    if (diffX > 40) {
+    if (e.touches[0].clientX - sidebarStartX.current > 40) {
       window.dispatchEvent(new Event('openSidebar'));
       sidebarStartX.current = null; 
     }
   };
-  const handleEdgeTouchEnd = () => { 
-    sidebarStartX.current = null; 
-  };
-  // ==========================================
+  const handleEdgeTouchEnd = () => { sidebarStartX.current = null; };
 
   useEffect(() => {
     const getUserId = async () => {
@@ -108,21 +87,12 @@ export default function MyPage() {
     getUserId();
   }, []);
 
-  const profileUrl = typeof window !== 'undefined' && myUserId 
-    ? `${window.location.origin}/user/${myUserId}` 
-    : "";
+  const profileUrl = typeof window !== 'undefined' && myUserId ? `${window.location.origin}/user/${myUserId}` : "";
 
   const handleShareProfile = async () => {
     if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Study Tracker Profile',
-          text: '私のStudy Trackerのプロフィールを見てね！',
-          url: profileUrl,
-        });
-      } catch (error) {
-        console.error('Error sharing', error);
-      }
+      try { await navigator.share({ title: 'Study Tracker Profile', text: '私のプロフィールを見てね！', url: profileUrl }); } 
+      catch (error) { console.error('Error sharing', error); }
     } else {
       navigator.clipboard.writeText(profileUrl);
       setToastMessage("URLをコピーしました！");
@@ -130,12 +100,8 @@ export default function MyPage() {
     }
   };
 
-  // ダークモードの同期
   useEffect(() => {
-    const checkDarkMode = () => {
-      const savedMode = localStorage.getItem('dark_mode');
-      setIsDarkMode(savedMode === 'true');
-    };
+    const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     checkDarkMode();
     window.addEventListener('storage', checkDarkMode);
     window.addEventListener('darkModeChanged', checkDarkMode);
@@ -145,44 +111,20 @@ export default function MyPage() {
     };
   }, []);
 
-  useEffect(() => {
-    fetchProfileAndStats();
-  }, []);
+  useEffect(() => { fetchProfileAndStats(); }, []);
 
   const fetchProfileAndStats = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    if (!user) { router.push("/login"); return; }
     setUserEmail(user.email || "");
 
-    // 🌟 全属性を取得するように修正 (`profiles.real_name` が姓 名 セイ メイ に対応)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*') // 全カラム取得
-      .eq('id', user.id)
-      .single();
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
     if (profile) {
       setNickname(profile.nickname || "");
       setAvatarColor(profile.avatar_url || AVATAR_COLORS[0]);
-      setFullProfile(profile); // 所属バッジ用
-
-      // 🌟 姓名の分割（漢字のみ、カナは無視）
-      if (profile.real_name) {
-        const parts = profile.real_name.split(' ');
-        if (parts.length >= 2) {
-          setLastName(parts[0]);
-          setFirstName(parts.slice(1).join(' ')); // 名前にスペースが含まれる場合の考慮
-        } else {
-          setLastName(profile.real_name);
-          setFirstName("");
-        }
-      }
-
-      // 🌟 新規属性ステートのセット
+      setFullProfile(profile);
       setAge(profile.age || "");
       setUserType(profile.user_type || 'student');
       setUniversity(profile.university || "");
@@ -190,12 +132,7 @@ export default function MyPage() {
       setOccupation(profile.occupation || "");
     }
 
-    // 学習ログ同期・レベル計算
-    const { data: logs } = await supabase
-      .from('study_logs')
-      .select('duration_minutes, studied_at')
-      .eq('student_id', user.id)
-      .order('studied_at', { ascending: false });
+    const { data: logs } = await supabase.from('study_logs').select('duration_minutes, studied_at').eq('student_id', user.id).order('studied_at', { ascending: false });
 
     if (logs && logs.length > 0) {
       const totalMin = logs.reduce((sum, log) => sum + log.duration_minutes, 0);
@@ -210,9 +147,7 @@ export default function MyPage() {
         if (uniqueDates.includes(dateStr)) {
           streak++;
           checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
-        }
+        } else break;
       }
       setStats({ totalMinutes: totalMin, streak });
     }
@@ -224,39 +159,33 @@ export default function MyPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 🌟 漢字の姓名を結合
-    const fullName = `${lastName} ${firstName}`;
-
+    // 🌟 本名(real_name)は更新対象から外して変更不可に！
     const { error } = await supabase
       .from('profiles')
-      .upsert({ 
-        id: user.id, 
+      .update({ 
         nickname: nickname, 
         avatar_url: avatarColor,
-        // 🌟 新規属性を追加（upsert で全カラム保存）
-        real_name: fullName,
         age: age,
         user_type: userType,
-        university: userType === 'student' ? university : null, // 学生でなければnullに
-        grade: userType === 'student' ? grade : null, // 学生でなければnullに
-        occupation: userType === 'worker' ? occupation : null, // 社会人でなければnullに
+        university: userType === 'student' ? university : null,
+        grade: userType === 'student' ? grade : null,
+        occupation: userType === 'worker' ? occupation : null,
         updated_at: new Date().toISOString()
-      });
+      })
+      .eq('id', user.id);
 
     if (error) {
       alert("保存に失敗しました: " + error.message);
     } else {
       setShowSuccess(true);
+      setShowEditModal(false); // 🌟 保存成功時にモーダルを閉じる
       setTimeout(() => setShowSuccess(false), 3000);
-      fetchProfileAndStats(); // 所属バッジなどを更新
+      fetchProfileAndStats();
     }
     setIsSaving(false);
   };
 
-  // 🌟 爆速フィルター処理（オンボーディング画面と同じ）
-  const filteredUnis = university.trim() === '' 
-    ? [] 
-    : UNIVERSITIES.filter(uni => uni.includes(university)).slice(0, 10);
+  const filteredUnis = university.trim() === '' ? [] : UNIVERSITIES.filter(uni => uni.includes(university)).slice(0, 10);
 
   if (isLoading) return <div className={`text-center mt-20 font-bold animate-pulse ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>ステータス同期中...</div>;
 
@@ -265,7 +194,6 @@ export default function MyPage() {
   const nextLevelMin = getNextLevelMinutes(level);
   const progress = ((stats.totalMinutes - currentLevelMin) / (nextLevelMin - currentLevelMin)) * 100;
 
-  // ダークモード用CSS
   const bgPage = isDarkMode ? "bg-[#0a0a0a]" : "bg-slate-50";
   const bgCard = isDarkMode ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-slate-100";
   const bgSubCard = isDarkMode ? "bg-[#2c2c2e] border-[#38383a]" : "bg-slate-50 border-slate-100";
@@ -276,7 +204,6 @@ export default function MyPage() {
   return (
     <div className={`min-h-screen font-sans pb-32 transition-colors duration-300 ${bgPage}`}>
       
-      {/* 保存成功トースト */}
       {showSuccess && (
         <div className="fixed top-4 left-4 right-4 z-[100] bg-emerald-600 text-white p-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top duration-300 max-w-md mx-auto">
           <CheckCircle2 className="w-6 h-6" />
@@ -284,10 +211,8 @@ export default function MyPage() {
         </div>
       )}
 
-      {/* ヘッダーエリア：プロフィール表示（所属バッジ付き） */}
+      {/* ヘッダーエリア */}
       <div className={`relative px-6 pt-12 pb-10 rounded-b-[3rem] shadow-sm border-b mb-6 transition-colors duration-300 ${bgCard}`}>
-        
-        {/* メニューボタン */}
         <button onClick={() => window.dispatchEvent(new Event('openSidebar'))} className={`absolute top-6 left-6 p-2 rounded-xl transition-all active:scale-90 ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}><Menu className="w-6 h-6" /></button>
 
         <div className="max-w-md mx-auto flex items-center gap-6 mt-4">
@@ -296,19 +221,15 @@ export default function MyPage() {
           </div>
           <div>
             <h1 className={`text-2xl font-black transition-colors ${textMain}`}>{nickname || "ゲスト"}</h1>
-            
-            {/* 🌟 ここに所属バッジ（画像と同じ） */}
             {fullProfile && getSubProfileText(fullProfile) && (
               <div className={`inline-block mt-1 px-3 py-1 text-[10px] font-bold rounded-full ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-50 text-indigo-600'}`}>
                 {getSubProfileText(fullProfile)}
               </div>
             )}
-            
             <p className={`text-[10px] font-bold transition-colors mt-1.5 ${textSub}`}>{userEmail}</p>
           </div>
         </div>
 
-        {/* レベルカード */}
         <div className="max-w-md mx-auto mt-8 bg-[#111827] rounded-[2.5rem] p-6 text-white shadow-xl shadow-indigo-900/20">
           <div className="flex justify-between items-end mb-4">
             <div>
@@ -324,112 +245,110 @@ export default function MyPage() {
         </div>
       </div>
 
-      <main className="max-w-md mx-auto px-4 space-y-6">
+      <main className="max-w-md mx-auto px-4 space-y-4">
         
         {/* 統計クイックビュー */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-2">
           <div className={`p-5 rounded-3xl shadow-sm border flex flex-col items-center gap-1 transition-colors duration-300 ${bgCard}`}><Flame className={`w-6 h-6 ${stats.streak > 0 ? 'text-orange-500 animate-pulse' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} /><p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Streak</p><p className={`text-lg font-black ${textMain}`}>{stats.streak}日連続</p></div>
           <div className={`p-5 rounded-3xl shadow-sm border flex flex-col items-center gap-1 transition-colors duration-300 ${bgCard}`}><Clock className="w-6 h-6 text-blue-500" /><p className={`text-[10px] font-black uppercase tracking-widest ${textSub}`}>Total Time</p><p className={`text-lg font-black ${textMain}`}>{stats.totalMinutes}分</p></div>
         </div>
 
-        {/* 🌟 プロフィール編集（すべての属性に対応） */}
-        <section className={`p-6 md:p-8 rounded-[2.5rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
-          <div className={`flex items-center gap-2 mb-8 ${textMain}`}><Settings className="w-5 h-5 text-indigo-500" /><h2 className="font-black">プロフィール設定</h2></div>
-
-          {/* アバター色選択（既存） */}
-          <div className="mb-8 flex flex-col items-center"><div className={`flex gap-3 p-3 rounded-2xl border transition-colors ${bgSubCard}`}>{AVATAR_COLORS.map((color) => (<button key={color} onClick={() => setAvatarColor(color)} className={`w-8 h-8 rounded-xl ${color} border-2 transition-all ${avatarColor === color ? (isDarkMode ? 'border-white scale-110 shadow-md' : 'border-slate-800 scale-110 shadow-md') : 'border-transparent hover:scale-105'}`}/>))}</div></div>
-
-          <div className="space-y-6">
-            {/* ニックネーム（既存） */}
-            <div><label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Nickname</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="例: たろう" className={`w-full border-2 rounded-2xl px-5 py-4 font-bold outline-none transition-colors duration-300 ${bgInput}`} /></div>
-
-            <hr className="border-slate-100 dark:border-[#2c2c2e]" />
-
-            {/* 🌟 新規：お名前入力 */}
-            <div className="space-y-3">
-              <label className={`block text-[10px] font-black ml-1 uppercase tracking-widest ${textSub}`}>お名前（漢字）</label>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="姓（山田）" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} />
-                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="名（太郎）" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} />
-              </div>
-            </div>
-
-            {/* 🌟 新規：年齢 */}
-            <div><label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Age</label><input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="例: 20" min="10" max="100" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} /></div>
-
-            {/* 🌟 新規：ステータス選択 */}
-            <div>
-              <label className={`block text-[10px] font-black mb-3 ml-1 uppercase tracking-widest ${textSub}`}>Current Status</label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${userType === 'student' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-indigo-200'}`}><input type="radio" value="student" checked={userType === 'student'} onChange={(e) => setUserType(e.target.value)} className="hidden" /><GraduationCap className={`w-5 h-5 ${userType === 'student' ? 'text-indigo-500' : 'text-slate-400'}`} /><span className={`text-sm font-bold ${userType === 'student' ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500'}`}>学生</span></label>
-                <label className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${userType === 'worker' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-emerald-200'}`}><input type="radio" value="worker" checked={userType === 'worker'} onChange={(e) => setUserType(e.target.value)} className="hidden" /><Briefcase className={`w-5 h-5 ${userType === 'worker' ? 'text-emerald-500' : 'text-slate-400'}`} /><span className={`text-sm font-bold ${userType === 'worker' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>社会人・その他</span></label>
-              </div>
-            </div>
-
-            {/* 🌟 新規：学生用の入力 */}
-            {userType === 'student' && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
-                <div className="relative">
-                  <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>University / School</label>
-                  <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" value={university} onChange={(e) => { setUniversity(e.target.value); setShowUniDropdown(true); }} onFocus={() => setShowUniDropdown(true)} onBlur={() => setTimeout(() => setShowUniDropdown(false), 200)} className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl text-sm font-bold outline-none transition-all ${bgInput}`} placeholder="大学名を検索、または直接入力" /></div>
-                  
-                  {/* 爆速サジェスト機能 */}
-                  {showUniDropdown && university.trim() && (
-                    <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-[#2c2c2e] border border-slate-200 dark:border-[#38383a] rounded-xl shadow-xl max-h-48 overflow-y-auto no-scrollbar">
-                      {filteredUnis.length > 0 ? filteredUnis.map(uni => (<li key={uni} onMouseDown={(e) => e.preventDefault()} onClick={() => { setUniversity(uni); setShowUniDropdown(false); }} className="p-3 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">{uni}</li>)) : (<li className="p-3 text-sm font-bold text-slate-400 text-center">候補が見つかりません（そのまま入力可能）</li>)}
-                    </ul>
-                  )}
-                </div>
-                <div>
-                  <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Grade</label>
-                  <select value={grade} onChange={(e) => setGrade(e.target.value)} className={`w-full p-3 border-2 rounded-xl text-sm font-bold outline-none transition-all cursor-pointer ${bgInput}`}>
-                    <option value="">選択してください</option>
-                    <option value="大学1年生">大学1年生</option><option value="大学2年生">大学2年生</option><option value="大学3年生">大学3年生</option><option value="大学4年生">大学4年生</option><option value="大学院生">大学院生</option><option value="専門学生">専門学生</option><option value="その他学生">その他学生</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* 🌟 新規：社会人用の入力 */}
-            {userType === 'worker' && (
-              <div className="animate-in fade-in slide-in-from-top-4">
-                <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Occupation</label>
-                <input type="text" value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="例：ITエンジニア、弁護士、公務員など" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} />
-              </div>
-            )}
-
-            <button
-              onClick={handleSaveProfile}
-              disabled={isSaving || !nickname.trim()}
-              className={`w-full disabled:opacity-50 text-white font-black py-4 rounded-2xl shadow-lg transition-all flex justify-center items-center active:scale-95 ${isDarkMode ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-900 hover:bg-black'}`}
-            >
-              {isSaving ? <Loader2 className="animate-spin" /> : "変更を保存する"}
-            </button>
-          </div>
-        </section>
-
-        {/* 🌟 おまけ：マイ本棚と学習記録へのショートカット（画像に合わせる） */}
-        <button onClick={() => router.push('/materials')} className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all active:scale-95 mb-2 ${bgCard}`}>
-          <div className="flex items-center gap-4"><div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400"><PencilLine className="w-6 h-6" /></div><span className={`text-sm font-black ${textMain}`}>マイ本棚</span></div><ChevronRight className={`w-5 h-5 ${textSub}`} />
+        {/* 🌟 プロフィール編集ボタン (モーダルを開く) */}
+        <button onClick={() => setShowEditModal(true)} className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all active:scale-95 ${bgCard}`}>
+          <div className="flex items-center gap-4"><div className="p-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400"><Settings className="w-6 h-6" /></div><span className={`text-sm font-black ${textMain}`}>プロフィールを編集</span></div><ChevronRight className={`w-5 h-5 ${textSub}`} />
         </button>
 
-        <button onClick={() => setShowQrModal(true)} className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all active:scale-95 mb-2 ${bgCard}`}>
+        {/* QRコード/シェア */}
+        <button onClick={() => setShowQrModal(true)} className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all active:scale-95 ${bgCard}`}>
           <div className="flex items-center gap-4"><div className="p-2 bg-blue-100 dark:bg-blue-500/20 rounded-xl text-blue-600 dark:text-blue-400"><QrCode className="w-6 h-6" /></div><span className={`text-sm font-black ${textMain}`}>マイQRコード / シェア</span></div><ChevronRight className={`w-5 h-5 ${textSub}`} />
         </button>
 
         {/* ログアウト */}
-        <button
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.push("/login");
-          }}
-          className={`w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl transition-all active:scale-95 mb-10 ${isDarkMode ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' : 'bg-rose-50 hover:bg-rose-100 text-rose-600'}`}
-        >
-          <LogOut className="w-5 h-5" />
-          ログアウト
+        <button onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className={`w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl transition-all active:scale-95 mt-6 ${isDarkMode ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' : 'bg-rose-50 hover:bg-rose-100 text-rose-600'}`}>
+          <LogOut className="w-5 h-5" /> ログアウト
         </button>
 
       </main>
+
+      {/* =========================================
+          🌟 プロフィール編集モーダル (新規追加)
+      ========================================= */}
+      {showEditModal && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[300]" onClick={() => setShowEditModal(false)}></div>
+          <div className={`fixed bottom-0 left-0 right-0 z-[301] max-h-[85vh] overflow-y-auto no-scrollbar ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} rounded-t-[2.5rem] shadow-2xl p-6 md:p-8 animate-in slide-in-from-bottom duration-300`}>
+            
+            <div className="flex justify-between items-center mb-6">
+              <h3 className={`text-lg font-black ${textMain}`}>プロフィール編集</h3>
+              <button onClick={() => setShowEditModal(false)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'}`}><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* アバター色選択 */}
+            <div className="mb-6 flex flex-col items-center">
+              <div className={`flex gap-3 p-3 rounded-2xl border transition-colors ${bgSubCard}`}>
+                {AVATAR_COLORS.map((color) => (
+                  <button key={color} onClick={() => setAvatarColor(color)} className={`w-8 h-8 rounded-xl ${color} border-2 transition-all ${avatarColor === color ? (isDarkMode ? 'border-white scale-110 shadow-md' : 'border-slate-800 scale-110 shadow-md') : 'border-transparent hover:scale-105'}`}/>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-6 pb-6">
+              {/* ニックネーム */}
+              <div><label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Nickname</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="例: たろう" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} /></div>
+
+              {/* 年齢 */}
+              <div><label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Age</label><input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="例: 20" min="10" max="100" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} /></div>
+
+              {/* ステータス選択 */}
+              <div>
+                <label className={`block text-[10px] font-black mb-3 ml-1 uppercase tracking-widest ${textSub}`}>Current Status</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${userType === 'student' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-indigo-200'}`}><input type="radio" value="student" checked={userType === 'student'} onChange={(e) => setUserType(e.target.value)} className="hidden" /><GraduationCap className={`w-5 h-5 ${userType === 'student' ? 'text-indigo-500' : 'text-slate-400'}`} /><span className={`text-sm font-bold ${userType === 'student' ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500'}`}>学生</span></label>
+                  <label className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${userType === 'worker' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-emerald-200'}`}><input type="radio" value="worker" checked={userType === 'worker'} onChange={(e) => setUserType(e.target.value)} className="hidden" /><Briefcase className={`w-5 h-5 ${userType === 'worker' ? 'text-emerald-500' : 'text-slate-400'}`} /><span className={`text-sm font-bold ${userType === 'worker' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>社会人</span></label>
+                </div>
+              </div>
+
+              {/* 学生用の入力 */}
+              {userType === 'student' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                  <div className="relative">
+                    <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>University / School</label>
+                    <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" value={university} onChange={(e) => { setUniversity(e.target.value); setShowUniDropdown(true); }} onFocus={() => setShowUniDropdown(true)} onBlur={() => setTimeout(() => setShowUniDropdown(false), 200)} className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl text-sm font-bold outline-none transition-all ${bgInput}`} placeholder="大学名" /></div>
+                    {showUniDropdown && university.trim() && (
+                      <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-[#2c2c2e] border border-slate-200 dark:border-[#38383a] rounded-xl shadow-xl max-h-48 overflow-y-auto no-scrollbar">
+                        {filteredUnis.length > 0 ? filteredUnis.map(uni => (<li key={uni} onMouseDown={(e) => e.preventDefault()} onClick={() => { setUniversity(uni); setShowUniDropdown(false); }} className="p-3 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors">{uni}</li>)) : (<li className="p-3 text-sm font-bold text-slate-400 text-center">候補が見つかりません</li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Grade</label>
+                    <select value={grade} onChange={(e) => setGrade(e.target.value)} className={`w-full p-3 border-2 rounded-xl text-sm font-bold outline-none transition-all cursor-pointer ${bgInput}`}>
+                      <option value="">選択してください</option>
+                      <option value="大学1年生">大学1年生</option><option value="大学2年生">大学2年生</option><option value="大学3年生">大学3年生</option><option value="大学4年生">大学4年生</option><option value="大学院生">大学院生</option><option value="専門学生">専門学生</option><option value="その他学生">その他学生</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* 社会人用の入力 */}
+              {userType === 'worker' && (
+                <div className="animate-in fade-in slide-in-from-top-4">
+                  <label className={`block text-[10px] font-black mb-2 ml-1 uppercase tracking-widest ${textSub}`}>Occupation</label>
+                  <input type="text" value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="例：ITエンジニア" className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-bold outline-none transition-colors duration-300 ${bgInput}`} />
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveProfile}
+                disabled={isSaving || !nickname.trim()}
+                className={`w-full disabled:opacity-50 text-white font-black py-4 rounded-xl shadow-lg transition-all flex justify-center items-center active:scale-95 ${isDarkMode ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-slate-900 hover:bg-black'}`}
+              >
+                {isSaving ? <Loader2 className="animate-spin" /> : "変更を保存する"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* QRコードモーダル（既存） */}
       {showQrModal && (
