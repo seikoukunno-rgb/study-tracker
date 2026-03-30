@@ -34,45 +34,64 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const studyRecords = [...(logsRes.data || []), ...(recordsRes.data || [])];
   const materials = matRes.data || [];
 
-  const { data: groupMembers } = await supabase.from('group_members').select('group_id').eq('user_id', targetUserId);
+  // 🌟 新規追加：フォローとフォロワーの取得（カラム名のブレを防ぐ安全設計）
+  let followersRes = await supabase.from('follows').select('*').eq('following_id', targetUserId);
+  if (followersRes.error) followersRes = await supabase.from('follows').select('*').eq('followed_id', targetUserId);
+  
+  let followingRes = await supabase.from('follows').select('*').eq('follower_id', targetUserId);
+  if (followingRes.error) followingRes = await supabase.from('follows').select('*').eq('user_id', targetUserId);
+
+  const followerIds = (followersRes.data || []).map(f => f.follower_id || f.user_id).filter(Boolean);
+  const followingIds = (followingRes.data || []).map(f => f.following_id || f.followed_id || f.target_id).filter(Boolean);
+
+  const { data: followerProfiles } = await supabase.from('profiles').select('id, nickname').in('id', followerIds.length > 0 ? followerIds : ['dummy']);
+  const { data: followingProfiles } = await supabase.from('profiles').select('id, nickname').in('id', followingIds.length > 0 ? followingIds : ['dummy']);
+
+  const followers = followerIds.map(id => followerProfiles?.find(p => p.id === id) || { id, nickname: '不明なユーザー' });
+  const following = followingIds.map(id => followingProfiles?.find(p => p.id === id) || { id, nickname: '不明なユーザー' });
+
+
+  // 🌟 修正：グループ、メンバー、メッセージの取得
+  const { data: groupMembers } = await supabase.from('group_members').select('group_id, user_id').eq('user_id', targetUserId);
   let groupsWithMessages: any[] = [];
   
   if (groupMembers && groupMembers.length > 0) {
-    const { data: groups } = await supabase.from('groups').select('*').in('id', groupMembers.map(gm => gm.group_id));
+    const groupIds = groupMembers.map(gm => gm.group_id);
+    const { data: groups } = await supabase.from('groups').select('*').in('id', groupIds);
     
+    // グループの全メンバーIDを一括取得
+    const { data: allMembersData } = await supabase.from('group_members').select('*').in('group_id', groupIds);
+    const allMemberUserIds = [...new Set((allMembersData || []).map(m => m.user_id).filter(Boolean))];
+    const { data: allMemberProfiles } = await supabase.from('profiles').select('id, nickname').in('id', allMemberUserIds.length > 0 ? allMemberUserIds : ['dummy']);
+
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
         let messagesData: any[] = [];
         let msgErrorMessage: string | undefined | null = null;
 
-        // 🌟 修正：TypeScriptが怒らないように、別々の変数として結果を受け取る
-        const primaryMsgRes = await supabase
-          .from('messages')
-          .select('id, content, created_at, user_id, profiles(nickname)')
-          .eq('room_id', group.id) // 🌟 画像で判明した room_id を使用
-          .order('created_at', { ascending: false })
-          .limit(30);
+        const primaryMsgRes = await supabase.from('messages').select('id, content, created_at, user_id, profiles(nickname)').eq('room_id', group.id).order('created_at', { ascending: false }).limit(30);
         
         if (primaryMsgRes.error) {
-          // エラーが起きたら、シンプルな取得に切り替える（フォールバック）
-          const fallbackMsgRes = await supabase
-            .from('messages')
-            .select('id, content, created_at, user_id')
-            .eq('room_id', group.id)
-            .order('created_at', { ascending: false })
-            .limit(30);
-
+          const fallbackMsgRes = await supabase.from('messages').select('id, content, created_at, user_id').eq('room_id', group.id).order('created_at', { ascending: false }).limit(30);
           messagesData = fallbackMsgRes.data || [];
           msgErrorMessage = fallbackMsgRes.error?.message || primaryMsgRes.error.message;
         } else {
-          // 成功したらそのまま使う
           messagesData = primaryMsgRes.data || [];
         }
+
+        // このグループのメンバーを割り当て
+        const membersOfThisGroup = (allMembersData || [])
+          .filter(m => m.group_id === group.id)
+          .map(m => ({
+            ...m,
+            profiles: allMemberProfiles?.find(p => p.id === m.user_id) || { nickname: 'ユーザー' }
+          }));
 
         return { 
           ...group, 
           messages: messagesData,
-          msgError: msgErrorMessage
+          msgError: msgErrorMessage,
+          members: membersOfThisGroup // 🌟 追加
         };
       }));
     }
@@ -89,6 +108,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         calendarEvents={calRes.data}
         materials={materials}
         groupsWithMessages={groupsWithMessages}
+        followers={followers} // 🌟 追加
+        following={following} // 🌟 追加
         targetUserId={targetUserId}
       />
     </div>
