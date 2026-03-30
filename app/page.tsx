@@ -208,6 +208,22 @@ export default function Home() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/login"); return; }
 
+    // ==========================================
+    // 🌟 ここに追加！【関所システム】
+    // ユーザーのプロフィールを確認し、設定が終わってなければ強制送還
+    // ==========================================
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_setup_completed')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile?.is_setup_completed) {
+      router.push('/onboarding');
+      return; // ここで処理をストップ！下には進ませない
+    }
+    // ==========================================
+
     const { data: matData } = await supabase.from('materials').select('*').eq('student_id', user.id).order('created_at', { ascending: false });
     if (matData) setMaterials(matData);
 
