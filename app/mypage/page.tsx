@@ -13,6 +13,19 @@ const AVATAR_COLORS = [
   "bg-amber-500", "bg-rose-500", "bg-purple-500"
 ];
 
+// 🌟 新規追加：プロフィールのサブ情報（大学や職業）を綺麗に整形する関数
+const getSubProfileText = (profile: any) => {
+  if (!profile) return '';
+  if (profile.user_type === 'student') {
+    const uni = profile.university || '';
+    const grade = profile.grade || '';
+    return `${uni} ${grade}`.trim() || '学生';
+  } else if (profile.user_type === 'worker') {
+    return profile.occupation || '社会人・その他';
+  }
+  return '';
+};
+
 export default function MyPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -25,6 +38,7 @@ export default function MyPage() {
   // プロフィール情報
   const [nickname, setNickname] = useState("");
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
+  const [fullProfile, setFullProfile] = useState<any>(null); // 🌟 新規追加：プロフィール全体を保持するステート
   const [showSuccess, setShowSuccess] = useState(false);
 
   // 学習統計データ
@@ -117,7 +131,7 @@ export default function MyPage() {
     
     setUserEmail(user.email || "");
 
-    // 1. プロフィール情報を取得
+    // 1. プロフィール情報を取得 (SELECT * なので新しいカラムも全部取れています)
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
@@ -127,6 +141,7 @@ export default function MyPage() {
     if (profile) {
       setNickname(profile.nickname || "");
       setAvatarColor(profile.avatar_url || AVATAR_COLORS[0]);
+      setFullProfile(profile); // 🌟 プロフィール全体を保存
     }
 
     // 2. 学習ログを取得して統計（レベル・ストリーク）を計算
@@ -233,11 +248,19 @@ export default function MyPage() {
           </div>
           <div>
             <h1 className={`text-2xl font-black transition-colors ${textMain}`}>{nickname || "ゲスト"}</h1>
-            <p className={`text-xs font-bold transition-colors ${textSub}`}>{userEmail}</p>
+            
+            {/* 🌟 ここが新規追加：大学名・職業のバッジ */}
+            {fullProfile && getSubProfileText(fullProfile) && (
+              <div className={`inline-block mt-1 px-3 py-1 text-[10px] font-bold rounded-full ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-50 text-indigo-600'}`}>
+                {getSubProfileText(fullProfile)}
+              </div>
+            )}
+            
+            <p className={`text-[10px] font-bold transition-colors mt-1.5 ${textSub}`}>{userEmail}</p>
           </div>
         </div>
 
-        {/* レベルカード (このカードは常にダークトーンでカッコよく表示) */}
+        {/* レベルカード */}
         <div className="max-w-md mx-auto mt-8 bg-[#111827] rounded-[2.5rem] p-6 text-white shadow-xl shadow-indigo-900/20">
           <div className="flex justify-between items-end mb-4">
             <div>
@@ -367,7 +390,7 @@ export default function MyPage() {
                   fgColor={"#4f46e5"}
                   level={"H"} 
                   imageSettings={{
-                    src: "/logo.png", // 🌟 保存したペンと月のロゴ
+                    src: "/logo.png",
                     height: 48,
                     width: 48,
                     excavate: true,
@@ -397,25 +420,9 @@ export default function MyPage() {
         </div>
       )}
 
-      {/* =========================================================
-          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
-      ========================================================= */}
-      
-      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
-      <div
-        onTouchStart={handleEdgeTouchStart}
-        onTouchMove={handleEdgeTouchMove}
-        onTouchEnd={handleEdgeTouchEnd}
-        className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
-      />
-
-      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
-      <button
-        onClick={() => window.dispatchEvent(new Event('openSidebar'))}
-        className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
-          isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
-        } backdrop-blur-sm group`}
-      >
+      {/* スワイプエリア */}
+      <div onTouchStart={handleEdgeTouchStart} onTouchMove={handleEdgeTouchMove} onTouchEnd={handleEdgeTouchEnd} className="fixed top-0 left-0 bottom-0 w-6 z-[30]" />
+      <button onClick={() => window.dispatchEvent(new Event('openSidebar'))} className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'} backdrop-blur-sm group`}>
         <div className={`w-1 h-10 rounded-full transition-colors ${isDarkMode ? 'bg-slate-400/50 group-hover:bg-white' : 'bg-slate-500/50 group-hover:bg-white'}`} />
       </button>
 
