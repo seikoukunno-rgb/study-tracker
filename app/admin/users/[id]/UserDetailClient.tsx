@@ -1,11 +1,24 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus, ChevronRight } from 'lucide-react';
+import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus, ChevronRight, ShieldAlert } from 'lucide-react';
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
-import Link from 'next/link'; // 🌟 リンク機能を使用
+import Link from 'next/link';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
+
+// 🌟 所属情報を整形する関数（管理者画面用）
+const getSubProfileText = (profile: any) => {
+  if (!profile) return '';
+  if (profile.user_type === 'student') {
+    const uni = profile.university || '';
+    const grade = profile.grade || '';
+    return `${uni} ${grade}`.trim() || '学生';
+  } else if (profile.user_type === 'worker') {
+    return profile.occupation || '社会人・その他';
+  }
+  return '未設定';
+};
 
 export default function UserDetailClient({ userProfile, studyRecords, calendarEvents, materials, groupsWithMessages, followers, following, targetUserId }: any) {
   const [viewMode, setViewMode] = useState<'grid' | 'tabs'>('tabs');
@@ -73,22 +86,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           </ul>
         ) : <div className="p-8 text-center text-slate-400 text-sm font-bold">学習記録がありません</div>}
       </div>
-
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
-        <div className="p-4 border-b border-slate-100 dark:border-[#2c2c2e] bg-slate-50 dark:bg-[#2c2c2e]/30">
-           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> カレンダー登録予定</h3>
-        </div>
-        {calendarEvents && calendarEvents.length > 0 ? (
-          <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
-            {calendarEvents.map((ev: any) => (
-              <li key={ev.id} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30">
-                <p className="text-sm font-bold text-slate-800 dark:text-white">{ev.title || ev.name || '予定タイトルなし'}</p>
-                <p className="text-[10px] text-slate-400 font-mono mt-1">{new Date(ev.created_at).toLocaleString('ja-JP')}</p>
-              </li>
-            ))}
-          </ul>
-        ) : <div className="p-8 text-center text-slate-400 text-sm font-bold">カレンダーの予定がありません</div>}
-      </div>
     </div>
   );
 
@@ -144,7 +141,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
     </div>
   );
 
-  // 🌟 修正：つながりセクションのユーザーを「クリック可能なリンク」に変更
   const ConnectionsSection = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
@@ -190,14 +186,42 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
   return (
     <>
       <div className="bg-white dark:bg-[#1c1c1e] p-6 md:p-8 rounded-3xl shadow-lg border border-slate-100 dark:border-[#2c2c2e] mb-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-        <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 shrink-0"><User className="w-10 h-10 md:w-12 md:h-12 text-slate-400" /></div>
+        <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 shrink-0">
+          <User className="w-10 h-10 md:w-12 md:h-12 text-slate-400" />
+        </div>
+        
         <div className="flex-1 text-center sm:text-left w-full">
-          <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start mb-2 sm:mb-0">
+          <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start mb-2 sm:mb-0 w-full">
             <div>
-              <h1 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white mb-1">{userProfile.nickname || '名前未設定'}</h1>
-              <p className="text-[10px] md:text-xs font-mono text-slate-400 mb-2">ID: {userProfile.id}</p>
+              {/* 🌟 ニックネームと年齢 */}
+              <div className="flex items-baseline justify-center sm:justify-start gap-3 mb-2">
+                <h1 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
+                  {userProfile.nickname || '名前未設定'}
+                </h1>
+                {userProfile.age && (
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400">{userProfile.age}歳</span>
+                )}
+              </div>
+              
+              {/* 🌟 本名、所属、IDの各種バッジ */}
+              <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 mb-3">
+                <p className="text-[10px] md:text-xs font-mono text-slate-400">ID: {userProfile.id}</p>
+                
+                {/* 本名バッジ (管理者専用の非公開情報であることを強調) */}
+                {userProfile.real_name && (
+                  <div className="px-2 py-0.5 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[10px] font-black rounded border border-rose-100 dark:border-rose-500/20 flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3" /> 本名: {userProfile.real_name}
+                  </div>
+                )}
+
+                {/* 属性・所属バッジ */}
+                <div className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black rounded border border-indigo-100 dark:border-indigo-500/20">
+                  {getSubProfileText(userProfile)}
+                </div>
+              </div>
             </div>
           </div>
+          
           <div className="flex justify-center sm:justify-start gap-4 mt-2">
             <span className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300">フォロワー: <span className="text-blue-500">{followers?.length || 0}</span></span>
             <span className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300">フォロー中: <span className="text-blue-500">{following?.length || 0}</span></span>
