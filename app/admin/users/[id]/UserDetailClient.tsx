@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus, ChevronRight, ShieldAlert } from 'lucide-react';
-// 🌟 Legend のインポートは残していても問題ありませんが、使用箇所を削除しました
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import Link from 'next/link';
 
@@ -60,11 +59,9 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                {/* 🌟 修正ポイント: labelは無し、Legendコンポーネントも削除してスッキリさせました */}
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" nameKey="name">
                   {pieData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                 </Pie>
-                {/* ホバー時（タップ時）のツールチップのみ残しています */}
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderRadius: '8px', color: '#fff', border: '1px solid #333' }} formatter={(value: any, name: any) => [`${value} 分`, name]} />
               </PieChart>
             </ResponsiveContainer>
@@ -102,10 +99,16 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
                   <div>
                     <span className="font-black text-sm text-slate-800 dark:text-white block">{group.name || '名称未設定グループ'}</span>
                     <div className="flex flex-wrap gap-1 mt-1">
+                      {/* 🌟 修正ポイント：メンバーバッジを「クリック可能なリンク」に変更 */}
                       {group.members?.map((m: any, idx: number) => (
-                        <span key={idx} className="text-[9px] px-1.5 py-0.5 bg-slate-200 dark:bg-[#38383a] text-slate-600 dark:text-slate-300 rounded">
+                        <Link 
+                          key={idx} 
+                          href={`/admin/users/${m.user_id}`} 
+                          onClick={(e) => e.stopPropagation()} // アコーディオンの開閉を防ぐ魔法
+                          className="text-[9px] px-1.5 py-0.5 bg-slate-200 dark:bg-[#38383a] text-slate-600 dark:text-slate-300 rounded hover:bg-indigo-500 hover:text-white transition-colors"
+                        >
                           {m.profiles?.nickname || '不明'}
-                        </span>
+                        </Link>
                       ))}
                     </div>
                   </div>
@@ -113,17 +116,33 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
                 <span className="text-xs text-pink-500 font-bold group-open:hidden self-end sm:self-auto shrink-0">チャットを見る ▼</span>
                 <span className="text-xs text-pink-500 font-bold hidden group-open:block self-end sm:self-auto shrink-0">閉じる ▲</span>
               </summary>
-              <div className="p-4 border-t border-slate-100 dark:border-[#38383a] bg-white dark:bg-[#1c1c1e] max-h-[400px] overflow-y-auto flex flex-col-reverse gap-3">
+              <div className="p-4 border-t border-slate-100 dark:border-[#38383a] bg-white dark:bg-[#1c1c1e] max-h-[500px] overflow-y-auto flex flex-col-reverse gap-4">
                 {group.messages.length > 0 ? (
                   group.messages.map((msg: any) => {
                     const isTargetUser = msg.user_id === targetUserId;
                     return (
-                      <div key={msg.id} className={`flex flex-col max-w-[85%] ${isTargetUser ? 'self-end items-end' : 'self-start items-start'}`}>
-                        <span className="text-[10px] text-slate-400 mb-1">{msg.profiles?.nickname || 'ユーザー'}</span>
-                        <div className={`px-4 py-2 rounded-2xl text-sm ${isTargetUser ? 'bg-indigo-500 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-[#2c2c2e] text-slate-800 dark:text-white rounded-bl-sm'}`}>
-                          {msg.content}
+                      // 🌟 修正ポイント：チャットのレイアウトにアイコンを追加し、横並びに変更
+                      <div key={msg.id} className={`flex gap-2 max-w-[85%] ${isTargetUser ? 'self-end flex-row-reverse' : 'self-start'}`}>
+                        
+                        {/* アバターアイコン（クリックでユーザー詳細へ飛ぶ） */}
+                        <Link href={`/admin/users/${msg.user_id}`} className="shrink-0 mt-1">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden transition-all hover:ring-2 hover:ring-indigo-500 ${isTargetUser ? 'bg-indigo-100' : 'bg-slate-100 dark:bg-[#38383a]'}`}>
+                            <User className={`w-3 h-3 ${isTargetUser ? 'text-indigo-400' : 'text-slate-400'}`} />
+                          </div>
+                        </Link>
+
+                        <div className={`flex flex-col ${isTargetUser ? 'items-end' : 'items-start'}`}>
+                          {/* ニックネーム（クリックでユーザー詳細へ飛ぶ） */}
+                          <Link href={`/admin/users/${msg.user_id}`} className="text-[10px] text-slate-400 mb-1 hover:text-indigo-500 transition-colors">
+                            {msg.profiles?.nickname || 'ユーザー'}
+                          </Link>
+                          
+                          <div className={`px-4 py-2 text-sm shadow-sm ${isTargetUser ? 'bg-indigo-500 text-white rounded-2xl rounded-tr-sm' : 'bg-slate-100 dark:bg-[#2c2c2e] text-slate-800 dark:text-white rounded-2xl rounded-tl-sm'}`}>
+                            {msg.content}
+                          </div>
+                          
+                          <span className="text-[9px] text-slate-400 mt-1">{new Date(msg.created_at).toLocaleString('ja-JP')}</span>
                         </div>
-                        <span className="text-[9px] text-slate-400 mt-1">{new Date(msg.created_at).toLocaleString('ja-JP')}</span>
                       </div>
                     );
                   })
