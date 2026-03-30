@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus } from 'lucide-react';
+import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus, ChevronRight } from 'lucide-react';
 import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import Link from 'next/link'; // 🌟 リンク機能を使用
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
 
@@ -72,6 +73,22 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           </ul>
         ) : <div className="p-8 text-center text-slate-400 text-sm font-bold">学習記録がありません</div>}
       </div>
+
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-[#2c2c2e] bg-slate-50 dark:bg-[#2c2c2e]/30">
+           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-blue-500" /> カレンダー登録予定</h3>
+        </div>
+        {calendarEvents && calendarEvents.length > 0 ? (
+          <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
+            {calendarEvents.map((ev: any) => (
+              <li key={ev.id} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30">
+                <p className="text-sm font-bold text-slate-800 dark:text-white">{ev.title || ev.name || '予定タイトルなし'}</p>
+                <p className="text-[10px] text-slate-400 font-mono mt-1">{new Date(ev.created_at).toLocaleString('ja-JP')}</p>
+              </li>
+            ))}
+          </ul>
+        ) : <div className="p-8 text-center text-slate-400 text-sm font-bold">カレンダーの予定がありません</div>}
+      </div>
     </div>
   );
 
@@ -86,7 +103,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
                   <div className="p-2 bg-pink-500/10 rounded-lg"><MessageSquare className="w-4 h-4 text-pink-500" /></div>
                   <div>
                     <span className="font-black text-sm text-slate-800 dark:text-white block">{group.name || '名称未設定グループ'}</span>
-                    {/* 🌟 メンバー一覧のバッジ */}
                     <div className="flex flex-wrap gap-1 mt-1">
                       {group.members?.map((m: any, idx: number) => (
                         <span key={idx} className="text-[9px] px-1.5 py-0.5 bg-slate-200 dark:bg-[#38383a] text-slate-600 dark:text-slate-300 rounded">
@@ -128,7 +144,7 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
     </div>
   );
 
-  // 🌟 新規追加：つながり（フォロー/フォロワー）セクション
+  // 🌟 修正：つながりセクションのユーザーを「クリック可能なリンク」に変更
   const ConnectionsSection = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e] overflow-hidden">
@@ -137,9 +153,14 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
         </div>
         <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
           {followers && followers.length > 0 ? followers.map((f: any, i: number) => (
-            <li key={i} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#38383a] flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>
-              <span className="text-sm font-bold text-slate-800 dark:text-white">{f.nickname}</span>
+            <li key={i}>
+              <Link href={`/admin/users/${f.id}`} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30 flex items-center justify-between transition-colors group">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#38383a] flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>
+                  <span className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-blue-500 transition-colors">{f.nickname}</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+              </Link>
             </li>
           )) : <li className="p-8 text-center text-slate-400 text-sm font-bold">フォロワーはいません</li>}
         </ul>
@@ -151,9 +172,14 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
         </div>
         <ul className="divide-y divide-slate-100 dark:divide-[#2c2c2e] max-h-64 overflow-y-auto">
           {following && following.length > 0 ? following.map((f: any, i: number) => (
-            <li key={i} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#38383a] flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>
-              <span className="text-sm font-bold text-slate-800 dark:text-white">{f.nickname}</span>
+            <li key={i}>
+              <Link href={`/admin/users/${f.id}`} className="p-4 hover:bg-slate-50 dark:hover:bg-[#2c2c2e]/30 flex items-center justify-between transition-colors group">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#38383a] flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>
+                  <span className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-blue-500 transition-colors">{f.nickname}</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+              </Link>
             </li>
           )) : <li className="p-8 text-center text-slate-400 text-sm font-bold">フォローしていません</li>}
         </ul>
@@ -172,7 +198,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
               <p className="text-[10px] md:text-xs font-mono text-slate-400 mb-2">ID: {userProfile.id}</p>
             </div>
           </div>
-          {/* プロフィール下部にフォロー/フォロワー数のサマリーを追加 */}
           <div className="flex justify-center sm:justify-start gap-4 mt-2">
             <span className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300">フォロワー: <span className="text-blue-500">{followers?.length || 0}</span></span>
             <span className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300">フォロー中: <span className="text-blue-500">{following?.length || 0}</span></span>
@@ -192,7 +217,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           <button onClick={() => setActiveTab('study')} className={`px-4 py-2 whitespace-nowrap font-bold text-sm ${activeTab === 'study' ? 'border-b-2 border-indigo-500 text-indigo-500' : 'text-slate-500'}`}><Clock className="w-4 h-4 inline mr-1" /> 学習と予定</button>
           <button onClick={() => setActiveTab('materials')} className={`px-4 py-2 whitespace-nowrap font-bold text-sm ${activeTab === 'materials' ? 'border-b-2 border-emerald-500 text-emerald-500' : 'text-slate-500'}`}><BookOpen className="w-4 h-4 inline mr-1" /> 教材履歴</button>
           <button onClick={() => setActiveTab('groups')} className={`px-4 py-2 whitespace-nowrap font-bold text-sm ${activeTab === 'groups' ? 'border-b-2 border-pink-500 text-pink-500' : 'text-slate-500'}`}><Users className="w-4 h-4 inline mr-1" /> グループ</button>
-          {/* 🌟 新規追加：つながりタブ */}
           <button onClick={() => setActiveTab('connections')} className={`px-4 py-2 whitespace-nowrap font-bold text-sm ${activeTab === 'connections' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-slate-500'}`}><UserPlus className="w-4 h-4 inline mr-1" /> つながり</button>
         </div>
 
@@ -212,7 +236,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
            </div>
         )}
         {activeTab === 'groups' && <GroupSection />}
-        {/* 🌟 新規追加：つながりセクションの呼び出し */}
         {activeTab === 'connections' && <ConnectionsSection />}
       </div>
     </>
