@@ -10,14 +10,10 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
   const [viewMode, setViewMode] = useState<'grid' | 'tabs'>('tabs');
   const [activeTab, setActiveTab] = useState<'study' | 'materials' | 'groups'>('study');
 
-  // 🌟 魔法の関数：学習記録のIDから、取得したmaterialsリストを照らし合わせて名前を特定する
   const getRecordTitle = (record: any) => {
-    // 1. もし記録自体に名前があればそれを採用
     if (record.title || record.name || record.subject) return record.title || record.name || record.subject;
-    // 2. materials の中から、該当する教材を探し出す
     const linkedMaterial = materials?.find((m: any) => m.id === record.material_id || m.id === record.book_id);
     if (linkedMaterial) return linkedMaterial.name || linkedMaterial.title;
-    // 3. それでも無ければ
     return '名称未設定';
   };
 
@@ -27,7 +23,7 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
     let totalMinutes = 0;
     
     studyRecords.forEach((record: any) => {
-      const title = getRecordTitle(record); // 👆上で作った魔法の関数を使用
+      const title = getRecordTitle(record); 
       const minutes = Number(record.duration_minutes || record.duration || record.time || 0); 
       dataMap[title] = (dataMap[title] || 0) + minutes;
       totalMinutes += minutes;
@@ -50,10 +46,14 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" nameKey="name">
                   {pieData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                 </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderRadius: '8px', color: '#fff' }} formatter={(value: any) => [`${value} 分`, '学習時間']} />
+                {/* 🌟 修正：ホバーした時に教材名（name）が表示されるようにしました！ */}
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1c1c1e', borderRadius: '8px', color: '#fff', border: '1px solid #333' }} 
+                  formatter={(value: any, name: any) => [`${value} 分`, name]} 
+                />
                 <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} formatter={(value: any, entry: any) => `${value} (${entry.payload.percentage}%)`} />
               </PieChart>
             </ResponsiveContainer>
@@ -124,7 +124,9 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
                     );
                   })
                 ) : (
-                  <div className="text-center text-xs text-slate-400 py-4">メッセージがありません</div>
+                  <div className="text-center text-xs text-slate-400 py-4">
+                    {group.msgError ? `🚨 エラー: ${group.msgError}` : 'メッセージがありません'}
+                  </div>
                 )}
               </div>
               <div className="p-3 bg-slate-100 dark:bg-[#2c2c2e]/80 text-center text-[10px] text-slate-500 font-bold border-t border-slate-200 dark:border-[#38383a]">

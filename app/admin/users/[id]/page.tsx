@@ -16,7 +16,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
   if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
 
-  // 安全なデータ取得関数
   const fetchSafely = async (table: string) => {
     let res = await supabase.from(table).select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(50);
     if (res.error && res.error.message.includes('does not exist')) {
@@ -35,7 +34,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const studyRecords = [...(logsRes.data || []), ...(recordsRes.data || [])];
   const materials = matRes.data || [];
 
-  // グループとメッセージの取得
   const { data: groupMembers } = await supabase.from('group_members').select('group_id').eq('user_id', targetUserId);
   let groupsWithMessages: any[] = [];
   
@@ -44,21 +42,30 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     
     if (groups) {
       groupsWithMessages = await Promise.all(groups.map(async (group) => {
-        
-        // 🌟 修正：TypeScriptエラーを避けるため、変数を分けて定義
         let messagesData: any[] = [];
         let msgErrorMessage: string | undefined | null = null;
 
-        // 1. プロフィール名付きで取得を試みる
-        const primaryMsgRes = await supabase.from('messages').select('id, content, created_at, user_id, profiles(nickname)').eq('group_id', group.id).order('created_at', { ascending: false }).limit(30);
+        // 🌟 修正：TypeScriptが怒らないように、別々の変数として結果を受け取る
+        const primaryMsgRes = await supabase
+          .from('messages')
+          .select('id, content, created_at, user_id, profiles(nickname)')
+          .eq('room_id', group.id) // 🌟 画像で判明した room_id を使用
+          .order('created_at', { ascending: false })
+          .limit(30);
         
         if (primaryMsgRes.error) {
-          // 2. エラーが起きたら、シンプルな取得に切り替える（フォールバック）
-          const fallbackMsgRes = await supabase.from('messages').select('id, content, created_at, user_id').eq('group_id', group.id).order('created_at', { ascending: false }).limit(30);
+          // エラーが起きたら、シンプルな取得に切り替える（フォールバック）
+          const fallbackMsgRes = await supabase
+            .from('messages')
+            .select('id, content, created_at, user_id')
+            .eq('room_id', group.id)
+            .order('created_at', { ascending: false })
+            .limit(30);
+
           messagesData = fallbackMsgRes.data || [];
           msgErrorMessage = fallbackMsgRes.error?.message || primaryMsgRes.error.message;
         } else {
-          // 3. 成功したらそのまま使う
+          // 成功したらそのまま使う
           messagesData = primaryMsgRes.data || [];
         }
 
