@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { User, Clock, BookOpen, Users, LayoutGrid, Smartphone, CalendarDays, PieChart as PieChartIcon, MessageSquare, UserPlus, ChevronRight, ShieldAlert } from 'lucide-react';
-import { PieChart, Pie, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+// 🌟 Legend のインポートは残していても問題ありませんが、使用箇所を削除しました
+import { PieChart, Pie, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import Link from 'next/link';
 
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
 
-// 🌟 所属情報を整形する関数（管理者画面用）
 const getSubProfileText = (profile: any) => {
   if (!profile) return '';
   if (profile.user_type === 'student') {
@@ -60,11 +60,12 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
+                {/* 🌟 修正ポイント: labelは無し、Legendコンポーネントも削除してスッキリさせました */}
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" nameKey="name">
                   {pieData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                 </Pie>
+                {/* ホバー時（タップ時）のツールチップのみ残しています */}
                 <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderRadius: '8px', color: '#fff', border: '1px solid #333' }} formatter={(value: any, name: any) => [`${value} 分`, name]} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} formatter={(value: any, entry: any) => `${value} (${entry.payload.percentage}%)`} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -193,7 +194,6 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
         <div className="flex-1 text-center sm:text-left w-full">
           <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start mb-2 sm:mb-0 w-full">
             <div>
-              {/* 🌟 ニックネームと年齢 */}
               <div className="flex items-baseline justify-center sm:justify-start gap-3 mb-2">
                 <h1 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
                   {userProfile.nickname || '名前未設定'}
@@ -203,18 +203,15 @@ export default function UserDetailClient({ userProfile, studyRecords, calendarEv
                 )}
               </div>
               
-              {/* 🌟 本名、所属、IDの各種バッジ */}
               <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 mb-3">
                 <p className="text-[10px] md:text-xs font-mono text-slate-400">ID: {userProfile.id}</p>
                 
-                {/* 本名バッジ (管理者専用の非公開情報であることを強調) */}
                 {userProfile.real_name && (
                   <div className="px-2 py-0.5 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[10px] font-black rounded border border-rose-100 dark:border-rose-500/20 flex items-center gap-1">
                     <ShieldAlert className="w-3 h-3" /> 本名: {userProfile.real_name}
                   </div>
                 )}
 
-                {/* 属性・所属バッジ */}
                 <div className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black rounded border border-indigo-100 dark:border-indigo-500/20">
                   {getSubProfileText(userProfile)}
                 </div>
