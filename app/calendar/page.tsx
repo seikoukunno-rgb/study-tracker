@@ -140,10 +140,18 @@ export default function CalendarPage() {
         
         if (diffMinutes >= 0 && diffMinutes < 1 && !localStorage.getItem(notifiedKey)) {
           if (Notification.permission === "granted") {
-            new Notification("STUDY TRACKER", { 
-              body: `📚 ${notify.title} の時間です！学習を始めましょう！`, 
-              icon: "/favicon.ico" 
-            });
+            const timeString = new Date(notify.time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            
+            // 🌟 TSのエラーを回避するために、一旦 'any' 型としてオプションを定義します
+            const notificationOptions: any = { 
+              body: `📚「${notify.title}」の予定時刻（${timeString}）です！\nタップして学習を始めましょう🔥`, 
+              icon: "/logo.png", 
+              badge: "/logo.png", 
+              vibrate: [200, 100, 200, 100, 200], 
+              requireInteraction: true 
+            };
+
+            new Notification("Mercury リマインダー", notificationOptions);
             localStorage.setItem(notifiedKey, "true");
           }
         }
