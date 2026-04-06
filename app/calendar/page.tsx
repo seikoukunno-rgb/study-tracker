@@ -390,7 +390,20 @@ export default function CalendarPage() {
         );
         if (res.ok) {
           const data = await res.json();
-          const gEvent = data.items?.find((i: any) => i.summary === evToDelete.title && (i.start?.date === evToDelete.date || i.start?.dateTime?.startsWith(evToDelete.date)));
+          const gEvent = data.items?.find((i: any) => {
+            if (i.summary !== evToDelete.title) return false;
+            // 終日予定の場合
+            if (i.start?.date === evToDelete.date) return true;
+            // 🌟 修正：UTCのズレによる削除失敗を防ぐため、日本時間の日付文字列に変換して比較
+            if (i.start?.dateTime) {
+              const eventStartDate = new Date(i.start.dateTime);
+              const pad = (n: number) => String(n).padStart(2, '0');
+              const eventDateStr = `${eventStartDate.getFullYear()}-${pad(eventStartDate.getMonth() + 1)}-${pad(eventStartDate.getDate())}`;
+              return eventDateStr === evToDelete.date;
+            }
+            return false;
+          });
+          
           if (gEvent) {
             const delRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${gEvent.id}`, { 
               method: 'DELETE', 
@@ -398,7 +411,6 @@ export default function CalendarPage() {
             });
             if (delRes.ok) googleDeleted = true;
           }
-        } else {
           setGoogleToken(null);
         }
       } catch (e) { console.error(e); }
