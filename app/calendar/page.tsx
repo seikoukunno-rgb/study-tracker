@@ -690,13 +690,32 @@ let notifyTimeDisplay = "通知設定済み";
                         <div>
                           <p className={`text-sm font-black line-clamp-1 ${event.is_completed ? `line-through ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}` : (event.event_type === 'exam' ? 'text-rose-500' : textMain)}`}>{event.title}</p>
                           
-{/* 🌟 アイコンデザインを統一し、横並びにまとめる */}
-<div className="flex flex-wrap gap-2 mt-2 pointer-events-auto">
-  {event.notify_time && (
-    <div className={`px-2 py-1 rounded-full text-[10px] font-black flex items-center gap-1 w-fit ${event.is_completed ? 'bg-slate-200/50 text-slate-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
-      <Bell className="w-3 h-3" /> {notifyTimeDisplay}
-    </div>
-  )}
+<div className="flex flex-wrap gap-2 mt-2">
+                            {reminders
+                              .filter(rem => rem.task_id === event.id) 
+                              .map(rem => {
+                                const rDate = new Date(rem.remind_at);
+                                const [y, m, d] = event.date.split('-').map(Number);
+                                const eventDate = new Date(y, m - 1, d);
+                                const notifyDateObj = new Date(rDate.getFullYear(), rDate.getMonth(), rDate.getDate());
+                                const diffDays = Math.round((eventDate.getTime() - notifyDateObj.getTime()) / (1000 * 60 * 60 * 24));
+                                
+                                let dayPrefix = "";
+                                if (diffDays === 0) dayPrefix = "当日 ";
+                                else if (diffDays === 1) dayPrefix = "前日 ";
+                                else if (diffDays === 2) dayPrefix = "2日前 ";
+                                else if (diffDays === 7) dayPrefix = "1週間前 ";
+                                else if (diffDays > 0) dayPrefix = `${diffDays}日前 `;
+                                else if (diffDays < 0) dayPrefix = `${Math.abs(diffDays)}日後 `;
+
+                                return (
+                                  <div key={rem.id} className="px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-[10px] font-black flex items-center gap-1">
+                                    <Bell className="w-3 h-3" />
+                                    {dayPrefix}{rDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                );
+                              })}
+                        
   
   {reminders
     .filter(rem => rem.task_id === event.id) 
