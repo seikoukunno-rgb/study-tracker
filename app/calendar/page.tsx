@@ -142,7 +142,6 @@ export default function CalendarPage() {
           if (Notification.permission === "granted") {
             const timeString = new Date(notify.time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
             
-            // 🌟 TSのエラーを回避するために、一旦 'any' 型としてオプションを定義します
             const notificationOptions: any = { 
               body: `📚「${notify.title}」の予定時刻（${timeString}）です！\nタップして学習を始めましょう🔥`, 
               icon: "/logo.png", 
@@ -203,7 +202,6 @@ export default function CalendarPage() {
     if (error) alert("Google連携エラー: " + error.message);
   };
 
-  // 🌟 エラー詳細がわかるように改良
   const getOrCreateStudyTrackerCalendar = async (token: string) => {
     const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -245,22 +243,51 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error("AUTH_ERROR");
 
       const googleData = await res.json();
-      const existingTitles = googleData.items?.map((i:any) => i.summary) || [];
       let syncCount = 0;
 
       for (const ev of events) {
-        if (existingTitles.includes(ev.title)) continue;
+        const isAlreadySynced = googleData.items?.some((i:any) => {
+          if (i.summary !== ev.title) return false;
+          if (i.start?.date === ev.date) return true;
+          if (i.start?.dateTime) {
+            const dt = new Date(i.start.dateTime);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` === ev.date;
+          }
+          return false;
+        });
+
+        if (isAlreadySynced) continue;
+
         const [y, m, d] = ev.date.split('-').map(Number);
-        const nextDay = new Date(y, m - 1, d + 1);
-        const endDateStr = formatDateStr(nextDay);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        let bodyObj: any = { summary: ev.title, description: "StudyTrackerから追加" };
+
+        if (ev.notify_time) {
+          const nDate = new Date(ev.notify_time);
+          const startTimeStr = `${y}-${pad(m)}-${pad(d)}T${pad(nDate.getHours())}:${pad(nDate.getMinutes())}:00+09:00`;
+          const eDate = new Date(new Date(startTimeStr).getTime() + 3600000);
+          const endTimeStr = `${eDate.getFullYear()}-${pad(eDate.getMonth() + 1)}-${pad(eDate.getDate())}T${pad(eDate.getHours())}:${pad(eDate.getMinutes())}:00+09:00`;
+          bodyObj.start = { dateTime: startTimeStr, timeZone: 'Asia/Tokyo' };
+          bodyObj.end = { dateTime: endTimeStr, timeZone: 'Asia/Tokyo' };
+        } else {
+          const nextDay = new Date(y, m - 1, d + 1);
+          const endDateStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`;
+          bodyObj.start = { date: ev.date };
+          bodyObj.end = { date: endDateStr };
+        }
 
         const postRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ summary: ev.title, start: { date: ev.date }, end: { date: endDateStr } })
+          body: JSON.stringify(bodyObj)
         });
         
         if (postRes.ok) syncCount++;
+        else {
+          const errText = await postRes.text();
+          alert(`【同期エラー】${ev.title} の同期に失敗しました:\n${errText}`);
+        }
       }
       setToastMessage(`${syncCount}件の予定をGoogleに同期しました！`);
       setTimeout(() => setToastMessage(null), 3000);
@@ -277,10 +304,11 @@ export default function CalendarPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-        let calculatedNotifyTime = null;
+    let calculatedNotifyTime = null;
     let googleStartTime = null;
     let googleEndTime = null;
     const targetDate = new Date(selectedDate);
+    
     if (notifyOption !== "none") {
       if (notifyOption === "custom") {
         targetDate.setDate(targetDate.getDate() - customOffsetDays);
@@ -291,13 +319,12 @@ export default function CalendarPage() {
       else if (notifyOption === "prev2_2100") { targetDate.setDate(targetDate.getDate() - 2); targetDate.setHours(21, 0, 0, 0); } 
       else if (notifyOption === "week_1000") { targetDate.setDate(targetDate.getDate() - 7); targetDate.setHours(10, 0, 0, 0); } 
       
-      calculatedNotifyTime = targetDate.toISOString(); // Supabase保存用（UTC）
+      calculatedNotifyTime = targetDate.toISOString();
 
-      // 🌟 Google Calendar API専用に「日本時間(+09:00)」の文字列を明示的に作成
       const pad = (n: number) => String(n).padStart(2, '0');
       googleStartTime = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}T${pad(targetDate.getHours())}:${pad(targetDate.getMinutes())}:00+09:00`;
       
-      const eDate = new Date(targetDate.getTime() + 3600000); // 1時間後を終了時刻に
+      const eDate = new Date(targetDate.getTime() + 3600000); 
       googleEndTime = `${eDate.getFullYear()}-${pad(eDate.getMonth() + 1)}-${pad(eDate.getDate())}T${pad(eDate.getHours())}:${pad(eDate.getMinutes())}:00+09:00`;
     }
 
@@ -316,6 +343,7 @@ export default function CalendarPage() {
         const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
         const [y, m, d] = formatDateStr(selectedDate).split('-').map(Number);
         const nextDay = new Date(y, m - 1, d + 1);
+        const pad = (n: number) => String(n).padStart(2, '0');
         
         const googleEvent = {
           summary: newEventTitle,
@@ -325,8 +353,9 @@ export default function CalendarPage() {
             : { date: formatDateStr(selectedDate) },
           end: googleEndTime 
             ? { dateTime: googleEndTime, timeZone: 'Asia/Tokyo' } 
-            : { date: formatDateStr(nextDay) },
+            : { date: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}` },
         };
+        
         const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
@@ -336,9 +365,9 @@ export default function CalendarPage() {
         if (res.ok) {
           googleSynced = true;
         } else {
-          // 🌟 401/403ならトークン切れ、400ならデータ形式エラーとしてログを出す
           const errText = await res.text();
           console.error("Google Calendar Error:", errText);
+          alert(`【Google追加エラー】\n${errText}`);
           if (res.status === 401 || res.status === 403) setGoogleToken(null);
         }
       } catch (e) { console.error("Google Sync Catch Error", e); }
@@ -347,7 +376,6 @@ export default function CalendarPage() {
     if (!error) {
       fetchData(); 
       setShowAddModal(false);
-      // 🌟 トークンがあるのに同期失敗した場合はわかりやすいメッセージを出す
       if (currentToken && !googleSynced) {
         setToastMessage("アプリに保存しました。Google反映に失敗したため再連携してください。");
       } else {
@@ -382,23 +410,24 @@ export default function CalendarPage() {
       try {
         const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
         const [y, m, d] = evToDelete.date.split('-').map(Number);
-        const timeMin = new Date(y, m - 2, 1).toISOString(); 
-        const timeMax = new Date(y, m + 1, 0).toISOString(); 
+        
+        // 🌟 URLエンコード漏れ修正：timeMinとtimeMaxを安全な形式に変換
+        const timeMin = encodeURIComponent(new Date(y, m - 2, 1).toISOString()); 
+        const timeMax = encodeURIComponent(new Date(y, m + 1, 0).toISOString()); 
         
         const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true`,
           { headers: { 'Authorization': `Bearer ${currentToken}` } }
         );
+        
         if (res.ok) {
           const data = await res.json();
           const gEvent = data.items?.find((i: any) => {
             if (i.summary !== evToDelete.title) return false;
-            // 終日予定の場合
             if (i.start?.date === evToDelete.date) return true;
-            // 🌟 修正：UTCのズレによる削除失敗を防ぐため、日本時間の日付文字列に変換して比較
             if (i.start?.dateTime) {
-              const eventStartDate = new Date(i.start.dateTime);
+              const dt = new Date(i.start.dateTime);
               const pad = (n: number) => String(n).padStart(2, '0');
-              const eventDateStr = `${eventStartDate.getFullYear()}-${pad(eventStartDate.getMonth() + 1)}-${pad(eventStartDate.getDate())}`;
+              const eventDateStr = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
               return eventDateStr === evToDelete.date;
             }
             return false;
@@ -411,7 +440,13 @@ export default function CalendarPage() {
             });
             if (delRes.ok) googleDeleted = true;
           }
-          setGoogleToken(null);
+        } else {
+          if (res.status === 401 || res.status === 403) {
+            setGoogleToken(null);
+            alert("Googleとの連携が切れました。再度「Google連携」ボタンを押してください。");
+          } else {
+            alert(`Googleカレンダーの検索に失敗しました: ${res.status}`);
+          }
         }
       } catch (e) { console.error(e); }
     }
@@ -431,7 +466,11 @@ export default function CalendarPage() {
 
     setShowReminderModal(false);
 
-    const baseDate = selectedReminderTask.date ? new Date(selectedReminderTask.date) : new Date();
+    const baseDate = new Date();
+    if (selectedReminderTask.date) {
+      const [y, m, d] = selectedReminderTask.date.split('-').map(Number);
+      baseDate.setFullYear(y, m - 1, d);
+    }
     baseDate.setDate(baseDate.getDate() + remindOffset);
     baseDate.setHours(remindHour, remindMinute, 0, 0);
     const finalIsoTime = baseDate.toISOString(); 
@@ -460,8 +499,10 @@ export default function CalendarPage() {
           const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
           const [y, m, d] = selectedReminderTask.date.split('-').map(Number);
           const targetDate = new Date(y, m - 1, d);
-          const timeMin = new Date(targetDate.getTime() - 86400000 * 2).toISOString(); 
-          const timeMax = new Date(targetDate.getTime() + 86400000 * 2).toISOString(); 
+          
+          // 🌟 URLエンコード漏れ修正
+          const timeMin = encodeURIComponent(new Date(targetDate.getTime() - 86400000 * 2).toISOString()); 
+          const timeMax = encodeURIComponent(new Date(targetDate.getTime() + 86400000 * 2).toISOString()); 
           
           const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true`,
             { headers: { 'Authorization': `Bearer ${currentToken}` } }
@@ -501,8 +542,10 @@ export default function CalendarPage() {
 
               if (patchRes.ok) googleSynced = true;
             }
-          } else if (res.status === 401 || res.status === 403) {
-            setGoogleToken(null);
+          } else {
+            if (res.status === 401 || res.status === 403) {
+              setGoogleToken(null);
+            }
           }
         } catch(e) { console.error("Google Sync Error", e) }
       }
@@ -627,7 +670,7 @@ export default function CalendarPage() {
                 const mat = materials.find(m => m.title === event.title);
                 const matImageUrl = mat?.image_url;
 
-let notifyTimeDisplay = "通知設定済み";
+                let notifyTimeDisplay = "通知設定済み";
                 if (event.notify_time) {
                   const nDate = new Date(event.notify_time);
                   if (!isNaN(nDate.getTime())) {
@@ -647,6 +690,7 @@ let notifyTimeDisplay = "通知設定済み";
                     notifyTimeDisplay = `${dayPrefix}${nDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} に通知`;
                   }
                 }
+
                 return (
                   <div key={event.id} className={`relative rounded-2xl overflow-hidden mb-3 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`}>
                     
@@ -711,7 +755,8 @@ let notifyTimeDisplay = "通知設定済み";
                         )}
                         <div>
                           <p className={`text-sm font-black line-clamp-1 ${event.is_completed ? `line-through ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}` : (event.event_type === 'exam' ? 'text-rose-500' : textMain)}`}>{event.title}</p>
-              <div className="flex flex-wrap gap-2 mt-2">
+                          
+                          <div className="flex flex-wrap gap-2 mt-2">
                             {reminders
                               .filter(rem => rem.task_id === event.id) 
                               .map(rem => {
@@ -736,10 +781,15 @@ let notifyTimeDisplay = "通知設定済み";
                                   </div>
                                 );
                               })}
-                          </div>            
+                          </div>
 
-
-
+                          <div className="flex items-center gap-2 mt-1 pointer-events-auto">
+                            {event.notify_time && (
+                              <p className={`text-[10px] font-bold flex items-center gap-1 ${event.is_completed ? 'text-slate-400' : 'text-indigo-400'}`}>
+                                <Bell className="w-3 h-3" /> {notifyTimeDisplay}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                       
@@ -923,19 +973,19 @@ let notifyTimeDisplay = "通知設定済み";
                 </button>
               ))}
             </div>
-{/* 🌟 時計UIをコンパクト化（p-4, mb-4, gap-2, text-4xl 等へ縮小） */}
-<div className={`rounded-3xl p-4 mb-4 flex items-center justify-center gap-4 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
-   <div className="flex flex-col items-center gap-2">
-     <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
-     <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
-     <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
-   </div>
-   <span className="text-3xl sm:text-4xl font-black text-indigo-500 pb-1 animate-pulse">:</span>
-   <div className="flex flex-col items-center gap-2">
-     <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
-     <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
-     <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
-   </div>
+            <p className="text-xs font-black text-slate-500 mb-2 mt-2">何時に通知しますか？</p>
+            <div className={`rounded-3xl p-4 mb-4 flex items-center justify-center gap-4 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
+               <div className="flex flex-col items-center gap-2">
+                 <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+                 <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
+                 <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+               </div>
+               <span className="text-3xl sm:text-4xl font-black text-indigo-500 pb-1 animate-pulse">:</span>
+               <div className="flex flex-col items-center gap-2">
+                 <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+                 <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
+                 <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+               </div>
             </div>
             <button onClick={handleSaveReminder} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95">
               <Bell className="w-5 h-5" /> 通知をセットする
