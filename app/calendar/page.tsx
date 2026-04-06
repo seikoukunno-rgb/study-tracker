@@ -277,7 +277,7 @@ export default function CalendarPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    let calculatedNotifyTime = null;
+   let calculatedNotifyTime = null;
     const targetDate = new Date(selectedDate);
     if (notifyOption !== "none") {
       if (notifyOption === "custom") {
@@ -286,6 +286,8 @@ export default function CalendarPage() {
       } else if (notifyOption === "today_0700") targetDate.setHours(7, 0, 0, 0);
       else if (notifyOption === "today_2000") targetDate.setHours(20, 0, 0, 0);
       else if (notifyOption === "prev_2100") { targetDate.setDate(targetDate.getDate() - 1); targetDate.setHours(21, 0, 0, 0); }
+      else if (notifyOption === "prev2_2100") { targetDate.setDate(targetDate.getDate() - 2); targetDate.setHours(21, 0, 0, 0); } // 🌟追加
+      else if (notifyOption === "week_1000") { targetDate.setDate(targetDate.getDate() - 7); targetDate.setHours(10, 0, 0, 0); } // 🌟追加
       calculatedNotifyTime = targetDate.toISOString();
     }
 
@@ -689,8 +691,7 @@ let notifyTimeDisplay = "通知設定済み";
                         )}
                         <div>
                           <p className={`text-sm font-black line-clamp-1 ${event.is_completed ? `line-through ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}` : (event.event_type === 'exam' ? 'text-rose-500' : textMain)}`}>{event.title}</p>
-                          
-<div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                             {reminders
                               .filter(rem => rem.task_id === event.id) 
                               .map(rem => {
@@ -709,23 +710,14 @@ let notifyTimeDisplay = "通知設定済み";
                                 else if (diffDays < 0) dayPrefix = `${Math.abs(diffDays)}日後 `;
 
                                 return (
-                                  <div key={rem.id} className="px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-[10px] font-black flex items-center gap-1">
+                                  <div key={rem.id} className={`px-2 py-1 rounded-full text-[10px] font-black flex items-center gap-1 w-fit ${event.is_completed ? 'bg-slate-200/50 text-slate-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
                                     <Bell className="w-3 h-3" />
                                     {dayPrefix}{rDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
                                   </div>
                                 );
                               })}
-                        
-  
-  {reminders
-    .filter(rem => rem.task_id === event.id) 
-    .map(rem => (
-      <div key={rem.id} className={`px-2 py-1 rounded-full text-[10px] font-black flex items-center gap-1 w-fit ${event.is_completed ? 'bg-slate-200/50 text-slate-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
-        <Bell className="w-3 h-3" />
-        {new Date(rem.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </div>
-  ))}
-</div>
+                          </div>            
+
 
 
                         </div>
