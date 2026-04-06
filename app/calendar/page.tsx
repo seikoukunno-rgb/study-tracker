@@ -195,6 +195,7 @@ export default function CalendarPage() {
     if (error) alert("Google連携エラー: " + error.message);
   };
 
+  // 🌟 エラー詳細がわかるように改良
   const getOrCreateStudyTrackerCalendar = async (token: string) => {
     const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -296,6 +297,7 @@ export default function CalendarPage() {
         const [y, m, d] = formatDateStr(selectedDate).split('-').map(Number);
         const nextDay = new Date(y, m - 1, d + 1);
         
+        // 🌟 修正の要：タイムゾーンの指定を削除（toISOString は Z=UTC を含むため不要かつエラーの元）
         const googleEvent = {
           summary: newEventTitle,
           description: "StudyTrackerアプリから追加されました",
@@ -316,6 +318,7 @@ export default function CalendarPage() {
         if (res.ok) {
           googleSynced = true;
         } else {
+          // 🌟 401/403ならトークン切れ、400ならデータ形式エラーとしてログを出す
           const errText = await res.text();
           console.error("Google Calendar Error:", errText);
           if (res.status === 401 || res.status === 403) setGoogleToken(null);
@@ -326,6 +329,7 @@ export default function CalendarPage() {
     if (!error) {
       fetchData(); 
       setShowAddModal(false);
+      // 🌟 トークンがあるのに同期失敗した場合はわかりやすいメッセージを出す
       if (currentToken && !googleSynced) {
         setToastMessage("アプリに保存しました。Google反映に失敗したため再連携してください。");
       } else {
@@ -666,24 +670,25 @@ export default function CalendarPage() {
                         <div>
                           <p className={`text-sm font-black line-clamp-1 ${event.is_completed ? `line-through ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}` : (event.event_type === 'exam' ? 'text-rose-500' : textMain)}`}>{event.title}</p>
                           
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {reminders
-                              .filter(rem => rem.task_id === event.id) 
-                              .map(rem => (
-                                <div key={rem.id} className="px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-[10px] font-black flex items-center gap-1">
-                                  <Bell className="w-3 h-3" />
-                                  {new Date(rem.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                            ))}
-                          </div>
+{/* 🌟 アイコンデザインを統一し、横並びにまとめる */}
+<div className="flex flex-wrap gap-2 mt-2 pointer-events-auto">
+  {event.notify_time && (
+    <div className={`px-2 py-1 rounded-full text-[10px] font-black flex items-center gap-1 w-fit ${event.is_completed ? 'bg-slate-200/50 text-slate-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
+      <Bell className="w-3 h-3" /> {notifyTimeDisplay}
+    </div>
+  )}
+  
+  {reminders
+    .filter(rem => rem.task_id === event.id) 
+    .map(rem => (
+      <div key={rem.id} className={`px-2 py-1 rounded-full text-[10px] font-black flex items-center gap-1 w-fit ${event.is_completed ? 'bg-slate-200/50 text-slate-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
+        <Bell className="w-3 h-3" />
+        {new Date(rem.remind_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </div>
+  ))}
+</div>
 
-                          <div className="flex items-center gap-2 mt-1 pointer-events-auto">
-                            {event.notify_time && (
-                              <p className={`text-[10px] font-bold flex items-center gap-1 ${event.is_completed ? 'text-slate-400' : 'text-indigo-400'}`}>
-                                <Bell className="w-3 h-3" /> {notifyTimeDisplay}
-                              </p>
-                            )}
-                          </div>
+
                         </div>
                       </div>
                       
@@ -842,51 +847,45 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* 🌟 修正したリマインダー設定モーダル */}
       {showReminderModal && selectedReminderTask && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowReminderModal(false)} />
           <div className={`fixed bottom-0 left-0 right-0 z-[201] rounded-t-[2.5rem] p-6 animate-in slide-in-from-bottom flex flex-col max-h-[90vh] overflow-y-auto ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-6">
               <h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>リマインダーを追加</h2>
               <button onClick={() => setShowReminderModal(false)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
-            <div className={`p-4 rounded-2xl mb-4 border flex items-start gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-indigo-50 border-indigo-100'}`}>
+            <div className={`p-4 rounded-2xl mb-6 border flex items-start gap-3 ${isDarkMode ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-indigo-50 border-indigo-100'}`}>
               <Book className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
               <div>
                 <p className="text-[10px] font-black text-indigo-500 mb-1">対象課題</p>
                 <p className={`text-sm font-bold line-clamp-2 ${isDarkMode ? 'text-indigo-100' : 'text-indigo-900'}`}>{selectedReminderTask.title || selectedReminderTask.subject}</p>
               </div>
             </div>
-            
-            <p className="text-xs font-black text-slate-500 mb-2 mt-2">いつ通知しますか？</p>
-            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+            <p className="text-xs font-black text-slate-500 mb-3 mt-4">いつ通知しますか？</p>
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {[ { label: "1週間前", value: -7 }, { label: "前日", value: -1 }, { label: "当日", value: 0 }, { label: "明日", value: 1 }, { label: "2日後", value: 2 } ].map(day => (
                 <button key={day.label} onClick={() => setRemindOffset(day.value)} className={`whitespace-nowrap px-6 py-3 rounded-2xl text-sm font-bold transition-all ${remindOffset === day.value ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : isDarkMode ? 'bg-[#2c2c2e] text-slate-400 hover:text-slate-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>
                   {day.label}
                 </button>
               ))}
             </div>
-            
-            <p className="text-xs font-black text-slate-500 mb-2 mt-2">何時に通知しますか？</p>
-            {/* 🌟 時計のUIをコンパクトに修正 */}
-            <div className={`rounded-[2rem] p-4 mb-6 flex items-center justify-center gap-4 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
-               <div className="flex flex-col items-center gap-2">
-                 <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
-                 <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
-                 <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
-               </div>
-               <span className="text-3xl sm:text-4xl font-black text-indigo-500 pb-1 animate-pulse">:</span>
-               <div className="flex flex-col items-center gap-2">
-                 <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
-                 <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
-                 <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
-               </div>
+{/* 🌟 時計UIをコンパクト化（p-4, mb-4, gap-2, text-4xl 等へ縮小） */}
+<div className={`rounded-3xl p-4 mb-4 flex items-center justify-center gap-4 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
+   <div className="flex flex-col items-center gap-2">
+     <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+     <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
+     <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+   </div>
+   <span className="text-3xl sm:text-4xl font-black text-indigo-500 pb-1 animate-pulse">:</span>
+   <div className="flex flex-col items-center gap-2">
+     <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+     <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
+     <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+   </div>
             </div>
-            
             <button onClick={handleSaveReminder} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95">
               <Bell className="w-5 h-5" /> 通知をセットする
             </button>
