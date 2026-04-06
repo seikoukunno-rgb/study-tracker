@@ -6,7 +6,7 @@ import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
   ChevronDown, ChevronUp, X, Minus, RefreshCcw, ChevronRight as ChevronRightIcon,
-  Menu // 🌟 アイコン追加
+  Menu 
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -58,9 +58,6 @@ export default function CalendarPage() {
 
   const isMounted = useRef(true);
 
-  // ==========================================
-  // 🌟 共通サイドバー呼び出し処理
-  // ==========================================
   const sidebarStartX = useRef<number | null>(null);
 
   const handleEdgeTouchStart = (e: React.TouchEvent) => { 
@@ -69,16 +66,14 @@ export default function CalendarPage() {
   const handleEdgeTouchMove = (e: React.TouchEvent) => { 
     if (sidebarStartX.current === null) return;
     const diffX = e.touches[0].clientX - sidebarStartX.current;
-    // 左端から40px以上右へスワイプされたら共通サイドバーを開く命令を送る
     if (diffX > 40) {
       window.dispatchEvent(new Event('openSidebar'));
-      sidebarStartX.current = null; // 連続発火防止
+      sidebarStartX.current = null; 
     }
   };
   const handleEdgeTouchEnd = () => { 
     sidebarStartX.current = null; 
   };
-  // ==========================================
 
   const notifyOptionsList = [
     { id: "none", label: "通知しない" },
@@ -200,11 +195,19 @@ export default function CalendarPage() {
     if (error) alert("Google連携エラー: " + error.message);
   };
 
+  // 🌟 エラー詳細がわかるように改良
   const getOrCreateStudyTrackerCalendar = async (token: string) => {
     const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!listRes.ok) throw new Error("AUTH_ERROR");
+    
+    if (!listRes.ok) {
+      const errorData = await listRes.json().catch(() => ({}));
+      if (errorData?.error?.message?.includes('Calendar API has not been used')) {
+        alert("Google Cloud Consoleで「Google Calendar API」を有効化してください！");
+      }
+      throw new Error("AUTH_ERROR");
+    }
 
     const listData = await listRes.json();
     const existing = listData.items?.find((c: any) => c.summary === 'StudyTracker');
@@ -257,7 +260,7 @@ export default function CalendarPage() {
       console.error(e);
       setToastMessage(null);
       setGoogleToken(null);
-      alert("Google連携の有効期限が切れました。右上のボタンから再連携してください。");
+      alert("同期に失敗しました。再連携をお試しください。");
     }
   };
 
@@ -294,14 +297,15 @@ export default function CalendarPage() {
         const [y, m, d] = formatDateStr(selectedDate).split('-').map(Number);
         const nextDay = new Date(y, m - 1, d + 1);
         
+        // 🌟 修正の要：タイムゾーンの指定を削除（toISOString は Z=UTC を含むため不要かつエラーの元）
         const googleEvent = {
           summary: newEventTitle,
           description: "StudyTrackerアプリから追加されました",
           start: calculatedNotifyTime 
-            ? { dateTime: calculatedNotifyTime, timeZone: 'Asia/Tokyo' } 
+            ? { dateTime: calculatedNotifyTime } 
             : { date: formatDateStr(selectedDate) },
           end: calculatedNotifyTime 
-            ? { dateTime: new Date(new Date(calculatedNotifyTime).getTime() + 3600000).toISOString(), timeZone: 'Asia/Tokyo' } 
+            ? { dateTime: new Date(new Date(calculatedNotifyTime).getTime() + 3600000).toISOString() } 
             : { date: formatDateStr(nextDay) },
         };
         
@@ -313,17 +317,21 @@ export default function CalendarPage() {
 
         if (res.ok) {
           googleSynced = true;
-        } else if (res.status === 401 || res.status === 403) {
-          setGoogleToken(null);
+        } else {
+          // 🌟 401/403ならトークン切れ、400ならデータ形式エラーとしてログを出す
+          const errText = await res.text();
+          console.error("Google Calendar Error:", errText);
+          if (res.status === 401 || res.status === 403) setGoogleToken(null);
         }
-      } catch (e) { console.error("Google Sync Error", e); }
+      } catch (e) { console.error("Google Sync Catch Error", e); }
     }
 
     if (!error) {
       fetchData(); 
       setShowAddModal(false);
+      // 🌟 トークンがあるのに同期失敗した場合はわかりやすいメッセージを出す
       if (currentToken && !googleSynced) {
-        setToastMessage("アプリに保存しました。Google同期には再連携が必要です。");
+        setToastMessage("アプリに保存しました。Google反映に失敗したため再連携してください。");
       } else {
         setToastMessage(googleSynced ? "予定を追加し、Googleに反映しました！" : "予定を追加しました！");
       }
@@ -507,7 +515,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 🌟 修正：ヘッダーの左端にMENUボタンを追加 */}
       <header className={`px-6 py-6 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300 border-b ${isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-white border-slate-100'}`}>
         <div className="flex items-center gap-3">
           <button 
@@ -520,7 +527,6 @@ export default function CalendarPage() {
           <h1 className="text-xl font-black italic tracking-tighter text-indigo-500 uppercase">Calendar</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* 鈴ボタン */}
           <button onClick={() => setShowGlobalReminders(true)} className="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform relative">
             <Bell className="w-6 h-6 text-slate-400" />
             {(reminders.length > 0 || events.some(e => e.notify_time && !e.is_completed)) && (
@@ -701,7 +707,6 @@ export default function CalendarPage() {
         </div>
       </main>
 
-      {/* 🌟 リマインダー確認モーダル */}
       {showGlobalReminders && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] animate-in fade-in duration-200" onClick={() => setShowGlobalReminders(false)}></div>
@@ -763,7 +768,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* 予定追加モーダル */}
       {showAddModal && (
         <>
           <div className="fixed inset-0 bg-black/60 z-[200]" onClick={() => setShowAddModal(false)}></div>
@@ -842,7 +846,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* リマインダー設定モーダル */}
       {showReminderModal && selectedReminderTask && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] animate-in fade-in duration-200" onClick={() => setShowReminderModal(false)} />
@@ -889,11 +892,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* =========================================================
-          🌟 共通サイドバー呼び出しエリア（スワイプ＆グリップ）
-      ========================================================= */}
-      
-      {/* 1. スワイプ検知用の透明エリア (z-indexを下げてサイドバー展開時は下敷きになるように) */}
       <div
         onTouchStart={handleEdgeTouchStart}
         onTouchMove={handleEdgeTouchMove}
@@ -901,7 +899,6 @@ export default function CalendarPage() {
         className="fixed top-0 left-0 bottom-0 w-6 z-[30]"
       />
 
-      {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
       <button
         onClick={() => window.dispatchEvent(new Event('openSidebar'))}
         className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
