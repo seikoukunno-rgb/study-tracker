@@ -277,7 +277,9 @@ export default function CalendarPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-   let calculatedNotifyTime = null;
+        let calculatedNotifyTime = null;
+    let googleStartTime = null;
+    let googleEndTime = null;
     const targetDate = new Date(selectedDate);
     if (notifyOption !== "none") {
       if (notifyOption === "custom") {
@@ -286,9 +288,17 @@ export default function CalendarPage() {
       } else if (notifyOption === "today_0700") targetDate.setHours(7, 0, 0, 0);
       else if (notifyOption === "today_2000") targetDate.setHours(20, 0, 0, 0);
       else if (notifyOption === "prev_2100") { targetDate.setDate(targetDate.getDate() - 1); targetDate.setHours(21, 0, 0, 0); }
-      else if (notifyOption === "prev2_2100") { targetDate.setDate(targetDate.getDate() - 2); targetDate.setHours(21, 0, 0, 0); } // 🌟追加
-      else if (notifyOption === "week_1000") { targetDate.setDate(targetDate.getDate() - 7); targetDate.setHours(10, 0, 0, 0); } // 🌟追加
-      calculatedNotifyTime = targetDate.toISOString();
+      else if (notifyOption === "prev2_2100") { targetDate.setDate(targetDate.getDate() - 2); targetDate.setHours(21, 0, 0, 0); } 
+      else if (notifyOption === "week_1000") { targetDate.setDate(targetDate.getDate() - 7); targetDate.setHours(10, 0, 0, 0); } 
+      
+      calculatedNotifyTime = targetDate.toISOString(); // Supabase保存用（UTC）
+
+      // 🌟 Google Calendar API専用に「日本時間(+09:00)」の文字列を明示的に作成
+      const pad = (n: number) => String(n).padStart(2, '0');
+      googleStartTime = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}T${pad(targetDate.getHours())}:${pad(targetDate.getMinutes())}:00+09:00`;
+      
+      const eDate = new Date(targetDate.getTime() + 3600000); // 1時間後を終了時刻に
+      googleEndTime = `${eDate.getFullYear()}-${pad(eDate.getMonth() + 1)}-${pad(eDate.getDate())}T${pad(eDate.getHours())}:${pad(eDate.getMinutes())}:00+09:00`;
     }
 
     const newEventObj = {
@@ -307,18 +317,16 @@ export default function CalendarPage() {
         const [y, m, d] = formatDateStr(selectedDate).split('-').map(Number);
         const nextDay = new Date(y, m - 1, d + 1);
         
-        // 🌟 修正の要：タイムゾーンの指定を削除（toISOString は Z=UTC を含むため不要かつエラーの元）
         const googleEvent = {
           summary: newEventTitle,
           description: "StudyTrackerアプリから追加されました",
-          start: calculatedNotifyTime 
-            ? { dateTime: calculatedNotifyTime } 
+          start: googleStartTime 
+            ? { dateTime: googleStartTime, timeZone: 'Asia/Tokyo' } 
             : { date: formatDateStr(selectedDate) },
-          end: calculatedNotifyTime 
-            ? { dateTime: new Date(new Date(calculatedNotifyTime).getTime() + 3600000).toISOString() } 
+          end: googleEndTime 
+            ? { dateTime: googleEndTime, timeZone: 'Asia/Tokyo' } 
             : { date: formatDateStr(nextDay) },
         };
-        
         const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
