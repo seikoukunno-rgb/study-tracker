@@ -597,14 +597,26 @@ export default function CalendarPage() {
                 const mat = materials.find(m => m.title === event.title);
                 const matImageUrl = mat?.image_url;
 
-                let notifyTimeDisplay = "通知設定済み";
+let notifyTimeDisplay = "通知設定済み";
                 if (event.notify_time) {
                   const nDate = new Date(event.notify_time);
                   if (!isNaN(nDate.getTime())) {
-                    notifyTimeDisplay = `${nDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} に通知`;
+                    const [y, m, d] = event.date.split('-').map(Number);
+                    const eventDate = new Date(y, m - 1, d);
+                    const notifyDateObj = new Date(nDate.getFullYear(), nDate.getMonth(), nDate.getDate());
+                    const diffDays = Math.round((eventDate.getTime() - notifyDateObj.getTime()) / (1000 * 60 * 60 * 24));
+                    
+                    let dayPrefix = "";
+                    if (diffDays === 0) dayPrefix = "当日 ";
+                    else if (diffDays === 1) dayPrefix = "前日 ";
+                    else if (diffDays === 2) dayPrefix = "2日前 ";
+                    else if (diffDays === 7) dayPrefix = "1週間前 ";
+                    else if (diffDays > 0) dayPrefix = `${diffDays}日前 `;
+                    else if (diffDays < 0) dayPrefix = `${Math.abs(diffDays)}日後 `;
+
+                    notifyTimeDisplay = `${dayPrefix}${nDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} に通知`;
                   }
                 }
-
                 return (
                   <div key={event.id} className={`relative rounded-2xl overflow-hidden mb-3 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-slate-100'}`}>
                     
