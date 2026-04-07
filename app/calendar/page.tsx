@@ -85,6 +85,17 @@ export default function CalendarPage() {
     { id: "custom", label: "カスタム（日時を指定）..." },
   ];
 
+  // Googleカレンダー用の終日予定日付フォーマットを生成するヘルパー
+  const getGoogleAllDayDates = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const nextDay = new Date(y, m - 1, d + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return {
+      start: dateStr,
+      end: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`
+    };
+  };
+
   useEffect(() => {
     isMounted.current = true;
     fetchData();
@@ -259,14 +270,13 @@ export default function CalendarPage() {
 
         if (isAlreadySynced) continue;
 
-        const [y, m, d] = ev.date.split('-').map(Number);
-        const pad = (n: number) => String(n).padStart(2, '0');
-        let bodyObj: any = { summary: ev.title, description: "StudyTrackerから追加" };
-
-        const nextDay = new Date(y, m - 1, d + 1);
-        const endDateStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`;
-        bodyObj.start = { date: ev.date };
-        bodyObj.end = { date: endDateStr };
+        const gDates = getGoogleAllDayDates(ev.date);
+        const bodyObj: any = { 
+          summary: ev.title, 
+          description: "StudyTrackerから追加",
+          start: { date: gDates.start },
+          end: { date: gDates.end }
+        };
 
         const postRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
           method: 'POST',
@@ -277,7 +287,7 @@ export default function CalendarPage() {
         if (postRes.ok) syncCount++;
         else {
           const errText = await postRes.text();
-          alert(`【同期エラー】${ev.title} の同期に失敗しました:\n${errText}`);
+          console.error(`Sync Error for ${ev.title}:`, errText);
         }
       }
       setToastMessage(`${syncCount}件の予定をGoogleに同期しました！`);
@@ -311,8 +321,9 @@ export default function CalendarPage() {
       calculatedNotifyTime = targetDate.toISOString();
     }
 
+    const eventDateStr = formatDateStr(selectedDate);
     const newEventObj = {
-      student_id: session.user.id, date: formatDateStr(selectedDate), title: newEventTitle,
+      student_id: session.user.id, date: eventDateStr, title: newEventTitle,
       event_type: newEventType, is_completed: false, notify_time: calculatedNotifyTime
     };
 
@@ -324,15 +335,13 @@ export default function CalendarPage() {
     if (!error && currentToken) {
       try {
         const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-        const [y, m, d] = formatDateStr(selectedDate).split('-').map(Number);
-        const nextDay = new Date(y, m - 1, d + 1);
-        const pad = (n: number) => String(n).padStart(2, '0');
+        const gDates = getGoogleAllDayDates(eventDateStr);
         
         const googleEvent = {
           summary: newEventTitle,
           description: "StudyTrackerアプリから追加されました",
-          start: { date: formatDateStr(selectedDate) },
-          end: { date: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}` },
+          start: { date: gDates.start },
+          end: { date: gDates.end },
         };
         
         const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
