@@ -263,19 +263,10 @@ export default function CalendarPage() {
         const pad = (n: number) => String(n).padStart(2, '0');
         let bodyObj: any = { summary: ev.title, description: "StudyTrackerから追加" };
 
-        if (ev.notify_time) {
-          const nDate = new Date(ev.notify_time);
-          const startTimeStr = `${y}-${pad(m)}-${pad(d)}T${pad(nDate.getHours())}:${pad(nDate.getMinutes())}:00+09:00`;
-          const eDate = new Date(new Date(startTimeStr).getTime() + 3600000);
-          const endTimeStr = `${eDate.getFullYear()}-${pad(eDate.getMonth() + 1)}-${pad(eDate.getDate())}T${pad(eDate.getHours())}:${pad(eDate.getMinutes())}:00+09:00`;
-          bodyObj.start = { dateTime: startTimeStr, timeZone: 'Asia/Tokyo' };
-          bodyObj.end = { dateTime: endTimeStr, timeZone: 'Asia/Tokyo' };
-        } else {
-          const nextDay = new Date(y, m - 1, d + 1);
-          const endDateStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`;
-          bodyObj.start = { date: ev.date };
-          bodyObj.end = { date: endDateStr };
-        }
+        const nextDay = new Date(y, m - 1, d + 1);
+        const endDateStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`;
+        bodyObj.start = { date: ev.date };
+        bodyObj.end = { date: endDateStr };
 
         const postRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
           method: 'POST',
@@ -305,8 +296,6 @@ export default function CalendarPage() {
     if (!session?.user) return;
 
     let calculatedNotifyTime = null;
-    let googleStartTime = null;
-    let googleEndTime = null;
     const targetDate = new Date(selectedDate);
     
     if (notifyOption !== "none") {
@@ -320,12 +309,6 @@ export default function CalendarPage() {
       else if (notifyOption === "week_1000") { targetDate.setDate(targetDate.getDate() - 7); targetDate.setHours(10, 0, 0, 0); } 
       
       calculatedNotifyTime = targetDate.toISOString();
-
-      const pad = (n: number) => String(n).padStart(2, '0');
-      googleStartTime = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}T${pad(targetDate.getHours())}:${pad(targetDate.getMinutes())}:00+09:00`;
-      
-      const eDate = new Date(targetDate.getTime() + 3600000); 
-      googleEndTime = `${eDate.getFullYear()}-${pad(eDate.getMonth() + 1)}-${pad(eDate.getDate())}T${pad(eDate.getHours())}:${pad(eDate.getMinutes())}:00+09:00`;
     }
 
     const newEventObj = {
@@ -348,12 +331,8 @@ export default function CalendarPage() {
         const googleEvent = {
           summary: newEventTitle,
           description: "StudyTrackerアプリから追加されました",
-          start: googleStartTime 
-            ? { dateTime: googleStartTime, timeZone: 'Asia/Tokyo' } 
-            : { date: formatDateStr(selectedDate) },
-          end: googleEndTime 
-            ? { dateTime: googleEndTime, timeZone: 'Asia/Tokyo' } 
-            : { date: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}` },
+          start: { date: formatDateStr(selectedDate) },
+          end: { date: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}` },
         };
         
         const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
@@ -411,7 +390,6 @@ export default function CalendarPage() {
         const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
         const [y, m, d] = evToDelete.date.split('-').map(Number);
         
-        // 🌟 URLエンコード漏れ修正：timeMinとtimeMaxを安全な形式に変換
         const timeMin = encodeURIComponent(new Date(y, m - 2, 1).toISOString()); 
         const timeMax = encodeURIComponent(new Date(y, m + 1, 0).toISOString()); 
         
@@ -491,66 +469,7 @@ export default function CalendarPage() {
     } else {
       setReminders(prev => [...prev, newReminder]); 
       
-      const currentToken = session?.provider_token || googleToken;
-      let googleSynced = false;
-
-      if (currentToken) {
-        try {
-          const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-          const [y, m, d] = selectedReminderTask.date.split('-').map(Number);
-          const targetDate = new Date(y, m - 1, d);
-          
-          // 🌟 URLエンコード漏れ修正
-          const timeMin = encodeURIComponent(new Date(targetDate.getTime() - 86400000 * 2).toISOString()); 
-          const timeMax = encodeURIComponent(new Date(targetDate.getTime() + 86400000 * 2).toISOString()); 
-          
-          const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true`,
-            { headers: { 'Authorization': `Bearer ${currentToken}` } }
-          );
-          
-          if (res.ok) {
-            const data = await res.json();
-            const gEvent = data.items?.find((i: any) => 
-              i.summary === (selectedReminderTask.title || selectedReminderTask.subject)
-            );
-
-            if (gEvent) {
-              let eventStartTimeMs = 0;
-              if (gEvent.start?.dateTime) {
-                eventStartTimeMs = new Date(gEvent.start.dateTime).getTime();
-              } else if (gEvent.start?.date) {
-                eventStartTimeMs = new Date(gEvent.start.date + 'T00:00:00+09:00').getTime();
-              }
-              
-              let minutesBefore = Math.round((eventStartTimeMs - baseDate.getTime()) / 60000);
-              if (minutesBefore < 0) minutesBefore = 0; 
-
-              const patchBody = {
-                reminders: {
-                  useDefault: false,
-                  overrides: [
-                    { method: 'popup', minutes: minutesBefore }
-                  ]
-                }
-              };
-
-              const patchRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${gEvent.id}`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(patchBody)
-              });
-
-              if (patchRes.ok) googleSynced = true;
-            }
-          } else {
-            if (res.status === 401 || res.status === 403) {
-              setGoogleToken(null);
-            }
-          }
-        } catch(e) { console.error("Google Sync Error", e) }
-      }
-
-      setToastMessage(googleSynced ? "Googleの既存予定に通知をセットしました！" : "通知をセットしました！");
+      setToastMessage("通知をセットしました！");
       setTimeout(() => setToastMessage(null), 3000);
     }
   };
