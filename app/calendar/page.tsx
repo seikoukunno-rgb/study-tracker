@@ -85,7 +85,6 @@ export default function CalendarPage() {
     { id: "custom", label: "カスタム（日時を指定）..." },
   ];
 
-  // Googleカレンダー用の終日予定日付フォーマットを生成するヘルパー
   const getGoogleAllDayDates = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-').map(Number);
     const nextDay = new Date(y, m - 1, d + 1);
@@ -520,6 +519,7 @@ export default function CalendarPage() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            aria-label="メニューを開く"
             className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
           >
             <Menu className="w-5 h-5 text-slate-500" />
@@ -528,7 +528,7 @@ export default function CalendarPage() {
           <h1 className="text-xl font-black italic tracking-tighter text-indigo-500 uppercase">Calendar</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowGlobalReminders(true)} className="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform relative">
+          <button onClick={() => setShowGlobalReminders(true)} aria-label="通知一覧" className="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform relative">
             <Bell className="w-6 h-6 text-slate-400" />
             {(reminders.length > 0 || events.some(e => e.notify_time && !e.is_completed)) && (
               <span className={`absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 rounded-full ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`}></span>
@@ -551,9 +551,9 @@ export default function CalendarPage() {
         
         <div className={`p-6 rounded-[2.5rem] shadow-sm border transition-colors ${bgCard}`}>
           <div className="flex justify-between items-center mb-6">
-            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronLeft className="w-5 h-5" /></button>
+            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} aria-label="前の月" className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronLeft className="w-5 h-5" /></button>
             <h2 className={`text-lg font-black ${textMain}`}>{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h2>
-            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronRight className="w-5 h-5" /></button>
+            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} aria-label="次の月" className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronRight className="w-5 h-5" /></button>
           </div>
           <div className="grid grid-cols-7 mb-4">
             {["日", "月", "火", "水", "木", "金", "土"].map((day, i) => (
@@ -668,6 +668,7 @@ export default function CalendarPage() {
                           <div className="flex items-center gap-3">
                             <button 
                               onClick={(e) => { e.stopPropagation(); toggleComplete(event); }} 
+                              aria-label={event.is_completed ? "未完了にする" : "完了にする"}
                               className="pointer-events-auto shrink-0 p-2 -ml-2 active:scale-90 transition-transform"
                             >
                               {event.is_completed ? <CheckCircle2 className={`w-8 h-8 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} /> : <Circle className={`w-8 h-8 ${textSub}`} />}
@@ -743,7 +744,7 @@ export default function CalendarPage() {
           <div className={`fixed top-24 right-4 w-[85%] max-w-xs ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[501] rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300`}>
             <div className={`flex justify-between items-center mb-4 border-b pb-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
               <h3 className={`text-sm font-black flex items-center gap-2 ${textMain}`}><Bell className="w-4 h-4 text-indigo-500"/> 設定中の通知</h3>
-              <button onClick={() => setShowGlobalReminders(false)} className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowGlobalReminders(false)} aria-label="閉じる" className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
             </div>
             {(() => {
               const allDisplayReminders = [
@@ -771,7 +772,7 @@ export default function CalendarPage() {
                            await supabase.from('calendar_events').update({ notify_time: null }).eq('id', rem.rawId);
                            setEvents(prev => prev.map(e => e.id === rem.rawId ? { ...e, notify_time: null } : e));
                          }
-                       }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
+                       }} aria-label="通知を削除" className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
                          <Trash2 className="w-4 h-4" />
                        </button>
                     </div>
@@ -804,7 +805,7 @@ export default function CalendarPage() {
           <div className={`fixed bottom-0 inset-x-0 z-[201] rounded-t-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="flex justify-between items-center mb-8">
               <h3 className={`text-lg font-black ${textMain}`}>予定を追加</h3>
-              <button onClick={() => setShowAddModal(false)} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'bg-[#2c2c2e] text-slate-300' : 'bg-slate-100 text-slate-500'}`}><X className="w-5 h-5"/></button>
+              <button onClick={() => setShowAddModal(false)} aria-label="閉じる" className={`p-2 rounded-full transition-colors ${isDarkMode ? 'bg-[#2c2c2e] text-slate-300' : 'bg-slate-100 text-slate-500'}`}><X className="w-5 h-5"/></button>
             </div>
             <div className="space-y-6">
               <div className={`flex p-1 rounded-2xl ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-100'}`}>
@@ -834,24 +835,24 @@ export default function CalendarPage() {
                     <div className="flex items-center justify-between mb-4">
                       <span className={`text-xs font-bold ${textMain}`}>通知日</span>
                       <div className={`flex items-center gap-4 px-4 py-2 rounded-xl ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-50'}`}>
-                        <button onClick={() => setCustomOffsetDays(Math.max(0, customOffsetDays - 1))}><Minus className="w-4 h-4 text-slate-400"/></button>
+                        <button onClick={() => setCustomOffsetDays(Math.max(0, customOffsetDays - 1))} aria-label="日数を減らす"><Minus className="w-4 h-4 text-slate-400"/></button>
                         <span className={`text-sm font-black w-12 text-center ${textMain}`}>{customOffsetDays === 0 ? "当日" : `${customOffsetDays}日前`}</span>
-                        <button onClick={() => setCustomOffsetDays(customOffsetDays + 1)}><Plus className="w-4 h-4 text-slate-400"/></button>
+                        <button onClick={() => setCustomOffsetDays(customOffsetDays + 1)} aria-label="日数を増やす"><Plus className="w-4 h-4 text-slate-400"/></button>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className={`text-xs font-bold ${textMain}`}>時間</span>
                       <div className="flex items-center gap-2">
                         <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-50'}`}>
-                          <button onClick={() => setCustomHour((customHour - 1 + 24) % 24)}><Minus className="w-4 h-4 text-slate-400"/></button>
+                          <button onClick={() => setCustomHour((customHour - 1 + 24) % 24)} aria-label="時間を減らす"><Minus className="w-4 h-4 text-slate-400"/></button>
                           <span className={`text-sm font-black w-6 text-center ${textMain}`}>{customHour.toString().padStart(2, '0')}</span>
-                          <button onClick={() => setCustomHour((customHour + 1) % 24)}><Plus className="w-4 h-4 text-slate-400"/></button>
+                          <button onClick={() => setCustomHour((customHour + 1) % 24)} aria-label="時間を増やす"><Plus className="w-4 h-4 text-slate-400"/></button>
                         </div>
                         <span className="font-black text-slate-400">:</span>
                         <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-slate-50'}`}>
-                          <button onClick={() => setCustomMinute((customMinute - 5 + 60) % 60)}><Minus className="w-4 h-4 text-slate-400"/></button>
+                          <button onClick={() => setCustomMinute((customMinute - 5 + 60) % 60)} aria-label="分を減らす"><Minus className="w-4 h-4 text-slate-400"/></button>
                           <span className={`text-sm font-black w-6 text-center ${textMain}`}>{customMinute.toString().padStart(2, '0')}</span>
-                          <button onClick={() => setCustomMinute((customMinute + 5) % 60)}><Plus className="w-4 h-4 text-slate-400"/></button>
+                          <button onClick={() => setCustomMinute((customMinute + 5) % 60)} aria-label="分を増やす"><Plus className="w-4 h-4 text-slate-400"/></button>
                         </div>
                       </div>
                     </div>
@@ -882,7 +883,7 @@ export default function CalendarPage() {
           <div className={`fixed bottom-0 left-0 right-0 z-[201] rounded-t-[2.5rem] p-6 animate-in slide-in-from-bottom flex flex-col max-h-[90vh] overflow-y-auto ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>リマインダーを追加</h2>
-              <button onClick={() => setShowReminderModal(false)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+              <button onClick={() => setShowReminderModal(false)} aria-label="閉じる" className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -904,15 +905,15 @@ export default function CalendarPage() {
             <p className="text-xs font-black text-slate-500 mb-2 mt-2">何時に通知しますか？</p>
             <div className={`rounded-3xl p-4 mb-4 flex items-center justify-center gap-4 shadow-inner ${isDarkMode ? 'bg-[#151516] border border-[#2c2c2e]' : 'bg-slate-50 border border-slate-100'}`}>
                <div className="flex flex-col items-center gap-2">
-                 <button onClick={() => setRemindHour(h => (h + 1) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+                 <button onClick={() => setRemindHour(h => (h + 1) % 24)} aria-label="時間を進める" className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
                  <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindHour).padStart(2, '0')}</span>
-                 <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+                 <button onClick={() => setRemindHour(h => (h - 1 + 24) % 24)} aria-label="時間を戻す" className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
                </div>
                <span className="text-3xl sm:text-4xl font-black text-indigo-500 pb-1 animate-pulse">:</span>
                <div className="flex flex-col items-center gap-2">
-                 <button onClick={() => setRemindMinute(m => (m + 5) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
+                 <button onClick={() => setRemindMinute(m => (m + 5) % 60)} aria-label="分を進める" className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronUp className="w-5 h-5"/></button>
                  <span className={`text-4xl sm:text-5xl font-black tabular-nums ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{String(remindMinute).padStart(2, '0')}</span>
-                 <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
+                 <button onClick={() => setRemindMinute(m => (m - 5 + 60) % 60)} aria-label="分を戻す" className={`p-2 rounded-full transition-colors active:scale-90 ${isDarkMode ? 'hover:bg-[#2c2c2e] bg-[#1c1c1e] text-slate-400' : 'hover:bg-slate-200 bg-white text-slate-500 shadow-sm'}`}><ChevronDown className="w-5 h-5"/></button>
                </div>
             </div>
             <button onClick={handleSaveReminder} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-95">
@@ -931,6 +932,7 @@ export default function CalendarPage() {
 
       <button
         onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        aria-label="サイドバーを開く"
         className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
           isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
         } backdrop-blur-sm group`}

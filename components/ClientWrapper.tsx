@@ -34,9 +34,9 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
       setIsAuthorized(true);
     }
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(console.error);
-    }
+   // if ('serviceWorker' in navigator) {
+    //  navigator.serviceWorker.register('/sw.js').catch(console.error);
+    //}
 
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     window.addEventListener('storage', checkDarkMode);

@@ -165,7 +165,6 @@ function ReportContent() {
     localStorage.setItem('study_reminders_v2', JSON.stringify(newReminders));
   };
 
-  // 🌟【修正】グラフ用（自分全件）とタイムライン用（自分＋フォロワー直近1週間）の分離＆マニュアルジョイン
   const fetchLogs = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -174,29 +173,24 @@ function ReportContent() {
       setCurrentUser(user);
       setMyUserId(user.id);
 
-      // 1. フォローしているユーザーIDを取得
       const { data: followings } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
       const followingIds = followings?.map(f => f.following_id) || [];
 
-      // 2. 自分の全学習記録を取得（グラフ集計用）
       const { data: myLogsData } = await supabase
         .from('study_logs')
         .select('id, student_id, material_id, duration_minutes, thoughts, studied_at, created_at')
         .eq('student_id', user.id)
         .order('created_at', { ascending: false });
 
-      // 3. 自分の全教材を取得（フィルタやグラフのラベル用）
       const { data: myMatsData } = await supabase
         .from('materials')
         .select('*')
         .eq('student_id', user.id);
 
-      // 4. 直近1週間の日時を計算
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
       const oneWeekAgoIso = oneWeekAgo.toISOString();
 
-      // 5. フォロワーの直近1週間の学習記録を爆速クエリで取得
       let followerLogsData: any[] = [];
       if (followingIds.length > 0) {
         const { data: fLogs } = await supabase
@@ -208,11 +202,9 @@ function ReportContent() {
         if (fLogs) followerLogsData = fLogs;
       }
 
-      // 6. 自分のログも直近1週間に絞り、フォロワーのログと合体してタイムライン用データを作成
       const myRecentLogs = (myLogsData || []).filter(l => l.created_at >= oneWeekAgoIso);
       const allRawLogs = [...myRecentLogs, ...followerLogsData].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       
-      // 7. 必要なプロフィールと教材だけをマニュアルジョイン
       const studentIds = Array.from(new Set(allRawLogs.map(l => l.student_id)));
       const materialIds = Array.from(new Set([...allRawLogs.map(l => l.material_id), ...(myLogsData || []).map(l => l.material_id)].filter(Boolean)));
 
@@ -230,7 +222,6 @@ function ReportContent() {
       const matMap: Record<string, any> = {};
       allMatsData?.forEach(m => { matMap[m.id] = m; });
 
-      // タイムライン用にフォーマット
       const formattedLogs = allRawLogs.map(log => {
          return {
            ...log,
@@ -243,9 +234,9 @@ function ReportContent() {
       });
 
       if (isMounted.current) {
-        setRawLogs(myLogsData || []); // グラフには自分の全データのみ
-        setRawMats(myMatsData || []); // 教材フィルタ用
-        setLogs(formattedLogs); // タイムラインには「自分とフォロワーの直近1週間」
+        setRawLogs(myLogsData || []); 
+        setRawMats(myMatsData || []); 
+        setLogs(formattedLogs); 
         processChartData(myLogsData || [], myMatsData || [], chartRange);
       }
     }
@@ -307,9 +298,18 @@ function ReportContent() {
     grouped.forEach(g => { g.segments.forEach(s => { s.heightPercent = calcMax > 0 ? (s.minutes / calcMax) * 100 : 0; }); });
     setChartData(grouped);
 
+    // 棒グラフの集計で使った periods から、全体の開始・終了時間を取得
+    const rangeStartTime = periods[0].start.getTime();
+    const rangeEndTime = periods[periods.length - 1].end.getTime();
+
     const groupedByMat: Record<string, number> = {};
     let totalMinutes = 0;
-    logsData.forEach(log => {
+    
+    // 全データから、グラフの表示期間内のものだけを抽出（filter）してから集計する
+    logsData.filter(log => {
+      const logTime = new Date(log.created_at).getTime();
+      return logTime >= rangeStartTime && logTime <= rangeEndTime;
+    }).forEach(log => {
       const title = matData?.find(m => m.id === log.material_id)?.title || log.subject || "その他";
       groupedByMat[title] = (groupedByMat[title] || 0) + log.duration_minutes;
       totalMinutes += log.duration_minutes;
@@ -317,7 +317,9 @@ function ReportContent() {
 
     setPieData(Object.keys(groupedByMat).map(title => ({
       title, percentage: totalMinutes > 0 ? (groupedByMat[title] / totalMinutes) * 100 : 0, color: subjectColors[title]
-    })).sort((a, b) => b.percentage - a.percentage));
+    }))
+    .filter(d => Math.round(d.percentage) > 0) // 0%になるものをここで除外
+    .sort((a, b) => b.percentage - a.percentage));
   };
 
   const showToast = (message: string, type: "success" | "error" = "success", icon: "pen" | "trash" | "error" = "pen") => {
@@ -628,7 +630,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
           <div className={`fixed top-24 right-4 w-[85%] max-w-xs ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[201] rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300`}>
             <div className={`flex justify-between items-center mb-4 border-b pb-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
               <h3 className={`text-sm font-black flex items-center gap-2 ${textMain}`}><Bell className="w-4 h-4 text-indigo-500"/> 設定中のリマインダー</h3>
-              <button onClick={() => setShowGlobalReminders(false)} className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowGlobalReminders(false)} aria-label="閉じる" className={`p-1 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-4 h-4" /></button>
             </div>
             {Object.keys(reminders).length === 0 ? (
               <p className="text-xs font-bold text-slate-400 text-center py-6">現在設定されているリマインダーはありません</p>
@@ -643,7 +645,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                            {getCountdownDisplay(timeIso)}
                          </p>
                        </div>
-                       <button onClick={() => handleClearReminder(sub, timeIso)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
+                       <button onClick={() => handleClearReminder(sub, timeIso)} aria-label="リマインダーを削除" className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors shrink-0">
                          <Trash2 className="w-4 h-4" />
                        </button>
                     </div>
@@ -659,7 +661,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[300]" onClick={() => setShowQrModal(false)}></div>
           <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[301] w-[85%] max-w-sm ${isDarkMode ? 'bg-[#2c2c2e]' : 'bg-white'} rounded-[2.5rem] shadow-2xl p-8 flex flex-col items-center animate-in zoom-in-95 fade-in duration-300`}>
-            <button onClick={() => setShowQrModal(false)} className={`absolute top-4 right-4 p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
+            <button onClick={() => setShowQrModal(false)} aria-label="閉じる" className={`absolute top-4 right-4 p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
             <h3 className={`text-lg font-black mb-6 ${textMain}`}>プロフィールQR</h3>
             
             <div className={`p-6 rounded-[2rem] shadow-sm border mb-6 flex flex-col items-center ${isDarkMode ? 'bg-white border-transparent' : 'bg-white border-slate-100'}`}>
@@ -694,7 +696,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
           <div className={`fixed inset-x-0 bottom-0 top-[10%] z-[301] rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300 ${isDarkMode ? 'bg-[#111111]' : 'bg-white'}`}>
             
             <div className={`flex justify-between items-center px-6 py-5 border-b ${isDarkMode ? 'border-[#2c2c2e]' : 'border-slate-100'}`}>
-              <button onClick={() => setShowAddMaterial(false)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowAddMaterial(false)} aria-label="閉じる" className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
               <h2 className={`text-base font-black ${textMain}`}>教材の追加</h2>
               <button onClick={handleAddCustomMaterial} disabled={!newMaterialTitle.trim()} className="text-blue-500 font-black disabled:opacity-40 px-2 py-1">保存</button>
             </div>
@@ -708,6 +710,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                 <label className={`text-sm font-black block mb-2 ${textMain}`}>教材名</label>
                 <input 
                   type="text" 
+                  aria-label="教材名"
                   placeholder="教材名を入力" 
                   value={newMaterialTitle}
                   maxLength={128}
@@ -742,7 +745,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
           <div className={`fixed bottom-0 left-0 right-0 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[201] rounded-t-[2.5rem] p-8 animate-in slide-in-from-bottom duration-500 shadow-2xl`}>
             <div className="flex justify-between items-center mb-6">
               <h3 className={`text-xl font-black ${textMain}`}>リマインダーを追加</h3>
-              <button onClick={() => setShowReminderSetup(false)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowReminderSetup(false)} aria-label="閉じる" className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
             </div>
             
             {reminderSubject && (
@@ -781,6 +784,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                 <label className={`text-xs font-black uppercase mb-3 block flex items-center gap-1 ${textSub}`}><Calendar className="w-3 h-3"/> 日時を細かく指定</label>
                 <input 
                   type="datetime-local" 
+                  aria-label="リマインダー日時"
                   value={['15分後', '1時間後', '明日', '3日後', '1週間後', '1ヶ月後'].includes(reminderDateTime) ? "" : reminderDateTime}
                   onChange={(e) => setReminderDateTime(e.target.value)}
                   className={`w-full border-2 rounded-2xl px-5 py-4 font-bold outline-none focus:border-indigo-500 transition-all ${bgInput}`} 
@@ -803,12 +807,12 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
           <div className={`fixed bottom-0 left-0 right-0 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} z-[201] rounded-t-[2.5rem] p-8 animate-in slide-in-from-bottom duration-500`}>
             <div className="flex justify-between items-center mb-8">
               <h3 className={`text-xl font-black ${textMain}`}>記録を編集</h3>
-              <button onClick={() => setEditingLog(null)} className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
+              <button onClick={() => setEditingLog(null)} aria-label="閉じる" className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-800' : 'bg-slate-100'}`}><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-6 text-sm font-bold">
-              <input type="datetime-local" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={`w-full rounded-2xl px-5 py-4 font-black ${bgInput}`} />
-              <input type="number" value={editMinutes} onChange={(e) => setEditMinutes(parseInt(e.target.value))} className={`w-full rounded-2xl px-5 py-4 font-black ${bgInput}`} placeholder="学習時間(分)" />
-              <textarea value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className={`w-full rounded-2xl px-5 py-4 font-bold h-24 ${bgInput}`} placeholder="メモ" />
+              <input type="datetime-local" aria-label="学習日時" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={`w-full rounded-2xl px-5 py-4 font-black ${bgInput}`} />
+              <input type="number" aria-label="学習時間(分)" value={editMinutes} onChange={(e) => setEditMinutes(parseInt(e.target.value))} className={`w-full rounded-2xl px-5 py-4 font-black ${bgInput}`} placeholder="学習時間(分)" />
+              <textarea aria-label="メモ" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className={`w-full rounded-2xl px-5 py-4 font-bold h-24 ${bgInput}`} placeholder="メモ" />
               <button onClick={handleUpdate} className="w-full bg-indigo-600 text-white py-5 rounded-[2rem] font-black shadow-lg">更新を保存</button>
             </div>
           </div>
@@ -819,6 +823,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
         <div className="flex justify-between items-center px-6 mb-4">
           <button 
             onClick={() => window.dispatchEvent(new Event('openSidebar'))} 
+            aria-label="メニューを開く"
             className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm transition-all active:scale-90 ${bgCard}`}
           >
             <Menu className="w-5 h-5 text-slate-500" />
@@ -930,6 +935,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                   </div>
                   <input
                     type="text"
+                    aria-label="教材を検索"
                     value={materialSearchQuery}
                     onChange={(e) => setMaterialSearchQuery(e.target.value)}
                     placeholder="教材を検索..."
@@ -1048,7 +1054,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
               </div>
 
 
-{getFilteredTimelineLogs().length === 0 ? (
+              {getFilteredTimelineLogs().length === 0 ? (
                  <div className={`text-center py-20 font-black tracking-widest ${textSub}`}>記録がありません</div>
               ) : (
                 getFilteredTimelineLogs().map((log: any) => (
@@ -1097,7 +1103,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                           {/* 🌟 自分の記録のみ編集メニュー（...）を表示 */}
                           {log.student_id === myUserId && (
                             <div className="relative">
-                                                            <button onClick={(e) => { e.stopPropagation(); setActiveEditMenu(activeEditMenu === log.id ? null : log.id); }} className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
+                              <button onClick={(e) => { e.stopPropagation(); setActiveEditMenu(activeEditMenu === log.id ? null : log.id); }} aria-label="操作メニューを開く" className={`p-2 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'}`}>
                                 <MoreHorizontal className={`w-5 h-5 ${textSub}`} />
                               </button>
                               
@@ -1136,7 +1142,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                       
                       <div className={`rounded-3xl p-5 mb-5 flex items-center gap-5 border ${bgSubCard}`}>
                         <div className={`w-14 h-18 rounded-xl shadow-sm border overflow-hidden flex-shrink-0 ${isDarkMode ? 'bg-[#1c1c1e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
-                          {log.materials?.image_url ? <img src={log.materials.image_url} className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
+                          {log.materials?.image_url ? <img src={log.materials.image_url} alt="教材画像" className="w-full h-full object-cover" /> : <Book className={`w-6 h-6 m-auto mt-6 ${isDarkMode ? 'text-slate-700' : 'text-slate-200'}`} />}
                         </div>
                         <div className="flex-grow">
                           <h3 className={`text-xs font-black line-clamp-1 mb-1 ${textMain}`}>{log.materials?.title || log.subject}</h3>
@@ -1187,6 +1193,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
       {/* 2. じゃまにならないスライドグリップ (開いている時はサイドバーの裏に隠れる) */}
       <button
         onClick={() => window.dispatchEvent(new Event('openSidebar'))}
+        aria-label="サイドバーを開く"
         className={`fixed left-0 top-1/3 -translate-y-1/2 z-[20] w-4 h-24 rounded-r-xl shadow-sm flex items-center justify-center transition-all duration-300 active:scale-95 border-y border-r border-white/10 ${
           isDarkMode ? 'bg-slate-700/40 hover:bg-indigo-500/80' : 'bg-slate-300/50 hover:bg-indigo-500/80'
         } backdrop-blur-sm group`}

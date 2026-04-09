@@ -112,6 +112,7 @@ export default function DashboardClient({
                 <select 
                   value={sortOrder} 
                   onChange={(e) => { setSortOrder(e.target.value as any); setCurrentPage(1); }}
+                  aria-label="並び替え順を選択"
                   className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
                 >
                   <option value="newest">登録が新しい順</option>
@@ -192,8 +193,8 @@ export default function DashboardClient({
             <div className="p-4 border-t border-slate-100 dark:border-[#2c2c2e] flex justify-between items-center bg-slate-50 dark:bg-[#1c1c1e]">
               <span className="text-xs text-slate-500 font-bold">全 {filteredUsers.length} 件中 {currentPage} ページ目</span>
               <div className="flex gap-2">
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white dark:bg-[#2c2c2e] rounded-lg border border-slate-200 dark:border-[#38383a] disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-[#38383a]"><ChevronLeft className="w-4 h-4 text-slate-600 dark:text-white" /></button>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 bg-white dark:bg-[#2c2c2e] rounded-lg border border-slate-200 dark:border-[#38383a] disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-[#38383a]"><ChevronRight className="w-4 h-4 text-slate-600 dark:text-white" /></button>
+                <button aria-label="前のページ" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white dark:bg-[#2c2c2e] rounded-lg border border-slate-200 dark:border-[#38383a] disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-[#38383a]"><ChevronLeft className="w-4 h-4 text-slate-600 dark:text-white" /></button>
+                <button aria-label="次のページ" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 bg-white dark:bg-[#2c2c2e] rounded-lg border border-slate-200 dark:border-[#38383a] disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-[#38383a]"><ChevronRight className="w-4 h-4 text-slate-600 dark:text-white" /></button>
               </div>
             </div>
           )}
