@@ -1,7 +1,7 @@
 'use client';
 
 import { Dispatch, SetStateAction } from 'react'; 
-import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText, ChevronDown, RotateCcw, Save, Loader2, PencilLine } from 'lucide-react'; // 🌟 アイコンを追加
+import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText, ChevronDown, RotateCcw, Save, Loader2, PencilLine } from 'lucide-react';
 
 type PdfSidebarProps = {
   seconds: number;
@@ -23,8 +23,6 @@ type PdfSidebarProps = {
   pdfList: string[];
   currentIndex: number;
   setCurrentIndex: Dispatch<SetStateAction<number>>;
-  
-  // 🌟 追加：タイマーの保存に必要なProps
   memo: string;
   setMemo: Dispatch<SetStateAction<string>>;
   handleSave: () => void;
@@ -37,7 +35,7 @@ export default function PdfSidebar({
   notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, 
   handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId,
   pdfList, currentIndex, setCurrentIndex,
-  memo, setMemo, handleSave, isSaving, setSeconds // 🌟 受け取る
+  memo, setMemo, handleSave, isSaving, setSeconds
 }: PdfSidebarProps) {
   
   const formatTime = (totalSeconds: number) => {
@@ -61,12 +59,13 @@ export default function PdfSidebar({
             {formatTime(seconds)}
           </div>
           
-          {/* 🌟 修正：通常のタイマー画面と同じ「リセット」＆「保存」UIを搭載 */}
           <div className="flex gap-2">
             {!isRunning && seconds > 0 && (
               <button 
                 onClick={() => { setIsRunning(false); setSeconds(0); setMemo(""); }}
                 className="flex-1 py-3 bg-white/10 text-white/70 rounded-xl font-bold hover:bg-white/20 active:scale-95 transition-all flex items-center justify-center"
+                aria-label="タイマーをリセット"
+                title="タイマーをリセット"
               >
                 <RotateCcw size={16} />
               </button>
@@ -79,7 +78,6 @@ export default function PdfSidebar({
             </button>
           </div>
 
-          {/* 🌟 追加：一時停止時に現れる保存（メモ）エリア */}
           <div className={`transition-all duration-500 overflow-hidden text-left ${!isRunning && seconds > 0 ? 'max-h-96 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
             <div className="space-y-3 pt-4 border-t border-white/10">
               <div>
@@ -105,24 +103,25 @@ export default function PdfSidebar({
           </div>
         </div>
 
-        {/* 🌟 修正：PDFファイル切り替えのデザインをスタイリッシュに刷新！ */}
         {pdfList && pdfList.length > 1 && (
           <div className="mb-8">
             <label className="flex items-center gap-2 text-[10px] text-indigo-400 font-black tracking-[0.2em] uppercase mb-2 ml-1">
               <FileText className="w-3.5 h-3.5" /> Document Select
             </label>
             <div className="relative group">
+              {/* 🌟 修正箇所: selectタグに aria-label と title を追加 */}
               <select 
                 value={currentIndex}
                 onChange={(e) => setCurrentIndex(Number(e.target.value))}
                 className="w-full bg-[#1c1c1e] hover:bg-[#252528] border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer appearance-none shadow-lg pr-10"
+                aria-label="表示するPDFドキュメントを選択" 
+                title="表示するPDFドキュメントを選択"
               >
                 {pdfList.map((pdf, idx) => {
                   const name = pdf.split('/').pop()?.replace(/^\d+_/, '') || `PDF Document ${idx + 1}`;
                   return <option key={idx} value={idx}>{name}</option>;
                 })}
               </select>
-              {/* カスタムの矢印アイコンで純正セレクトボックス感を消す */}
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-hover:text-white/70 transition-colors pointer-events-none" />
             </div>
           </div>
@@ -134,6 +133,8 @@ export default function PdfSidebar({
           <button 
             onClick={() => { setIsAddingNote(true); setNoteContent(""); }} 
             className="p-1 hover:bg-white/10 rounded-md transition-colors text-indigo-400"
+            aria-label="新規メモを追加"
+            title="新規メモを追加"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -146,7 +147,11 @@ export default function PdfSidebar({
                 <span className="text-[10px] text-indigo-400/70 font-black uppercase">{editingNoteId ? "メモを編集" : "新規メモ"}</span>
                 <input type="number" value={notePage} onChange={(e) => setNotePage(Number(e.target.value))} className="w-16 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs font-black text-indigo-400 outline-none" placeholder="Page" />
               </div>
-              <button onClick={editingNoteId ? handleCancelNote : () => setIsAddingNote(false)}>
+              <button 
+                onClick={editingNoteId ? handleCancelNote : () => setIsAddingNote(false)}
+                aria-label="閉じる"
+                title="閉じる"
+              >
                 <X className="w-4 h-4 text-slate-500 hover:text-white transition-colors" />
               </button>
             </div>
@@ -175,12 +180,16 @@ export default function PdfSidebar({
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleEditNote(note); }}
                   className="p-1.5 bg-black/60 text-indigo-400 hover:text-white hover:bg-indigo-500 rounded-md transition-all"
+                  aria-label="メモを編集"
+                  title="メモを編集"
                 >
                   <Edit2 size={14} />
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
                   className="p-1.5 bg-black/60 text-rose-500 hover:text-white hover:bg-rose-500 rounded-md transition-all"
+                  aria-label="メモを削除"
+                  title="メモを削除"
                 >
                   <Trash2 size={14} />
                 </button>

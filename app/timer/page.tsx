@@ -76,24 +76,57 @@ function TimerContent() {
     } catch (e: any) { setPdfError(e.message); setIsInitializing(false); } 
   }, [materialId]);
 
-  const fetchSignedUrl = useCallback(async () => {
+  const fetchDriveFile = useCallback(async () => {
     if (pdfList.length === 0) return;
     setPdfError(null);
-    try {
-      let filePath = pdfList[currentIndex];
-      if (filePath.includes('/storage/v1/object/public/pdfs/')) filePath = filePath.split('/storage/v1/object/public/pdfs/')[1];
-      else if (filePath.includes('/pdfs/')) filePath = filePath.split('/pdfs/')[1];
+    
+    if (securePdfUrl && securePdfUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(securePdfUrl);
+    }
 
-      const { data, error: storageError } = await supabase.storage.from('pdfs').createSignedUrl(filePath, 300);
-      if (storageError) throw new Error("セキュアPDFの発行に失敗しました");
-      setSecurePdfUrl(data.signedUrl);
-    } catch (e: any) { setPdfError(e.message); } finally {
+    try {
+      const fileId = pdfList[currentIndex];
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) throw new Error("セッションが見つかりません。再ログインしてください。");
+
+      const providerToken = session.provider_token; 
+      if (!providerToken) {
+        throw new Error("Googleの権限が不足しています。ドライブ権限を許可して再ログインしてください。");
+      }
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: {
+          'Authorization': `Bearer ${providerToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) throw new Error("セッションが期限切れです。再ログインしてください。");
+        throw new Error("Google Driveからのファイル取得に失敗しました。");
+      }
+
+      const blob = await response.blob();
+      const localBlobUrl = URL.createObjectURL(blob);
+      setSecurePdfUrl(localBlobUrl);
+
+    } catch (e: any) { 
+      setPdfError(e.message); 
+    } finally {
       setIsInitializing(false);
     }
   }, [pdfList, currentIndex]);
 
+  useEffect(() => {
+    return () => {
+      if (securePdfUrl && securePdfUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(securePdfUrl);
+      }
+    };
+  }, [securePdfUrl]);
+
   useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
-  useEffect(() => { fetchSignedUrl(); }, [fetchSignedUrl]);
+  useEffect(() => { fetchDriveFile(); }, [fetchDriveFile]);
 
   const fetchNotes = useCallback(async () => {
     if (!materialId) return;
@@ -167,11 +200,10 @@ function TimerContent() {
 
   if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
-  if (pdfError) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchSignedUrl} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
+  if (pdfError) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (
-      // 🌟🌟🌟 ここが最大の修正ポイント！ 'fixed inset-0 z-50' によって、アンダーバーの干渉を強制シャットアウトします！
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0a] overflow-hidden text-white font-sans">
         
         <PdfToolbar 
@@ -198,12 +230,17 @@ function TimerContent() {
               eraserWidth={eraserWidth}
             />
 
-            <button onClick={() => router.back()} className="absolute top-4 left-4 z-40 p-2.5 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60">
+            {/* 🌟 修正1: PDFビューアの戻るボタン */}
+            <button 
+              onClick={() => router.back()} 
+              className="absolute top-4 left-4 z-40 p-2.5 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60"
+              aria-label="前の画面に戻る"
+              title="戻る"
+            >
               <ArrowLeft className="w-5 h-5" />
             </button>
           </div>
 
-          {/* 🌟 オーバーレイも 'fixed inset-0' で全画面覆う */}
           {isSidebarOpen && (
             <div 
               className="fixed inset-0 bg-black/50 z-[60] md:hidden"
@@ -211,7 +248,6 @@ function TimerContent() {
             />
           )}
 
-          {/* 🌟 サイドバー自体も 'fixed inset-y-0 right-0' で上下ピッタリに貼り付ける */}
           <div className={`
             fixed inset-y-0 right-0 z-[70] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
             ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -235,7 +271,18 @@ function TimerContent() {
         {showSaveModal && (
           <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="bg-[#1c1c1e] border border-white/10 w-full max-w-xs rounded-[2.5rem] p-7 shadow-2xl">
-              <div className="flex justify-between items-center mb-6"><h3 className="text-white font-black text-sm tracking-tight">学習の記録</h3><button onClick={() => setShowSaveModal(false)} className="p-2 bg-white/5 rounded-full text-white/40"><X className="w-4 h-4" /></button></div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-white font-black text-sm tracking-tight">学習の記録</h3>
+                {/* 🌟 修正2: モーダルの閉じるボタン */}
+                <button 
+                  onClick={() => setShowSaveModal(false)} 
+                  className="p-2 bg-white/5 rounded-full text-white/40"
+                  aria-label="閉じる"
+                  title="閉じる"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
               <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="何を学んだ？" className="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-4 text-sm text-white outline-none focus:border-indigo-500 transition-all resize-none h-32 mb-6" />
               <button onClick={handleSave} disabled={isSaving} className="w-full bg-indigo-600 text-white py-5 rounded-[1.5rem] font-black text-sm flex justify-center items-center gap-3 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all disabled:opacity-50">
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{isSaving ? "SAVING..." : "COMPLETE"}
@@ -254,11 +301,16 @@ function TimerContent() {
     );
   }
 
-  // 📄 パターンB: PDFがない場合の「ノーマルタイマー」も念のため full screen (fixed) にしておきます
   return (
     <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col text-slate-900 items-center justify-center p-4">
       <div className="absolute top-6 left-6">
-        <button onClick={() => router.back()} className="p-3 bg-white hover:bg-slate-100 rounded-full shadow-sm transition-colors">
+        {/* 🌟 修正3: PDFなし画面の戻るボタン */}
+        <button 
+          onClick={() => router.back()} 
+          className="p-3 bg-white hover:bg-slate-100 rounded-full shadow-sm transition-colors"
+          aria-label="前の画面に戻る"
+          title="戻る"
+        >
           <ArrowLeft className="w-6 h-6" />
         </button>
       </div>

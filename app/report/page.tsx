@@ -298,18 +298,9 @@ function ReportContent() {
     grouped.forEach(g => { g.segments.forEach(s => { s.heightPercent = calcMax > 0 ? (s.minutes / calcMax) * 100 : 0; }); });
     setChartData(grouped);
 
-    // 棒グラフの集計で使った periods から、全体の開始・終了時間を取得
-    const rangeStartTime = periods[0].start.getTime();
-    const rangeEndTime = periods[periods.length - 1].end.getTime();
-
     const groupedByMat: Record<string, number> = {};
     let totalMinutes = 0;
-    
-    // 全データから、グラフの表示期間内のものだけを抽出（filter）してから集計する
-    logsData.filter(log => {
-      const logTime = new Date(log.created_at).getTime();
-      return logTime >= rangeStartTime && logTime <= rangeEndTime;
-    }).forEach(log => {
+    logsData.forEach(log => {
       const title = matData?.find(m => m.id === log.material_id)?.title || log.subject || "その他";
       groupedByMat[title] = (groupedByMat[title] || 0) + log.duration_minutes;
       totalMinutes += log.duration_minutes;
@@ -890,11 +881,11 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
               <div className={`p-8 rounded-[3rem] shadow-sm border transition-colors duration-300 ${bgCard}`}>
                 <h3 className={`text-[10px] font-black mb-8 tracking-[0.2em] uppercase ${isDarkMode ? 'text-slate-400' : 'text-black'}`}>Distribution</h3>
                 <div className="flex flex-col items-center gap-8">
-                  <div className={`w-44 h-44 rounded-full relative flex items-center justify-center border-4 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-slate-50'}`} style={{ background: `conic-gradient(${pieData.map((d, i) => {
-                    const start = pieData.slice(0, i).reduce((s, x) => s + x.percentage * 3.6, 0);
-                    const end = start + d.percentage * 3.6;
-                    return `${d.color} ${start}deg ${end}deg`;
-                  }).join(", ")})` }}>
+                  <div className={`w-44 h-44 rounded-full relative flex items-center justify-center border-4 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-slate-50'}`} style={{ background: pieData.length > 0 ? `conic-gradient(${pieData.map((d, i) => {
+  const start = pieData.slice(0, i).reduce((s, x) => s + x.percentage * 3.6, 0);
+  const end = start + d.percentage * 3.6;
+  return `${d.color} ${start}deg ${end}deg`;
+}).join(", ")})` : (isDarkMode ? '#2c2c2e' : '#f1f5f9') }}>
                     <div className={`w-28 h-28 rounded-full flex items-center justify-center shadow-inner ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
                       <BookOpen className={`w-8 h-8 ${isDarkMode ? 'text-slate-800' : 'text-slate-100'}`} />
                     </div>

@@ -3,8 +3,13 @@
 import { useState, useRef, forwardRef, useImperativeHandle, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
+
+// 🌟 修正: TypeScriptのCSSモジュール型エラーを回避するために @ts-ignore を追加
+// @ts-ignore
 import 'react-pdf/dist/Page/AnnotationLayer.css';
+// @ts-ignore
 import 'react-pdf/dist/Page/TextLayer.css';
+
 import DrawingCanvas from './DrawingCanvas';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs`;
@@ -103,7 +108,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                     renderAnnotationLayer={true}
                     loading=""
                   />
-                  {/* 🌟 修正：DrawingCanvas を正しく呼び出します */}
                   <DrawingCanvas 
                     mode={drawingMode} 
                     color={drawingColor} 
@@ -111,7 +115,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
                     markerWidth={markerWidth}
                     eraserWidth={eraserWidth}
                     pageIndex={index + 1} 
-                    pdfId={pdfId || pdfUrl} // 🌟 親からきた pdfId を渡す
+                    pdfId={pdfId || pdfUrl}
                   />
                 </div>
               ))}
