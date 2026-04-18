@@ -64,7 +64,14 @@ function TimerContent() {
       
       // Google Drive からの取得
       if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
-        setPdfList([material.google_drive_file_id]);
+        let fileIds: string[];
+        try {
+          const parsed = JSON.parse(material.google_drive_file_id);
+          fileIds = Array.isArray(parsed) ? parsed : [material.google_drive_file_id];
+        } catch {
+          fileIds = [material.google_drive_file_id];
+        }
+        setPdfList(fileIds);
         setStorageType('google_drive');
         // isInitializing は fetchDriveFile の finally で false にする
         return;
@@ -104,23 +111,25 @@ function TimerContent() {
     try {
       const fileId = pdfList[currentIndex];
 
-      // Google Drive から取得
+      // Google Drive から直接取得（クライアントサイドで Google API を呼ぶ）
       if (storageType === 'google_drive') {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         const providerToken = currentSession?.provider_token;
-        if (!providerToken) throw new Error("Google Drive の認証が必要です。再ログインしてください。");
-        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`, {
-          headers: { 'Authorization': `Bearer ${providerToken}` },
-        });
+        if (!providerToken) throw new Error("Google Drive の認証が期限切れです。再認証してください。");
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          if (response.status === 401) throw new Error("セッションが期限切れです。再ログインしてください。");
-          if (response.status === 404) throw new Error("ファイルが見つかりません。");
-          throw new Error(errorData.error || "Google Drive からのファイル取得に失敗しました。");
+        const driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+          { headers: { Authorization: `Bearer ${providerToken}` } }
+        );
+
+        if (!driveRes.ok) {
+          if (driveRes.status === 401 || driveRes.status === 403) {
+            throw new Error("Google Drive へのアクセス権限がありません。再認証してください。");
+          }
+          throw new Error(`Google Drive エラー (${driveRes.status})`);
         }
 
-        const blob = await response.blob();
+        const blob = await driveRes.blob();
         const localBlobUrl = URL.createObjectURL(blob);
         setSecurePdfUrl(localBlobUrl);
       } else {
