@@ -114,8 +114,11 @@ function TimerContent() {
       // Google Drive から直接取得（クライアントサイドで Google API を呼ぶ）
       if (storageType === 'google_drive') {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const providerToken = currentSession?.provider_token;
-        if (!providerToken) throw new Error("Google Drive の認証が期限切れです。再認証してください。");
+        // sessionStorage にキャッシュしたトークンをフォールバックとして使用
+        const sessionToken = currentSession?.provider_token;
+        const cachedToken = typeof window !== 'undefined' ? sessionStorage.getItem('drive_provider_token') : null;
+        const providerToken = sessionToken || cachedToken;
+        if (!providerToken) throw new Error("DRIVE_AUTH_REQUIRED");
 
         const driveRes = await fetch(
           `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
@@ -124,7 +127,7 @@ function TimerContent() {
 
         if (!driveRes.ok) {
           if (driveRes.status === 401 || driveRes.status === 403) {
-            throw new Error("Google Drive へのアクセス権限がありません。再認証してください。");
+            throw new Error("DRIVE_AUTH_REQUIRED");
           }
           throw new Error(`Google Drive エラー (${driveRes.status})`);
         }
@@ -232,9 +235,40 @@ function TimerContent() {
     pdfViewerRef.current?.scrollToPage(pageNumber);
   };
 
+  const handleDriveReauth = async () => {
+    const returnPath = window.location.pathname + window.location.search;
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnPath)}`;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        scopes: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    });
+  };
+
   if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
-  if (pdfError) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none"><AlertCircle className="w-12 h-12 mb-4 animate-pulse" /><p className="font-black mb-6 text-sm">{pdfError}</p><button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button></div>;
+  if (pdfError) {
+    const isDriveAuthError = pdfError === 'DRIVE_AUTH_REQUIRED';
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none">
+        <AlertCircle className="w-12 h-12 mb-4 animate-pulse" />
+        <p className="font-black mb-6 text-sm">
+          {isDriveAuthError ? 'Google Drive へのアクセス権限がありません' : pdfError}
+        </p>
+        {isDriveAuthError ? (
+          <button onClick={handleDriveReauth} className="px-8 py-4 bg-indigo-600 rounded-full text-white font-black active:scale-95 transition-all hover:bg-indigo-700">
+            Google Drive を再認証する
+          </button>
+        ) : (
+          <button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button>
+        )}
+        <button onClick={() => router.back()} className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors">戻る</button>
+      </div>
+    );
+  }
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (

@@ -39,6 +39,9 @@ export default function GoogleDriveSetup() {
         return;
       }
 
+      // タイマーページでも使えるようにトークンをキャッシュ
+      sessionStorage.setItem('drive_provider_token', session.provider_token);
+
       fetchGoogleDriveFiles(session.provider_token);
     } catch (err: any) {
       setError(err.message);
