@@ -17,6 +17,7 @@ export default function GoogleDriveSetup() {
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [materialTitle, setMaterialTitle] = useState<string>("");
   const [iconUrl, setIconUrl] = useState<string>("");
+  const [fileSearch, setFileSearch] = useState<string>("");
 
   useEffect(() => {
     const title = searchParams.get("title") || "";
@@ -231,8 +232,15 @@ export default function GoogleDriveSetup() {
                 </span>
               )}
             </div>
+            <input
+              type="text"
+              placeholder="ファイル名で検索..."
+              value={fileSearch}
+              onChange={(e) => setFileSearch(e.target.value)}
+              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none transition-colors text-sm"
+            />
             <div className="max-h-64 overflow-y-auto space-y-2">
-              {files.map((file) => {
+              {files.filter(f => f.name.toLowerCase().includes(fileSearch.toLowerCase())).map((file) => {
                 const isSelected = selectedFiles.some((f) => f.id === file.id);
                 return (
                   <button

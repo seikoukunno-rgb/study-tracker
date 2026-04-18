@@ -78,13 +78,13 @@ export async function GET(request: NextRequest) {
       throw new Error(`Google Drive API error: ${response.status}`);
     }
 
-    const blob = await response.blob();
+    const arrayBuffer = await response.arrayBuffer();
 
-    return new NextResponse(blob, {
+    return new NextResponse(arrayBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Length': blob.size.toString(),
-        'Cache-Control': 'public, max-age=86400',
+        'Content-Length': arrayBuffer.byteLength.toString(),
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error: any) {

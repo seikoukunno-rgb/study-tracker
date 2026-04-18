@@ -111,28 +111,30 @@ function TimerContent() {
     try {
       const fileId = pdfList[currentIndex];
 
-      // Google Drive から直接取得（クライアントサイドで Google API を呼ぶ）
+      // Google Drive から取得（サーバー経由でCORSを回避）
       if (storageType === 'google_drive') {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
-        // sessionStorage にキャッシュしたトークンをフォールバックとして使用
         const sessionToken = currentSession?.provider_token;
         const cachedToken = typeof window !== 'undefined' ? sessionStorage.getItem('drive_provider_token') : null;
         const providerToken = sessionToken || cachedToken;
+
+        // 取得できたトークンはsessionStorageにキャッシュ
+        if (sessionToken && typeof window !== 'undefined') {
+          sessionStorage.setItem('drive_provider_token', sessionToken);
+        }
         if (!providerToken) throw new Error("DRIVE_AUTH_REQUIRED");
 
-        const driveRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
-          { headers: { Authorization: `Bearer ${providerToken}` } }
-        );
+        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`, {
+          headers: { Authorization: `Bearer ${providerToken}` },
+        });
 
-        if (!driveRes.ok) {
-          if (driveRes.status === 401 || driveRes.status === 403) {
-            throw new Error("DRIVE_AUTH_REQUIRED");
-          }
-          throw new Error(`Google Drive エラー (${driveRes.status})`);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          if (response.status === 401 || response.status === 403) throw new Error("DRIVE_AUTH_REQUIRED");
+          throw new Error(errData.error || `Google Drive エラー (${response.status})`);
         }
 
-        const blob = await driveRes.blob();
+        const blob = await response.blob();
         const localBlobUrl = URL.createObjectURL(blob);
         setSecurePdfUrl(localBlobUrl);
       } else {
