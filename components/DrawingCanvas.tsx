@@ -14,6 +14,7 @@ type DrawingCanvasProps = {
   pdfId?: string; 
 };
 
+
 type Point = { x: number; y: number };
 type PathData = { mode: 'pen' | 'marker' | 'eraser'; color: string; width: number; points: Point[] };
 type TextData = { text: string; x: number; y: number; width: number; height: number; color: string; fontSize?: number };
