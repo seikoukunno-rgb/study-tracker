@@ -40,6 +40,7 @@ function TimerContent() {
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
+  const [gdrivePage, setGdrivePage] = useState(0);
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser' | 'text'>('none');
   const [drawingColor, setDrawingColor] = useState<string>('#ef4444');
   const [penWidth, setPenWidth] = useState(3);
@@ -258,9 +259,25 @@ function TimerContent() {
                     penWidth={penWidth}
                     markerWidth={markerWidth}
                     eraserWidth={eraserWidth}
-                    pageIndex={0}
+                    pageIndex={gdrivePage}
                     pdfId={`${materialId}-gdrive`}
                   />
+                </div>
+                {/* Page selector — user sets this to match the page visible in the iframe */}
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 pointer-events-auto">
+                  <button
+                    onClick={() => setGdrivePage(p => Math.max(0, p - 1))}
+                    className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm font-black"
+                    aria-label="前のページ"
+                  >‹</button>
+                  <span className="text-white text-xs font-black tabular-nums min-w-[3rem] text-center">
+                    P.{gdrivePage + 1}
+                  </span>
+                  <button
+                    onClick={() => setGdrivePage(p => p + 1)}
+                    className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm font-black"
+                    aria-label="次のページ"
+                  >›</button>
                 </div>
               </>
             ) : (
