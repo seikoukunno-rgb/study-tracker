@@ -105,6 +105,7 @@ export default function GoogleDriveSetup() {
         throw insertError;
       }
 
+      localStorage.setItem('google_drive_connected', 'true');
       setSuccess(true);
 
       // 3秒後にホーム画面に戻る
