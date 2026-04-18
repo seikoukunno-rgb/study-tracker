@@ -106,7 +106,12 @@ function TimerContent() {
 
       // Google Drive から取得
       if (storageType === 'google_drive') {
-        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const providerToken = currentSession?.provider_token;
+        if (!providerToken) throw new Error("Google Drive の認証が必要です。再ログインしてください。");
+        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`, {
+          headers: { 'Authorization': `Bearer ${providerToken}` },
+        });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));

@@ -36,9 +36,16 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // セッションからプロバイダトークンを取得
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.provider_token) {
+    // Authorization ヘッダー優先、なければセッションから取得
+    const authHeader = request.headers.get('Authorization');
+    let providerToken = authHeader?.replace('Bearer ', '') ?? null;
+
+    if (!providerToken) {
+      const { data: { session } } = await supabase.auth.getSession();
+      providerToken = session?.provider_token ?? null;
+    }
+
+    if (!providerToken) {
       return NextResponse.json(
         { error: 'No provider token found. Please re-authenticate.' },
         { status: 401 }
@@ -50,7 +57,7 @@ export async function GET(request: NextRequest) {
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
         headers: {
-          'Authorization': `Bearer ${session.provider_token}`,
+          'Authorization': `Bearer ${providerToken}`,
         },
       }
     );
