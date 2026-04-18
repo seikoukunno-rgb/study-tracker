@@ -312,8 +312,6 @@ export default function Home() {
   };
 
   const handleAddCustomMaterial = async () => {
-    if (!customTitle.trim()) return;
-
     const driveSetupPath = `/google-drive-setup?title=${encodeURIComponent(customTitle)}&icon=${encodeURIComponent(selectedIconUrl)}`;
 
     if (isGoogleConnected) {
@@ -433,8 +431,8 @@ export default function Home() {
               <div className="space-y-3 mt-6">
                 <button
                   onClick={handleAddCustomMaterial}
-                  disabled={!customTitle.trim() || isUploading}
-                  className={`w-full py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${!customTitle.trim() || isUploading ? 'bg-slate-400 cursor-not-allowed text-slate-600' : 'bg-green-600 text-white shadow-green-500/30'}`}
+                  disabled={isUploading}
+                  className={`w-full py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-slate-400 cursor-not-allowed text-slate-600' : 'bg-green-600 text-white shadow-green-500/30'}`}
                 >
                   {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : isGoogleConnected ? <><Plus className="w-5 h-5" /><span>GoogleドライブからPDFを追加</span></> : <><Plus className="w-5 h-5" /><span>Google Drive 認証</span></>}
                 </button>
@@ -496,13 +494,7 @@ export default function Home() {
         <div className="flex justify-between items-center mb-4 px-1">
           <h2 className={`text-sm font-black tracking-[0.2em] uppercase ${textSub}`}>マイ本棚</h2>
           <div className="flex gap-2">
-            <button 
-              onClick={() => router.push("/google-drive-setup")} 
-              className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-green-600 text-white shadow-lg shadow-green-500/20' : 'bg-green-600 text-white shadow-md'}`}
-            >
-              📁 Google Drive から追加
-            </button>
-            <button 
+            <button
               onClick={() => setShowAddModal(true)} 
               className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-600 text-white shadow-md'}`}
             >
