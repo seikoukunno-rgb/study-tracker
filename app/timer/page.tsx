@@ -9,8 +9,9 @@ import {
 } from "lucide-react";
 
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
-import PdfSidebar from "@/components/PdfSidebar"; 
+import PdfSidebar from "@/components/PdfSidebar";
 import PdfToolbar from "@/components/PdfToolbar";
+import DrawingCanvas from "@/components/DrawingCanvas";
 
 function TimerContent() {
   const searchParams = useSearchParams();
@@ -111,32 +112,9 @@ function TimerContent() {
     try {
       const fileId = pdfList[currentIndex];
 
-      // Google Drive から取得（サーバー経由でCORSを回避）
+      // Google Drive: ブラウザの既存Googleセッションを使ったプレビュー埋め込み
       if (storageType === 'google_drive') {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const sessionToken = currentSession?.provider_token;
-        const cachedToken = typeof window !== 'undefined' ? sessionStorage.getItem('drive_provider_token') : null;
-        const providerToken = sessionToken || cachedToken;
-
-        // 取得できたトークンはsessionStorageにキャッシュ
-        if (sessionToken && typeof window !== 'undefined') {
-          sessionStorage.setItem('drive_provider_token', sessionToken);
-        }
-        if (!providerToken) throw new Error("DRIVE_AUTH_REQUIRED");
-
-        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`, {
-          headers: { Authorization: `Bearer ${providerToken}` },
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          if (response.status === 401 || response.status === 403) throw new Error("DRIVE_AUTH_REQUIRED");
-          throw new Error(errData.error || `Google Drive エラー (${response.status})`);
-        }
-
-        const blob = await response.blob();
-        const localBlobUrl = URL.createObjectURL(blob);
-        setSecurePdfUrl(localBlobUrl);
+        setSecurePdfUrl(`https://drive.google.com/file/d/${fileId}/preview`);
       } else {
         // Supabase Storage から取得
         const { data, error } = await supabase.storage
@@ -237,46 +215,22 @@ function TimerContent() {
     pdfViewerRef.current?.scrollToPage(pageNumber);
   };
 
-  const handleDriveReauth = async () => {
-    const returnPath = window.location.pathname + window.location.search;
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnPath)}`;
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo,
-        scopes: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
-        queryParams: { access_type: 'offline', prompt: 'consent' },
-      },
-    });
-  };
-
   if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
-  if (pdfError) {
-    const isDriveAuthError = pdfError === 'DRIVE_AUTH_REQUIRED';
-    return (
-      <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none">
-        <AlertCircle className="w-12 h-12 mb-4 animate-pulse" />
-        <p className="font-black mb-6 text-sm">
-          {isDriveAuthError ? 'Google Drive へのアクセス権限がありません' : pdfError}
-        </p>
-        {isDriveAuthError ? (
-          <button onClick={handleDriveReauth} className="px-8 py-4 bg-indigo-600 rounded-full text-white font-black active:scale-95 transition-all hover:bg-indigo-700">
-            Google Drive を再認証する
-          </button>
-        ) : (
-          <button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button>
-        )}
-        <button onClick={() => router.back()} className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors">戻る</button>
-      </div>
-    );
-  }
+  if (pdfError) return (
+    <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center text-rose-500 p-10 text-center select-none">
+      <AlertCircle className="w-12 h-12 mb-4 animate-pulse" />
+      <p className="font-black mb-6 text-sm">{pdfError}</p>
+      <button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button>
+      <button onClick={() => router.back()} className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors">戻る</button>
+    </div>
+  );
 
   if (pdfList.length > 0 && securePdfUrl) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0a] overflow-hidden text-white font-sans">
         
-        <PdfToolbar 
+        <PdfToolbar
           mode={drawingMode} setMode={setDrawingMode}
           color={drawingColor} setColor={setDrawingColor}
           penWidth={penWidth} setPenWidth={setPenWidth}
@@ -289,20 +243,41 @@ function TimerContent() {
         <div className="flex-1 flex overflow-hidden relative">
           
           <div className="flex-1 relative border-r border-[#2c2c2e]">
-            <PdfViewer 
-              ref={pdfViewerRef} 
-              pdfUrl={securePdfUrl} 
-              pdfId={`${materialId}-pdf-${currentIndex}`} 
-              drawingMode={drawingMode} 
-              drawingColor={drawingColor}
-              penWidth={penWidth}
-              markerWidth={markerWidth}
-              eraserWidth={eraserWidth}
-            />
+            {storageType === 'google_drive' ? (
+              <>
+                <iframe
+                  src={securePdfUrl}
+                  className="w-full h-full border-0"
+                  allow="autoplay"
+                  title="Google Drive PDF"
+                />
+                <div className="absolute inset-0" style={{ pointerEvents: drawingMode === 'none' ? 'none' : 'auto' }}>
+                  <DrawingCanvas
+                    mode={drawingMode}
+                    color={drawingColor}
+                    penWidth={penWidth}
+                    markerWidth={markerWidth}
+                    eraserWidth={eraserWidth}
+                    pageIndex={0}
+                    pdfId={`${materialId}-gdrive`}
+                  />
+                </div>
+              </>
+            ) : (
+              <PdfViewer
+                ref={pdfViewerRef}
+                pdfUrl={securePdfUrl}
+                pdfId={`${materialId}-pdf-${currentIndex}`}
+                drawingMode={drawingMode}
+                drawingColor={drawingColor}
+                penWidth={penWidth}
+                markerWidth={markerWidth}
+                eraserWidth={eraserWidth}
+              />
+            )}
 
-            {/* 🌟 修正1: PDFビューアの戻るボタン */}
-            <button 
-              onClick={() => router.back()} 
+            <button
+              onClick={() => router.back()}
               className="absolute top-4 left-4 z-40 p-2.5 bg-black/40 backdrop-blur-xl rounded-full text-white/70 active:scale-90 transition-all border border-white/10 hover:bg-black/60"
               aria-label="前の画面に戻る"
               title="戻る"
