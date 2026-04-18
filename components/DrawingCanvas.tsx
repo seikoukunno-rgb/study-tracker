@@ -108,6 +108,9 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
     ctx.restore();
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
+  const redrawRef = useRef(redraw);
+  useEffect(() => { redrawRef.current = redraw; }, [redraw]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
@@ -143,6 +146,12 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   }, [pdfId, pageIndex]);
 
   useEffect(() => {
+    pathsRef.current = [];
+    textsRef.current = [];
+    setTextInput(null);
+    setTextValue("");
+    redrawRef.current();
+
     const loadAnnotations = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -151,10 +160,10 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
         pathsRef.current = data.data.paths || [];
         textsRef.current = data.data.texts || [];
       }
-      redraw();
+      redrawRef.current();
     };
     loadAnnotations();
-  }, [pageIndex, pdfId, redraw]);
+  }, [pageIndex, pdfId]);
 
   useEffect(() => {
     const handleClearCanvas = () => {
