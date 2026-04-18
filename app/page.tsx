@@ -407,20 +407,43 @@ export default function Home() {
                  <input type="text" value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder="例: 大学のプリント、英単語まとめ" className={`w-full rounded-2xl px-5 py-4 font-bold border-2 outline-none transition-all ${bgInput}`} />
                </div>
 
-              <div className={`mt-6 w-full p-6 rounded-[2rem] border-2 ${isDarkMode ? 'border-indigo-500/30 bg-indigo-500/10' : 'border-indigo-200 bg-indigo-50'}`}>
-                <p className={`text-sm font-black mb-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>📁 Google Drive から PDF を選択</p>
-                <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  「本棚に追加」ボタンをクリックすると、Google Drive から PDF ファイルを選択できます。
-                </p>
-              </div>
+              <div className="space-y-3 mt-6">
+                <button 
+                  onClick={handleAddCustomMaterial} 
+                  disabled={!customTitle.trim() || isUploading}
+                  className={`w-full py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-green-600 text-white shadow-green-500/30'}`}
+                >
+                  {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : <><Plus className="w-5 h-5" /><span>Google Drive 認証</span></>}
+                </button>
 
-              <button 
-                onClick={handleAddCustomMaterial} 
-                disabled={!customTitle.trim() || isUploading}
-                className={`w-full mt-8 py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white shadow-indigo-500/30'}`}
-              >
-                {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : <><Plus className="w-5 h-5" /><span>本棚に追加する</span></>}
-              </button>
+                <button 
+                  onClick={async () => {
+                    if (!customTitle.trim()) return;
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) return;
+                    
+                    const { error } = await supabase.from('materials').insert([{
+                      title: customTitle,
+                      student_id: user.id,
+                      image_url: selectedIconUrl,
+                      created_at: new Date().toISOString()
+                    }]);
+                    
+                    if (!error) {
+                      setShowCustomModal(false);
+                      setCustomTitle("");
+                      setSelectedIconUrl(PRESET_ICONS[0]);
+                      fetchData();
+                      setShowSuccess(true);
+                      setTimeout(() => setShowSuccess(false), 3000);
+                    }
+                  }}
+                  disabled={!customTitle.trim()}
+                  className={`w-full py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${!customTitle.trim() ? 'bg-slate-400 cursor-not-allowed text-slate-600' : 'bg-indigo-600 text-white shadow-indigo-500/30'}`}
+                >
+                  <Plus className="w-5 h-5" /><span>PDF なしで作成</span>
+                </button>
+              </div>
              </div>
           </div>
         </>
