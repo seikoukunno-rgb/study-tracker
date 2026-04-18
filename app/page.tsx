@@ -449,9 +449,20 @@ export default function Home() {
       <main className="max-w-4xl mx-auto p-5">
         <div className="flex justify-between items-center mb-4 px-1">
           <h2 className={`text-sm font-black tracking-[0.2em] uppercase ${textSub}`}>マイ本棚</h2>
-          <button onClick={() => setShowAddModal(true)} className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-600 text-white shadow-md'}`}>
-            <Plus className="w-4 h-4" /> 教材を追加
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => router.push("/google-drive-setup")} 
+              className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-green-600 text-white shadow-lg shadow-green-500/20' : 'bg-green-600 text-white shadow-md'}`}
+            >
+              📁 Google Drive から追加
+            </button>
+            <button 
+              onClick={() => setShowAddModal(true)} 
+              className={`text-sm font-bold flex items-center gap-1.5 px-5 py-2.5 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-600 text-white shadow-md'}`}
+            >
+              <Plus className="w-4 h-4" /> 教材を追加
+            </button>
+          </div>
         </div>
 
         <div className="relative mb-6 px-1">
