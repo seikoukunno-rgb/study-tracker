@@ -246,13 +246,18 @@ function TimerContent() {
           <div className="flex-1 relative border-r border-[#2c2c2e]">
             {storageType === 'google_drive' ? (
               <>
+                {/* Google Drive PDF viewer */}
                 <iframe
-                  src={securePdfUrl}
+                  key={gdrivePage}
+                  src={`${securePdfUrl}#page=${gdrivePage + 1}`}
                   className="w-full h-full border-0"
                   allow="autoplay"
                   title="Google Drive PDF"
                 />
-                <div className="absolute inset-0" style={{ pointerEvents: drawingMode === 'none' ? 'none' : 'auto' }}>
+                {/* iframeの内部スクロールを完全にブロック（キャンバスとページをズレさせないため） */}
+                <div className="absolute inset-0 z-[5]" style={{ pointerEvents: drawingMode !== 'none' ? 'none' : 'auto' }} />
+                {/* 書き込みキャンバス */}
+                <div className="absolute inset-0 z-10" style={{ pointerEvents: drawingMode === 'none' ? 'none' : 'auto' }}>
                   <DrawingCanvas
                     mode={drawingMode}
                     color={drawingColor}
@@ -263,8 +268,8 @@ function TimerContent() {
                     pdfId={`${materialId}-gdrive`}
                   />
                 </div>
-                {/* Page selector — user sets this to match the page visible in the iframe */}
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 pointer-events-auto">
+                {/* ページ切り替えボタン */}
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 pointer-events-auto">
                   <button
                     onClick={() => setGdrivePage(p => Math.max(0, p - 1))}
                     className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm font-black"
