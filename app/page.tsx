@@ -421,6 +421,7 @@ export default function Home() {
               >
                 {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : <><Plus className="w-5 h-5" /><span>本棚に追加する</span></>}
               </button>
+             </div>
           </div>
         </>
       )}
