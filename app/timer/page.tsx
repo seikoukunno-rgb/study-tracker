@@ -66,7 +66,7 @@ function TimerContent() {
       if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
         setPdfList([material.google_drive_file_id]);
         setStorageType('google_drive');
-        setIsInitializing(false);
+        // isInitializing は fetchDriveFile の finally で false にする
         return;
       }
 

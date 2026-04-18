@@ -530,6 +530,7 @@ export default function Home() {
               .filter(material => material.title.toLowerCase().includes(searchQuery.toLowerCase()))
               .map((material) => {
               const hasPdf = material.pdf_url && material.pdf_url !== '[]' && material.pdf_url !== '';
+              const isGoogleDrive = material.storage_type === 'google_drive';
 
               return (
                 <div key={material.id} className="relative h-full">
@@ -555,12 +556,16 @@ export default function Home() {
                       transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s' 
                     }}
                     className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2
-                      ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'} 
-                      ${hasPdf 
-                        ? (swipingMaterialId === material.id && Math.abs(swipeOffset) > 10) 
-                          ? isDarkMode ? 'border-[#38383a]' : 'border-slate-100' 
-                          : 'border-rose-500 shadow-rose-100' 
-                        : isDarkMode ? 'border-[#38383a]' : 'border-slate-100' 
+                      ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}
+                      ${isGoogleDrive
+                        ? (swipingMaterialId === material.id && Math.abs(swipeOffset) > 10)
+                          ? isDarkMode ? 'border-[#38383a]' : 'border-slate-100'
+                          : 'border-red-500 shadow-red-100'
+                        : hasPdf
+                          ? (swipingMaterialId === material.id && Math.abs(swipeOffset) > 10)
+                            ? isDarkMode ? 'border-[#38383a]' : 'border-slate-100'
+                            : 'border-rose-500 shadow-rose-100'
+                          : isDarkMode ? 'border-[#38383a]' : 'border-slate-100'
                       } ${swipingMaterialId === material.id ? 'shadow-2xl' : 'shadow-sm'}`}
                   >
                     
@@ -570,15 +575,22 @@ export default function Home() {
                       </div>
                     )}
 
-                    <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border shadow-inner pointer-events-none
-                      ${hasPdf ? 'border-rose-100' : bgSubCard}`}>
+                    <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border-2 shadow-inner pointer-events-none
+                      ${isGoogleDrive ? 'border-red-500' : hasPdf ? 'border-rose-100' : bgSubCard}`}>
                       {material.image_url ? (
                         <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
                       ) : (
-                        <Book className={`w-8 h-8 transition-colors ${hasPdf ? 'text-rose-300' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                        <Book className={`w-8 h-8 transition-colors ${hasPdf || isGoogleDrive ? 'text-rose-300' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
                       )}
-                      
-                      {hasPdf && (
+
+                      {isGoogleDrive && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-red-600/80 backdrop-blur-sm text-white text-[9px] font-black px-1 py-1 flex items-center justify-center gap-1 z-20">
+                          <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"/></svg>
+                          Drive PDF
+                        </div>
+                      )}
+
+                      {hasPdf && !isGoogleDrive && (
                         <div className="absolute top-1.5 right-1.5 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow z-20">
                           PDF
                         </div>
