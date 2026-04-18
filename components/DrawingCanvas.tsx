@@ -109,23 +109,27 @@ export default function DrawingCanvas({ mode, color, penWidth, markerWidth, eras
   }, [mode, color, penWidth, markerWidth, eraserWidth]);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    const parent = canvas?.parentElement;
+    if (!canvas || !parent) return;
+
     const initCanvas = () => {
-      const canvas = canvasRef.current;
-      const parent = canvas?.parentElement;
-      if (canvas && parent) {
-        const dpr = window.devicePixelRatio || 1;
-        const cssWidth = parent.clientWidth;
-        const cssHeight = parent.clientHeight;
-        canvas.style.width = `${cssWidth}px`;
-        canvas.style.height = `${cssHeight}px`;
-        canvas.width = cssWidth * dpr;
-        canvas.height = cssHeight * dpr;
-        redraw();
-      }
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = parent.clientWidth;
+      const cssHeight = parent.clientHeight;
+      if (cssWidth === 0 || cssHeight === 0) return;
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
+      canvas.width = cssWidth * dpr;
+      canvas.height = cssHeight * dpr;
+      redraw();
     };
-    const timer = setTimeout(initCanvas, 300);
-    window.addEventListener('resize', initCanvas);
-    return () => { clearTimeout(timer); window.removeEventListener('resize', initCanvas); };
+
+    const resizeObserver = new ResizeObserver(initCanvas);
+    resizeObserver.observe(parent);
+    initCanvas();
+
+    return () => resizeObserver.disconnect();
   }, [redraw]);
 
   const saveAnnotations = useCallback(async () => {

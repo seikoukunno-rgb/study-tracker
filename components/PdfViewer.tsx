@@ -95,15 +95,15 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
               loading={<div className="mt-32 text-indigo-400 font-black animate-pulse">LOADING...</div>}
             >
               {numPages && Array.from(new Array(numPages), (_, index) => (
-                <div 
+                <div
                   key={`page_${index + 1}`}
-                  ref={(el) => { pageRefs.current[index + 1] = el; }} 
+                  ref={(el) => { pageRefs.current[index + 1] = el; }}
                   className="relative shadow-2xl overflow-hidden bg-white mb-2"
                   style={{ width: pdfWidth }}
                 >
-                  <Page 
-                    pageNumber={index + 1} 
-                    width={pdfWidth} 
+                  <Page
+                    pageNumber={index + 1}
+                    width={pdfWidth}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
                     loading=""
