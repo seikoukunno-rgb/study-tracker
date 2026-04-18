@@ -1,0 +1,90 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+export async function GET(request: NextRequest) {
+  try {
+    const fileId = request.nextUrl.searchParams.get('fileId');
+
+    if (!fileId) {
+      return NextResponse.json(
+        { error: 'fileId is required' },
+        { status: 400 }
+      );
+    }
+
+    // サーバーサイドから Supabase セッションを取得
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Server Component からはクッキーをセットできないので無視
+            }
+          },
+        },
+      }
+    );
+
+    // セッションからプロバイダトークンを取得
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.provider_token) {
+      return NextResponse.json(
+        { error: 'No provider token found. Please re-authenticate.' },
+        { status: 401 }
+      );
+    }
+
+    // Google Drive API にサーバーサイドからアクセス
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      {
+        headers: {
+          'Authorization': `Bearer ${session.provider_token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        return NextResponse.json(
+          { error: 'Unauthorized: Session expired' },
+          { status: 401 }
+        );
+      }
+      if (response.status === 404) {
+        return NextResponse.json(
+          { error: 'File not found' },
+          { status: 404 }
+        );
+      }
+      throw new Error(`Google Drive API error: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+
+    return new NextResponse(blob, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Length': blob.size.toString(),
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  } catch (error: any) {
+    console.error('Drive API error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to fetch file' },
+      { status: 500 }
+    );
+  }
+}

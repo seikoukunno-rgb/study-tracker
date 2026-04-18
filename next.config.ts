@@ -4,18 +4,15 @@ import withPWAInit from 'next-pwa';
 
 const withPWA = withPWAInit({
   dest: 'public',
-  disable: false, // 🌟 開発中でも一旦生成するようにする
+  disable: process.env.NODE_ENV === 'development', // 開発環境では無効化
   register: true,
   skipWaiting: true,
 });
 
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: process.env.NODE_ENV === 'production', // 本番環境のみ有効
   serverExternalPackages: ['canvas'],
   
-  // 🌟 Turbopackの設定を削除（またはコメントアウト）
-  // turbopack: {}, 
-
   webpack: (config: any) => {
     config.resolve.alias.canvas = false;
     return config;

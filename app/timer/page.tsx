@@ -32,6 +32,7 @@ function TimerContent() {
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [securePdfUrl, setSecurePdfUrl] = useState<string | null>(null);
+  const [storageType, setStorageType] = useState<'supabase' | 'google_drive'>('supabase');
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -53,11 +54,26 @@ function TimerContent() {
   const fetchMaterialPaths = useCallback(async () => {
     if (!materialId) { setIsInitializing(false); return; }
     try {
-      const { data: material, error: dbError } = await supabase.from('materials').select('pdf_url').eq('id', materialId).single();
+      const { data: material, error: dbError } = await supabase
+        .from('materials')
+        .select('pdf_url, google_drive_file_id, storage_type')
+        .eq('id', materialId)
+        .single();
+
       if (dbError) throw new Error("教材データの取得に失敗しました");
       
+      // Google Drive からの取得
+      if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
+        setPdfList([material.google_drive_file_id]);
+        setStorageType('google_drive');
+        setIsInitializing(false);
+        return;
+      }
+
+      // Supabase Storage からの取得
       if (!material || !material.pdf_url || material.pdf_url === '[]') { 
         setPdfList([]);
+        setStorageType('supabase');
         setIsInitializing(false); 
         return; 
       }
@@ -73,6 +89,7 @@ function TimerContent() {
         }
       }
       setPdfList(paths);
+      setStorageType('supabase');
     } catch (e: any) { setPdfError(e.message); setIsInitializing(false); } 
   }, [materialId]);
 
@@ -87,35 +104,38 @@ function TimerContent() {
     try {
       const fileId = pdfList[currentIndex];
 
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) throw new Error("セッションが見つかりません。再ログインしてください。");
+      // Google Drive から取得
+      if (storageType === 'google_drive') {
+        const response = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
 
-      const providerToken = session.provider_token; 
-      if (!providerToken) {
-        throw new Error("Googleの権限が不足しています。ドライブ権限を許可して再ログインしてください。");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          if (response.status === 401) throw new Error("セッションが期限切れです。再ログインしてください。");
+          if (response.status === 404) throw new Error("ファイルが見つかりません。");
+          throw new Error(errorData.error || "Google Drive からのファイル取得に失敗しました。");
+        }
+
+        const blob = await response.blob();
+        const localBlobUrl = URL.createObjectURL(blob);
+        setSecurePdfUrl(localBlobUrl);
+      } else {
+        // Supabase Storage から取得
+        const { data, error } = await supabase.storage
+          .from('materials')
+          .createSignedUrl(fileId, 3600); // 1時間有効
+
+        if (error || !data?.signedUrl) {
+          throw new Error("Supabase からのファイル取得に失敗しました。");
+        }
+
+        setSecurePdfUrl(data.signedUrl);
       }
-
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: {
-          'Authorization': `Bearer ${providerToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) throw new Error("セッションが期限切れです。再ログインしてください。");
-        throw new Error("Google Driveからのファイル取得に失敗しました。");
-      }
-
-      const blob = await response.blob();
-      const localBlobUrl = URL.createObjectURL(blob);
-      setSecurePdfUrl(localBlobUrl);
-
     } catch (e: any) { 
       setPdfError(e.message); 
     } finally {
       setIsInitializing(false);
     }
-  }, [pdfList, currentIndex]);
+  }, [pdfList, currentIndex, storageType]);
 
   useEffect(() => {
     return () => {

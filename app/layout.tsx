@@ -20,15 +20,15 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+
   return (
-    <html lang="ja" suppressHydrationWarning> {/* 🌟 属性の微細な違いを無視する魔法の言葉 */}
+    <html lang="ja" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <ClientWrapper>
           <div className="flex min-h-screen">
             <main className="flex-1 relative overflow-hidden">
               {children}
             </main>
-            {/* サイドバー */}
             <GlobalSidebar />
           </div>
         </ClientWrapper>

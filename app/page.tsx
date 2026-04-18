@@ -310,43 +310,8 @@ export default function Home() {
   };
 
   const handleAddCustomMaterial = async () => {
-    if (!customTitle.trim()) return;
-    setIsUploading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { alert("ログインが必要です"); setIsUploading(false); return; }
-
-      let pdfPaths: string[] = [];
-      if (selectedPdfs.length > 0) {
-        for (const file of selectedPdfs) {
-          const fileExt = file.name.split('.').pop();
-          const uniqueFileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-          const { error: uploadError } = await supabase.storage.from('pdfs').upload(uniqueFileName, file);
-          if (uploadError) throw new Error("【ストレージのRLSエラー】 " + uploadError.message);
-          pdfPaths.push(uniqueFileName);
-        }
-      }
-
-      const { error: dbError } = await supabase.from('materials').insert([{ 
-        student_id: user.id, 
-        title: customTitle,
-        image_url: selectedIconUrl,
-        pdf_url: pdfPaths.length > 0 ? JSON.stringify(pdfPaths) : null 
-      }]);
-      if (dbError) throw new Error("【データベースのRLSエラー】 " + dbError.message);
-
-      setCustomTitle("");
-      setSelectedPdfs([]); 
-      setSelectedIconUrl(PRESET_ICONS[0]); 
-      setShowCustomModal(false); 
-      fetchData(); 
-      alert("バインダー教材を作成しました！");
-    } catch (error: any) {
-      console.error(error);
-      alert(error.message);
-    } finally {
-      setIsUploading(false);
-    }
+    // Google Drive Setup ページへリダイレクト
+    router.push("/google-drive-setup");
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-800";
@@ -442,34 +407,11 @@ export default function Home() {
                  <input type="text" value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} placeholder="例: 大学のプリント、英単語まとめ" className={`w-full rounded-2xl px-5 py-4 font-bold border-2 outline-none transition-all ${bgInput}`} />
                </div>
 
-              <div className="mt-6 w-full">
-                <p className={`text-[10px] font-black mb-3 uppercase tracking-widest ${textSub}`}>PDF教材を添付 (任意)</p>
-                <label className={`group relative flex flex-col items-center justify-center w-full p-6 border-2 border-dashed rounded-[2rem] cursor-pointer transition-all ${selectedPdfs.length > 0 ? 'border-emerald-500 bg-emerald-500/5' : `hover:bg-slate-50 dark:hover:bg-white/5 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}`}>
-                <input 
-                  type="file" 
-                  accept="application/pdf"
-                  className="hidden" 
-                  multiple 
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      const files = Array.from(e.target.files);
-                      setSelectedPdfs(files);
-                      if (!customTitle.trim()) {
-                        const firstFileName = files[0].name.replace(/\.[^/.]+$/, "");
-                        setCustomTitle(files.length === 1 ? firstFileName : `${firstFileName} 他${files.length - 1}件`);
-                      }
-                    }
-                  }}
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <div className={`p-3 rounded-2xl ${selectedPdfs.length > 0 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <span className={`text-xs font-black text-center px-4 line-clamp-1 ${selectedPdfs.length > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>
-                    {selectedPdfs.length > 0 ? `${selectedPdfs.length}個のPDFがバインダーに入っています` : "タップしてPDFを選択（複数可）"}
-                  </span>
-                </div>
-                </label>
+              <div className={`mt-6 w-full p-6 rounded-[2rem] border-2 ${isDarkMode ? 'border-indigo-500/30 bg-indigo-500/10' : 'border-indigo-200 bg-indigo-50'}`}>
+                <p className={`text-sm font-black mb-2 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>📁 Google Drive から PDF を選択</p>
+                <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  「本棚に追加」ボタンをクリックすると、Google Drive から PDF ファイルを選択できます。
+                </p>
               </div>
 
               <button 
@@ -477,9 +419,8 @@ export default function Home() {
                 disabled={!customTitle.trim() || isUploading}
                 className={`w-full mt-8 py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white shadow-indigo-500/30'}`}
               >
-                {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>アップロード中...</span></> : <><Plus className="w-5 h-5" /><span>本棚に追加する</span></>}
+                {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : <><Plus className="w-5 h-5" /><span>本棚に追加する</span></>}
               </button>
-             </div>
           </div>
         </>
       )}
