@@ -112,9 +112,10 @@ function TimerContent() {
       const fileId = pdfList[currentIndex];
 
       if (storageType === 'google_drive') {
-        // OAuthトークンでPDFをダウンロードしてBlobURLを作成 → react-pdfで描画
-        const token = sessionStorage.getItem('drive_provider_token');
-        if (!token) throw new Error("Google Drive のアクセストークンが見つかりません。一度 Google Drive 設定画面を開いてください。");
+        // OAuthトークン取得：Supabaseセッション優先、なければsessionStorageから
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.provider_token ?? sessionStorage.getItem('drive_provider_token');
+        if (!token) throw new Error("Google Drive のアクセストークンが見つかりません。一度ログアウトして再ログインしてください。");
 
         const res = await fetch(
           `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
