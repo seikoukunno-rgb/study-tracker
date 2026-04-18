@@ -11,7 +11,6 @@ import {
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
 import PdfSidebar from "@/components/PdfSidebar";
 import PdfToolbar from "@/components/PdfToolbar";
-import DrawingCanvas from "@/components/DrawingCanvas";
 
 function TimerContent() {
   const searchParams = useSearchParams();
@@ -40,7 +39,6 @@ function TimerContent() {
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
-  const [gdrivePage, setGdrivePage] = useState(0);
   const [drawingMode, setDrawingMode] = useState<'none' | 'pen' | 'marker' | 'eraser' | 'text'>('none');
   const [drawingColor, setDrawingColor] = useState<string>('#ef4444');
   const [penWidth, setPenWidth] = useState(3);
@@ -113,23 +111,30 @@ function TimerContent() {
     try {
       const fileId = pdfList[currentIndex];
 
-      // Google Drive: ブラウザの既存Googleセッションを使ったプレビュー埋め込み
       if (storageType === 'google_drive') {
-        setSecurePdfUrl(`https://drive.google.com/file/d/${fileId}/preview`);
+        // OAuthトークンでPDFをダウンロードしてBlobURLを作成 → react-pdfで描画
+        const token = sessionStorage.getItem('drive_provider_token');
+        if (!token) throw new Error("Google Drive のアクセストークンが見つかりません。一度 Google Drive 設定画面を開いてください。");
+
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);
+
+        const blob = await res.blob();
+        setSecurePdfUrl(URL.createObjectURL(blob));
       } else {
         // Supabase Storage から取得
         const { data, error } = await supabase.storage
           .from('materials')
-          .createSignedUrl(fileId, 3600); // 1時間有効
+          .createSignedUrl(fileId, 3600);
 
-        if (error || !data?.signedUrl) {
-          throw new Error("Supabase からのファイル取得に失敗しました。");
-        }
-
+        if (error || !data?.signedUrl) throw new Error("Supabase からのファイル取得に失敗しました。");
         setSecurePdfUrl(data.signedUrl);
       }
-    } catch (e: any) { 
-      setPdfError(e.message); 
+    } catch (e: any) {
+      setPdfError(e.message);
     } finally {
       setIsInitializing(false);
     }
@@ -244,59 +249,16 @@ function TimerContent() {
         <div className="flex-1 flex overflow-hidden relative">
           
           <div className="flex-1 relative border-r border-[#2c2c2e]">
-            {storageType === 'google_drive' ? (
-              <>
-                {/* Google Drive PDF viewer */}
-                <iframe
-                  key={gdrivePage}
-                  src={`${securePdfUrl}#page=${gdrivePage + 1}`}
-                  className="w-full h-full border-0"
-                  allow="autoplay"
-                  title="Google Drive PDF"
-                />
-                {/* iframeの内部スクロールを完全にブロック（キャンバスとページをズレさせないため） */}
-                <div className="absolute inset-0 z-[5]" style={{ pointerEvents: drawingMode !== 'none' ? 'none' : 'auto' }} />
-                {/* 書き込みキャンバス */}
-                <div className="absolute inset-0 z-10" style={{ pointerEvents: drawingMode === 'none' ? 'none' : 'auto' }}>
-                  <DrawingCanvas
-                    mode={drawingMode}
-                    color={drawingColor}
-                    penWidth={penWidth}
-                    markerWidth={markerWidth}
-                    eraserWidth={eraserWidth}
-                    pageIndex={gdrivePage}
-                    pdfId={`${materialId}-gdrive`}
-                  />
-                </div>
-                {/* ページ切り替えボタン */}
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 pointer-events-auto">
-                  <button
-                    onClick={() => setGdrivePage(p => Math.max(0, p - 1))}
-                    className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm font-black"
-                    aria-label="前のページ"
-                  >‹</button>
-                  <span className="text-white text-xs font-black tabular-nums min-w-[3rem] text-center">
-                    P.{gdrivePage + 1}
-                  </span>
-                  <button
-                    onClick={() => setGdrivePage(p => p + 1)}
-                    className="w-6 h-6 flex items-center justify-center text-white/60 hover:text-white transition-colors text-sm font-black"
-                    aria-label="次のページ"
-                  >›</button>
-                </div>
-              </>
-            ) : (
-              <PdfViewer
-                ref={pdfViewerRef}
-                pdfUrl={securePdfUrl}
-                pdfId={`${materialId}-pdf-${currentIndex}`}
-                drawingMode={drawingMode}
-                drawingColor={drawingColor}
-                penWidth={penWidth}
-                markerWidth={markerWidth}
-                eraserWidth={eraserWidth}
-              />
-            )}
+            <PdfViewer
+              ref={pdfViewerRef}
+              pdfUrl={securePdfUrl}
+              pdfId={`${materialId}-${currentIndex}`}
+              drawingMode={drawingMode}
+              drawingColor={drawingColor}
+              penWidth={penWidth}
+              markerWidth={markerWidth}
+              eraserWidth={eraserWidth}
+            />
 
             <button
               onClick={() => router.back()}
