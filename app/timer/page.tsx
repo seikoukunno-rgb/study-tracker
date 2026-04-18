@@ -121,6 +121,10 @@ function TimerContent() {
           `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        if (res.status === 403 || res.status === 401) {
+          sessionStorage.removeItem('drive_provider_token');
+          throw new Error(`Google Drive の認証が期限切れです。再度 Google 連携を行ってください。`);
+        }
         if (!res.ok) throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);
 
         const blob = await res.blob();
@@ -229,6 +233,9 @@ function TimerContent() {
       <AlertCircle className="w-12 h-12 mb-4 animate-pulse" />
       <p className="font-black mb-6 text-sm">{pdfError}</p>
       <button onClick={fetchDriveFile} className="px-8 py-4 bg-white/10 rounded-full text-white font-black active:scale-95 transition-all hover:bg-white/20">再試行する</button>
+      {pdfError.includes('認証が期限切れ') && (
+        <button onClick={() => router.push('/google-drive-setup')} className="mt-3 px-8 py-4 bg-indigo-500/30 rounded-full text-indigo-300 font-black active:scale-95 transition-all hover:bg-indigo-500/50">Google 再連携する</button>
+      )}
       <button onClick={() => router.back()} className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors">戻る</button>
     </div>
   );
