@@ -310,8 +310,8 @@ export default function Home() {
   };
 
   const handleAddCustomMaterial = async () => {
-    // Google Drive Setup ページへリダイレクト
-    router.push("/google-drive-setup");
+    // Google Drive Setup ページへリダイレクト（タイトルとアイコンを URL パラメータで渡す）
+    router.push(`/google-drive-setup?title=${encodeURIComponent(customTitle)}&icon=${encodeURIComponent(selectedIconUrl)}`);
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-800";

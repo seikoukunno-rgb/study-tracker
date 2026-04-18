@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ChevronRight, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function GoogleDriveSetup() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,10 +16,17 @@ export default function GoogleDriveSetup() {
   const [files, setFiles] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [materialTitle, setMaterialTitle] = useState<string>("");
+  const [iconUrl, setIconUrl] = useState<string>("");
 
   useEffect(() => {
+    // URL パラメータからタイトルとアイコンを取得
+    const title = searchParams.get("title") || "";
+    const icon = searchParams.get("icon") || "";
+    setMaterialTitle(title);
+    setIconUrl(icon);
+    
     checkSession();
-  }, []);
+  }, [searchParams]);
 
   const checkSession = async () => {
     try {
@@ -89,7 +97,7 @@ export default function GoogleDriveSetup() {
           title: materialTitle,
           google_drive_file_id: selectedFile.id,
           storage_type: "google_drive",
-          image_url: "", // Google Drive では画像 URL は別途取得が必要な場合があります
+          image_url: iconUrl || "", // URL パラメータから受け取ったアイコンを使用
         })
         .select();
 
