@@ -10,6 +10,7 @@ export default function GlobalSidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
+  
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [userName, setUserName] = useState("ユーザー");
