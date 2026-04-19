@@ -32,9 +32,9 @@ export default function Home() {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
 
   const PRESET_ICONS = [
-    "/icons/blue.png", "icons/black.png", "icons/gold.png", "icons/green.png", 
-    "/icons/light-blue.png", "icons/orange.png", "icons/purple.png", "icons/red.png", 
-    "/icons/silver.png", "icons/yellow.png", "icons/vocabulary-book.png"
+    "/icons/blue.png", "/icons/black.png", "/icons/gold.png", "/icons/green.png",
+    "/icons/orange.png", "/icons/purple.png", "/icons/red.png",
+    "/icons/silver.png", "/icons/yellow.png", "/icons/vocabulary-book.png",
   ];
   const [selectedIconUrl, setSelectedIconUrl] = useState(PRESET_ICONS[0]);
 
