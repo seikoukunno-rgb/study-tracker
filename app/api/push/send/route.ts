@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import webpush from 'web-push';
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,18 +14,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // ビルド時に実行されないよう動的インポート
+  const webpush = (await import('web-push')).default;
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  );
+
   const now = new Date();
   const windowStart = new Date(now.getTime() - 60 * 1000).toISOString();
   const windowEnd = now.toISOString();
 
-  // reminders テーブルから期限内の通知を取得
   const { data: dueReminders } = await supabase
     .from('reminders')
     .select('*')
     .gte('remind_at', windowStart)
     .lte('remind_at', windowEnd);
 
-  // calendar_events の notify_time から期限内を取得
   const { data: dueEvents } = await supabase
     .from('calendar_events')
     .select('*')
@@ -38,12 +39,11 @@ export async function GET(req: NextRequest) {
     .lte('notify_time', windowEnd)
     .eq('is_completed', false);
 
-  const notifications: { userId: string; title: string; body: string; notifyTime: string }[] = [
+  const notifications: { userId: string; title: string; body: string }[] = [
     ...(dueReminders || []).map((r: any) => ({
       userId: r.student_id,
       title: 'Mercury リマインダー',
       body: `📚「${r.title}」の学習時間です！`,
-      notifyTime: r.remind_at,
     })),
     ...(dueEvents || []).map((e: any) => {
       const dateStr = e.date
@@ -53,7 +53,6 @@ export async function GET(req: NextRequest) {
         userId: e.student_id,
         title: 'Mercury リマインダー',
         body: `📅 ${dateStr}「${e.title}」の予定時刻です🔥`,
-        notifyTime: e.notify_time,
       };
     }),
   ];
@@ -75,18 +74,14 @@ export async function GET(req: NextRequest) {
         keys: { p256dh: sub.p256dh, auth: sub.auth },
       };
 
-      const payload = JSON.stringify({
-        title: notif.title,
-        body: notif.body,
-        url: '/calendar',
-      });
-
       try {
-        await webpush.sendNotification(pushSubscription, payload);
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify({ title: notif.title, body: notif.body, url: '/calendar' })
+        );
         sent++;
       } catch (err: any) {
         console.error('Push failed:', err.statusCode, sub.endpoint);
-        // 購読が無効になった場合は削除
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
         }
