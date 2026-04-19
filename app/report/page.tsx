@@ -32,6 +32,7 @@ function ReportContent() {
   const [chartRange, setChartRange] = useState<"week" | "month">("week");
   
   const [activeReactionMenu, setActiveReactionMenu] = useState<string | null>(null);
+  const [activeReactionDetails, setActiveReactionDetails] = useState<{ logId: string, emoji: string } | null>(null);
   const [activeEditMenu, setActiveEditMenu] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<any | null>(null);
   const [showQrModal, setShowQrModal] = useState(false); 
@@ -222,16 +223,46 @@ function ReportContent() {
       const matMap: Record<string, any> = {};
       allMatsData?.forEach(m => { matMap[m.id] = m; });
 
-      const formattedLogs = allRawLogs.map(log => {
-         return {
-           ...log,
-           profiles: profMap[log.student_id] || { display_name: "ユーザー", avatar_url: null },
-           materials: matMap[log.material_id] || null,
-           reactions: {},
-           userReaction: null,
-           subject: matMap[log.material_id]?.title || "名称未設定"
-         };
+      // リアクション取得
+      const logIds = allRawLogs.map(l => l.id);
+      let reactionsData: any[] = [];
+      if (logIds.length > 0) {
+        const { data: rData } = await supabase
+          .from('log_reactions')
+          .select('log_id, user_id, emoji')
+          .in('log_id', logIds);
+        reactionsData = rData || [];
+      }
+
+      // リアクターのプロフィールで未取得分を補完
+      const reactorIds = Array.from(new Set(reactionsData.map(r => r.user_id)));
+      const missingIds = reactorIds.filter(id => !profMap[id]);
+      if (missingIds.length > 0) {
+        const { data: extraProfiles } = await supabase.from('profiles').select('*').in('id', missingIds);
+        extraProfiles?.forEach(p => {
+          profMap[p.id] = { ...p, display_name: p.nickname || p.name || p.full_name || p.username || p.display_name || "ユーザー", avatar_url: p.avatar_url };
+        });
+      }
+
+      // { [logId]: { [emoji]: { count, users[] } } }
+      const reactionsMap: Record<string, Record<string, { count: number; users: any[] }>> = {};
+      const userReactionMap: Record<string, string> = {};
+      reactionsData.forEach(r => {
+        if (!reactionsMap[r.log_id]) reactionsMap[r.log_id] = {};
+        if (!reactionsMap[r.log_id][r.emoji]) reactionsMap[r.log_id][r.emoji] = { count: 0, users: [] };
+        reactionsMap[r.log_id][r.emoji].count++;
+        reactionsMap[r.log_id][r.emoji].users.push(profMap[r.user_id] || { id: r.user_id, display_name: 'ユーザー', avatar_url: null });
+        if (r.user_id === user.id) userReactionMap[r.log_id] = r.emoji;
       });
+
+      const formattedLogs = allRawLogs.map(log => ({
+        ...log,
+        profiles: profMap[log.student_id] || { display_name: "ユーザー", avatar_url: null },
+        materials: matMap[log.material_id] || null,
+        reactions: reactionsMap[log.id] || {},
+        userReaction: userReactionMap[log.id] || null,
+        subject: matMap[log.material_id]?.title || "名称未設定"
+      }));
 
       if (isMounted.current) {
         setRawLogs(myLogsData || []); 
@@ -443,25 +474,38 @@ function ReportContent() {
     showToast(`リマインダーを解除しました。`, "success", "trash");
   };
 
-  const handleReaction = (logId: string, emoji: string) => {
-    setLogs(prev => prev.map(log => {
-      if (log.id === logId) {
-        const reactions = { ...log.reactions };
-        if (log.userReaction && log.userReaction !== emoji) {
-          reactions[log.userReaction] = Math.max(0, (reactions[log.userReaction] || 1) - 1);
-          if (reactions[log.userReaction] === 0) delete reactions[log.userReaction];
+  const handleReaction = async (logId: string, emoji: string) => {
+    if (!currentUser) return;
+    const userId = currentUser.id;
+    const log = logs.find(l => l.id === logId);
+    if (!log) return;
+    const prevEmoji = log.userReaction;
+    const myProfile = { id: userId, display_name: userName, avatar_url: userAvatar };
+
+    setLogs(prev => prev.map(l => {
+      if (l.id !== logId) return l;
+      const reactions = { ...l.reactions } as Record<string, { count: number; users: any[] }>;
+      if (prevEmoji) {
+        if (reactions[prevEmoji]) {
+          const updatedUsers = reactions[prevEmoji].users.filter((u: any) => u.id !== userId);
+          reactions[prevEmoji] = { count: updatedUsers.length, users: updatedUsers };
+          if (reactions[prevEmoji].count === 0) delete reactions[prevEmoji];
         }
-        if (log.userReaction === emoji) {
-          reactions[emoji] = Math.max(0, (reactions[emoji] || 1) - 1);
-          if (reactions[emoji] === 0) delete reactions[emoji];
-          return { ...log, reactions, userReaction: null };
-        }
-        reactions[emoji] = (reactions[emoji] || 0) + 1;
-        return { ...log, reactions, userReaction: emoji };
       }
-      return log;
+      if (prevEmoji === emoji) return { ...l, reactions, userReaction: null };
+      const existing = reactions[emoji] || { count: 0, users: [] };
+      reactions[emoji] = { count: existing.count + 1, users: [...existing.users, myProfile] };
+      return { ...l, reactions, userReaction: emoji };
     }));
     setActiveReactionMenu(null);
+    setActiveReactionDetails(null);
+
+    if (prevEmoji) {
+      await supabase.from('log_reactions').delete().eq('log_id', logId).eq('user_id', userId);
+    }
+    if (prevEmoji !== emoji) {
+      await supabase.from('log_reactions').insert({ log_id: logId, user_id: userId, emoji });
+    }
   };
 
   const getCountdownDisplay = (isoStr: string) => {
@@ -1143,19 +1187,49 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                       
                       {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
 
-                      <div className={`flex items-center gap-3 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
+                      <div className={`flex flex-wrap items-center gap-2 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
                         {floatingEmojis.filter(fe => fe.id > Date.now() - 2000).map(fe => (
                           <div key={fe.id} className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]" style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}>
                             {fe.emoji}
                           </div>
                         ))}
-                        <button onClick={(e) => { e.stopPropagation(); setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id); }} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
+                        <button onClick={(e) => { e.stopPropagation(); setActiveReactionMenu(activeReactionMenu === log.id ? null : log.id); setActiveReactionDetails(null); }} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-slate-50 hover:bg-slate-100 text-slate-400'}`}>
                           <SmilePlus className="w-5 h-5" /> <span className="text-xs font-black uppercase">React</span>
                         </button>
+                        {Object.entries(log.reactions as Record<string, { count: number; users: any[] }>).map(([emoji, data]) => (
+                          <button
+                            key={emoji}
+                            onClick={(e) => { e.stopPropagation(); setActiveReactionDetails(activeReactionDetails?.logId === log.id && activeReactionDetails?.emoji === emoji ? null : { logId: log.id, emoji }); setActiveReactionMenu(null); }}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold transition-all active:scale-95 border ${log.userReaction === emoji ? (isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : (isDarkMode ? 'bg-slate-800 text-slate-300 border-transparent' : 'bg-slate-50 text-slate-600 border-transparent')}`}
+                          >
+                            <span>{emoji}</span><span className="text-xs ml-0.5">{data.count}</span>
+                          </button>
+                        ))}
+                        {activeReactionDetails?.logId === log.id && activeReactionDetails && (
+                          <div className={`absolute left-0 bottom-full mb-2 p-3 rounded-2xl shadow-xl border z-50 min-w-[160px] animate-in fade-in zoom-in-95 duration-200 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
+                            <p className="text-xs font-black mb-2 text-slate-400">{activeReactionDetails!.emoji} リアクションした人</p>
+                            <div className="flex flex-col gap-1.5">
+                              {((log.reactions as any)[activeReactionDetails!.emoji]?.users || []).map((u: any) => (
+                                <div key={u.id} className="flex items-center gap-2">
+                                  <div className={`w-6 h-6 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                                    {u.avatar_url && !u.avatar_url.startsWith('bg-') ? (
+                                      <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <User className="w-3 h-3 text-indigo-400" />
+                                    )}
+                                  </div>
+                                  <span className={`text-xs font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                                    {u.id === myUserId ? 'あなた' : u.display_name}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {activeReactionMenu === log.id && (
                           <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
                             {EMOJIS.map(emoji => (
-                              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); setActiveReactionMenu(null); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
+                              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
                             ))}
                           </div>
                         )}
