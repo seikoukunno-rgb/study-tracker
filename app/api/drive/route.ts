@@ -28,6 +28,7 @@ async function fetchFromDrive(fileId: string, token: string) {
 export async function GET(request: NextRequest) {
   try {
     const fileId = request.nextUrl.searchParams.get('fileId');
+    const accountId = request.nextUrl.searchParams.get('accountId');
 
     if (!fileId) {
       return NextResponse.json({ error: 'fileId is required' }, { status: 400 });
@@ -51,9 +52,34 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { data: { session } } = await supabase.auth.getSession();
-    let providerToken = session?.provider_token ?? null;
-    const refreshToken = session?.provider_refresh_token ?? null;
+    let providerToken: string | null = null;
+    let refreshToken: string | null = null;
+
+    if (accountId) {
+      // 連携済みアカウントのtokenを使用（メインセッションに影響しない）
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const { data: account } = await supabase
+        .from('user_connected_google_accounts')
+        .select('refresh_token')
+        .eq('id', accountId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!account) {
+        return NextResponse.json({ error: 'Connected account not found' }, { status: 404 });
+      }
+
+      refreshToken = account.refresh_token;
+    } else {
+      // レガシー: Supabaseセッションのprovider_tokenを使用
+      const { data: { session } } = await supabase.auth.getSession();
+      providerToken = session?.provider_token ?? null;
+      refreshToken = session?.provider_refresh_token ?? null;
+    }
 
     if (!providerToken && !refreshToken) {
       return NextResponse.json(
@@ -64,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     let response = providerToken ? await fetchFromDrive(fileId, providerToken) : null;
 
-    // トークン期限切れの場合はリフレッシュして再試行
+    // tokenが期限切れの場合はrefresh_tokenで再取得
     if ((!response || response.status === 401 || response.status === 403) && refreshToken) {
       const newToken = await refreshGoogleToken(refreshToken);
       if (!newToken) {

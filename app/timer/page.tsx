@@ -36,6 +36,7 @@ function TimerContent() {
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
@@ -56,7 +57,7 @@ function TimerContent() {
     try {
       const { data: material, error: dbError } = await supabase
         .from('materials')
-        .select('pdf_url, google_drive_file_id, storage_type')
+        .select('pdf_url, google_drive_file_id, storage_type, connected_account_id')
         .eq('id', materialId)
         .single();
 
@@ -68,6 +69,10 @@ function TimerContent() {
         google_drive_file_id: material?.google_drive_file_id,
         pdf_url: material?.pdf_url,
       });
+
+      if (material?.connected_account_id) {
+        setConnectedAccountId(material.connected_account_id);
+      }
 
       if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
         let fileIds: string[];
@@ -119,7 +124,8 @@ function TimerContent() {
 
       if (storageType === 'google_drive') {
         console.log('🚀 Fetching Drive file with fileId:', fileId);
-        const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
+        const accountParam = connectedAccountId ? `&accountId=${connectedAccountId}` : '';
+        const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}${accountParam}`);
         console.log('📡 Drive API response:', res.status, res.headers.get('Content-Type'));
         if (res.status === 403 || res.status === 401) {
           throw new Error(`Google Drive の認証が期限切れです。再度 Google 連携を行ってください。`);
@@ -153,7 +159,7 @@ function TimerContent() {
     } finally {
       setIsInitializing(false);
     }
-  }, [pdfList, currentIndex, storageType]);
+  }, [pdfList, currentIndex, storageType, connectedAccountId]);
 
   useEffect(() => {
     return () => {
