@@ -237,6 +237,8 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
           </button>
         </form>
 
+        <p className="text-xs text-slate-400 dark:text-slate-500 text-right">※本ページはプロモーションが含まれています</p>
+
         <div className="space-y-4">
           {isLoading ? (
             <div className="flex flex-col items-center py-20 gap-3">

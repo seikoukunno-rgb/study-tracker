@@ -29,6 +29,10 @@ export default function OnboardingPage() {
   const [userId, setUserId] = useState<string | null>(null);
   
   const [showUniDropdown, setShowUniDropdown] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   // フォームの状態
   const [formData, setFormData] = useState({
@@ -102,13 +106,14 @@ export default function OnboardingPage() {
     : UNIVERSITIES.filter(uni => uni.includes(formData.university)).slice(0, 10);
 
   return (
+    <>
     <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-black overflow-y-auto flex items-start sm:items-center justify-center p-4 py-10">
       <div className="w-full max-w-xl bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-2xl border border-slate-100 dark:border-[#2c2c2e] overflow-hidden my-auto">
         
         {/* ヘッダー部分 */}
         <div className="bg-indigo-600 p-8 text-center">
           <h1 className="text-2xl font-black text-white mb-2 flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-6 h-6" /> Welcome to Studia!
+            <CheckCircle2 className="w-6 h-6" /> Welcome to Mercury!
           </h1>
           <p className="text-indigo-100 text-sm font-bold">アプリを始める前に、あなたのことを少しだけ教えてください。</p>
         </div>
@@ -251,13 +256,101 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {/* --- 利用規約・プライバシーポリシー同意 --- */}
+          <div className="space-y-3 bg-slate-50 dark:bg-[#2c2c2e]/50 rounded-2xl p-4 border border-slate-100 dark:border-[#38383a]">
+            <p className="text-xs font-black text-slate-500 dark:text-slate-400 mb-3">ご利用前にご確認ください</p>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedTerms ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'}`}
+                onClick={() => setAgreedTerms(v => !v)}>
+                {agreedTerms && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+              </div>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
+                <button type="button" onClick={() => setShowTermsModal(true)} className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800">利用規約</button>
+                を読み、同意します
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedPrivacy ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'}`}
+                onClick={() => setAgreedPrivacy(v => !v)}>
+                {agreedPrivacy && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+              </div>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
+                <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800">プライバシーポリシー</button>
+                を読み、同意します
+              </span>
+            </label>
+          </div>
+
           <div className="pt-4 pb-8">
-            <button disabled={loading} type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-500/30 transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50">
+            <button disabled={loading || !agreedTerms || !agreedPrivacy} type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-500/30 transition-all flex justify-center items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
               {loading ? '保存中...' : 'プロフィールを登録して始める'} <ChevronRight className="w-4 h-4" />
             </button>
+            {(!agreedTerms || !agreedPrivacy) && (
+              <p className="text-center text-xs text-slate-400 mt-2">利用規約とプライバシーポリシーへの同意が必要です</p>
+            )}
           </div>
         </form>
       </div>
     </div>
+
+    {/* 利用規約モーダル */}
+    {showTermsModal && (
+      <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowTermsModal(false)}>
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-[#2c2c2e]">
+            <h2 className="text-base font-black">Mercury 利用規約</h2>
+            <button type="button" onClick={() => setShowTermsModal(false)} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="overflow-y-auto p-5 text-xs text-slate-600 dark:text-slate-300 space-y-4 leading-relaxed">
+            <p><strong>第1条（適用）</strong><br/>本利用規約は、嶋崎星光（以下「当開発者」）が提供するアプリケーション「Mercury」の利用条件を定めます。本アプリを利用することにより、すべての条項に同意したものとみなされます。</p>
+            <p><strong>第2条（利用登録）</strong><br/>利用希望者は本規約に同意のうえ登録申請を行い、承認された時点で利用契約が成立します。アカウント情報は自己責任で管理し、第三者への開示・貸与・譲渡は禁止です。</p>
+            <p><strong>第3条（サービス内容）</strong><br/>教材・書籍検索（アフィリエイトリンク含む）、学習データ管理（PDF・本棚機能）、学習時間記録および分析等の機能を提供します。機能の追加・変更・削除を自由に行うことができます。</p>
+            <p><strong>第4条（禁止事項）</strong><br/>スクレイピング・クローリング等の自動取得、APIの不正利用、リバースエンジニアリング、サーバー負荷行為、DDoS攻撃、不正アクセス、知的財産権侵害、犯罪行為等を禁止します。</p>
+            <p><strong>第5条（知的財産権）</strong><br/>本アプリの権利はすべて当開発者または正当な権利者に帰属します。ユーザー投稿情報の権利はユーザーに留保されますが、運営に必要な範囲で無償利用を許諾します。</p>
+            <p><strong>第6条（免責）</strong><br/>当開発者は正確性・完全性・有用性・継続性等を保証しません。間接損害・逸失利益は責任対象外です。外部サービスとの取引はユーザー責任で行われます。</p>
+            <p><strong>第7条（規約変更）</strong><br/>当開発者は自由に変更可能です。掲載時点で効力が発生し、継続利用により同意とみなされます。</p>
+            <p><strong>第8条（準拠法・管轄）</strong><br/>日本法準拠。専属管轄は当開発者所在地裁判所とします。</p>
+          </div>
+          <div className="p-4 border-t border-slate-100 dark:border-[#2c2c2e]">
+            <button type="button" onClick={() => { setAgreedTerms(true); setShowTermsModal(false); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95">
+              読んで同意する
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* プライバシーポリシーモーダル */}
+    {showPrivacyModal && (
+      <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowPrivacyModal(false)}>
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-[#2c2c2e]">
+            <h2 className="text-base font-black">Mercury プライバシーポリシー</h2>
+            <button type="button" onClick={() => setShowPrivacyModal(false)} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="overflow-y-auto p-5 text-xs text-slate-600 dark:text-slate-300 space-y-4 leading-relaxed">
+            <p><strong>第1条（基本方針）</strong><br/>当開発者はユーザーの個人情報保護を最重要事項とし、個人情報保護法・GDPR・CCPA・Google API Services User Data Policyを遵守します。目的限定・データ最小化・透明性確保・安全管理の原則に基づき運用します。</p>
+            <p><strong>第2条（収集する情報）</strong><br/>検索・閲覧・学習履歴、操作ログ、デバイス識別子、IPアドレス、Cookie等の技術情報、Google Driveアクセストークン・APIメタデータを収集します。</p>
+            <p><strong>第3条（Googleユーザーデータ）</strong><br/>Google Drive連携により取得したデータは、ユーザーが指定したファイルの表示・閲覧のみに使用します。広告・分析・機械学習・第三者提供には一切利用しません。ファイル本体はサーバーに保存しません。</p>
+            <p><strong>第4条（利用目的）</strong><br/>サービス提供・維持・改善、パーソナライズ、不正利用検知、ユーザーサポート、統計分析（匿名化データのみ）に利用します。目的外利用は行いません。</p>
+            <p><strong>第5条（広告・トラッキング）</strong><br/>Amazonアソシエイト・楽天アフィリエイト・メルカリアンバサダーを利用します。これらはCookie等を使用する場合があります。ブラウザ設定により制御できます。</p>
+            <p><strong>第6条（第三者提供）</strong><br/>本人同意・法令要求・緊急保護の場合を除き、個人情報を第三者に提供しません。</p>
+            <p><strong>第7条（安全管理）</strong><br/>SSL/TLS暗号化・アクセス制御・セキュリティ監査・不正アクセス防止を実施します。ただし完全な安全性は保証されません。</p>
+            <p><strong>第8条（ユーザーの権利）</strong><br/>開示・訂正・削除・利用停止・データポータビリティの権利を有します。未成年は保護者同意が必要です。</p>
+            <p><strong>第9条（お問い合わせ）</strong><br/>問い合わせはアプリ内または開発者へご連絡ください。</p>
+          </div>
+          <div className="p-4 border-t border-slate-100 dark:border-[#2c2c2e]">
+            <button type="button" onClick={() => { setAgreedPrivacy(true); setShowPrivacyModal(false); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95">
+              読んで同意する
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
