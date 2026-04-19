@@ -28,6 +28,10 @@ export default function LoginPage() {
       options: {
         redirectTo: `${location.origin}/auth/callback`,
         scopes: "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
     if (error) {
