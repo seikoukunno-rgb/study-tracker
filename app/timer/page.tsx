@@ -136,6 +136,8 @@ function TimerContent() {
           throw new Error(`取得したファイルがPDFではありません (${contentType})`);
         }
         const blob = await res.blob();
+        const textPreview = await blob.slice(0, 10).text();
+        console.log('🔍 Blob Header (Should be %PDF-):', textPreview);
         setSecurePdfUrl(URL.createObjectURL(blob));
       } else {
         // Supabase Storage から取得
