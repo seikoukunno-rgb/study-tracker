@@ -126,7 +126,7 @@ export default function GoogleDriveSetup() {
           : JSON.stringify(selectedFiles.map(f => f.id));
 
       // ファイルIDとアカウントIDの対応マップを保存
-      const fileAccountMap = selectedFiles.map(f => ({ fileId: f.id, accountId: f.accountId }));
+      const fileAccountMap = selectedFiles.map(f => ({ fileId: f.id, accountId: f.accountId, fileName: f.name }));
 
       // 単一アカウントの場合は旧来の connected_account_id も保存（後方互換）
       const uniqueAccountIds = [...new Set(selectedFiles.map(f => f.accountId))];

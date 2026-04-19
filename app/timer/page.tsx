@@ -37,7 +37,8 @@ function TimerContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
-  const [fileAccountMap, setFileAccountMap] = useState<{ fileId: string; accountId: string }[]>([]);
+  const [fileAccountMap, setFileAccountMap] = useState<{ fileId: string; accountId: string; fileName?: string }[]>([]);
+  const [materialTitle, setMaterialTitle] = useState(title);
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
@@ -247,6 +248,16 @@ function TimerContent() {
     pdfViewerRef.current?.scrollToPage(pageNumber);
   };
 
+  const fileNames = pdfList.map(fileId =>
+    fileAccountMap.find(m => m.fileId === fileId)?.fileName
+  );
+
+  const handleRenameTitle = async (newTitle: string) => {
+    if (!materialId || !newTitle.trim()) return;
+    await supabase.from('materials').update({ title: newTitle.trim() }).eq('id', materialId);
+    setMaterialTitle(newTitle.trim());
+  };
+
   if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
 
   if (pdfError) return (
@@ -321,6 +332,7 @@ function TimerContent() {
                 handleCancelNote={handleCancelNote} editingNoteId={editingNoteId}
                 pdfList={pdfList} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex}
                 memo={memo} setMemo={setMemo} handleSave={handleSave} isSaving={isSaving} setSeconds={setSeconds}
+                fileNames={fileNames} materialTitle={materialTitle} onRenameTitle={handleRenameTitle}
               />
             </div>
           </div>

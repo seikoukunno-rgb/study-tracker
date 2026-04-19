@@ -1,7 +1,7 @@
 'use client';
 
-import { Dispatch, SetStateAction } from 'react'; 
-import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText, ChevronDown, RotateCcw, Save, Loader2, PencilLine } from 'lucide-react';
+import { Dispatch, SetStateAction, useState, useRef, useEffect } from 'react';
+import { Timer, Play, Pause, Plus, X, Send, Trash2, Edit2, FileText, ChevronDown, RotateCcw, Save, Loader2, PencilLine, Check } from 'lucide-react';
 
 type PdfSidebarProps = {
   seconds: number;
@@ -28,16 +28,36 @@ type PdfSidebarProps = {
   handleSave: () => void;
   isSaving: boolean;
   setSeconds: Dispatch<SetStateAction<number>>;
+  fileNames?: (string | undefined)[];
+  materialTitle?: string;
+  onRenameTitle?: (newTitle: string) => Promise<void>;
 };
 
-export default function PdfSidebar({ 
+export default function PdfSidebar({
   seconds, isRunning, setIsRunning,
-  notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent, 
+  notes, isAddingNote, setIsAddingNote, notePage, setNotePage, noteContent, setNoteContent,
   handleSaveNote, handleDeleteNote, onNoteClick, handleEditNote, handleCancelNote, editingNoteId,
   pdfList, currentIndex, setCurrentIndex,
-  memo, setMemo, handleSave, isSaving, setSeconds
+  memo, setMemo, handleSave, isSaving, setSeconds,
+  fileNames, materialTitle, onRenameTitle,
 }: PdfSidebarProps) {
-  
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(materialTitle ?? '');
+  const [renaming, setRenaming] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming) renameInputRef.current?.select();
+  }, [isRenaming]);
+
+  const submitRename = async () => {
+    if (!renameValue.trim() || !onRenameTitle) { setIsRenaming(false); return; }
+    setRenaming(true);
+    await onRenameTitle(renameValue.trim());
+    setRenaming(false);
+    setIsRenaming(false);
+  };
+
   const formatTime = (totalSeconds: number) => {
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;
@@ -48,6 +68,37 @@ export default function PdfSidebar({
     <aside className="w-full h-full flex flex-col relative z-10 overflow-y-auto no-scrollbar pb-10">
       <div className="p-6">
         
+        {/* 教材名 + リネーム */}
+        {materialTitle !== undefined && (
+          <div className="mb-5">
+            {isRenaming ? (
+              <div className="flex items-center gap-2">
+                <input
+                  ref={renameInputRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setIsRenaming(false); }}
+                  className="flex-1 bg-black/40 border border-indigo-500 rounded-lg px-3 py-1.5 text-xs font-bold text-white outline-none"
+                />
+                <button onClick={submitRename} disabled={renaming} className="p-1.5 bg-indigo-600 rounded-lg text-white disabled:opacity-50">
+                  {renaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                </button>
+                <button onClick={() => setIsRenaming(false)} className="p-1.5 bg-white/10 rounded-lg text-white/50">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setRenameValue(materialTitle); setIsRenaming(true); }}
+                className="group flex items-center gap-2 w-full text-left"
+              >
+                <span className="text-xs font-black text-white/60 truncate flex-1">{materialTitle}</span>
+                <Edit2 className="w-3 h-3 text-white/20 group-hover:text-indigo-400 transition-colors flex-shrink-0" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* タイマー機能 */}
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-indigo-500/20 rounded-lg"><Timer className="w-4 h-4 text-indigo-400" /></div>
@@ -118,7 +169,7 @@ export default function PdfSidebar({
                 title="表示するPDFドキュメントを選択"
               >
                 {pdfList.map((pdf, idx) => {
-                  const name = pdf.split('/').pop()?.replace(/^\d+_/, '') || `PDF Document ${idx + 1}`;
+                  const name = fileNames?.[idx] ?? pdf.split('/').pop()?.replace(/^\d+_/, '') ?? `Document ${idx + 1}`;
                   return <option key={idx} value={idx}>{name}</option>;
                 })}
               </select>
