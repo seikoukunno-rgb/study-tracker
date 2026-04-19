@@ -7,7 +7,8 @@ import {
   Menu, ChevronRight, Sun, Moon
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabase"; 
+import { supabase } from "../lib/supabase";
+import PdfThumbnail from "../components/PdfThumbnail";
 
 export default function Home() {
   const router = useRouter();
@@ -402,25 +403,37 @@ export default function Home() {
                   <label className={`text-xs font-black uppercase tracking-widest mb-3 block ${textSub}`}>
                     アイコンを選択
                   </label>
-                  <div className="grid grid-cols-4 gap-3 max-h-[40vh] overflow-y-auto no-scrollbar pb-2">
-                    {PRESET_ICONS.map((imgUrl) => (
-                      <button
-                        key={imgUrl}
-                        onClick={() => setSelectedIconUrl(imgUrl)}
-                        className={`relative rounded-xl overflow-hidden transition-all bg-slate-50 dark:bg-slate-800 aspect-square flex items-center justify-center border-2 
-                          ${selectedIconUrl === imgUrl 
-                            ? 'border-indigo-500 ring-4 ring-indigo-500/20 scale-105 shadow-md z-10' 
-                            : 'border-transparent hover:scale-105 opacity-80 hover:opacity-100'
-                          }`}
-                      >
-                        <img src={imgUrl} alt="icon" className="w-full h-full object-cover pointer-events-none" />
-                        {selectedIconUrl === imgUrl && (
-                          <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full p-0.5 shadow-sm">
-                            <CheckCircle2 className="w-3 h-3" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                  {/* 選択中アイコンの大きいプレビュー */}
+                  <div className="flex justify-center mb-4">
+                    <div className={`w-24 h-24 rounded-2xl overflow-hidden border-2 border-indigo-500 shadow-lg ring-4 ring-indigo-500/20 transition-all`}>
+                      <img src={selectedIconUrl} alt="selected" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                  {/* アイコン一覧グリッド */}
+                  <div className="grid grid-cols-5 gap-2.5 max-h-[30vh] overflow-y-auto pb-2 pr-1">
+                    {PRESET_ICONS.map((imgUrl) => {
+                      const isSelected = selectedIconUrl === imgUrl;
+                      return (
+                        <button
+                          key={imgUrl}
+                          onClick={() => setSelectedIconUrl(imgUrl)}
+                          className={`relative rounded-xl overflow-hidden aspect-square border-2 transition-all active:scale-90
+                            ${isSelected
+                              ? 'border-indigo-500 ring-2 ring-indigo-400/40 shadow-md scale-105 z-10'
+                              : isDarkMode ? 'border-[#38383a] opacity-70 hover:opacity-100' : 'border-slate-200 opacity-70 hover:opacity-100'
+                            }`}
+                        >
+                          <img src={imgUrl} alt="icon" className="w-full h-full object-cover pointer-events-none" />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-indigo-500/10 flex items-end justify-end p-0.5">
+                              <div className="bg-indigo-600 text-white rounded-full p-0.5">
+                                <CheckCircle2 className="w-3 h-3" />
+                              </div>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                <div>
@@ -578,8 +591,10 @@ export default function Home() {
                     <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden shadow-inner pointer-events-none`}>
                       {material.image_url ? (
                         <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
+                      ) : (hasPdf || isGoogleDrive) ? (
+                        <PdfThumbnail pdfUrl={material.pdf_url} width={96} />
                       ) : (
-                        <Book className={`w-8 h-8 transition-colors ${hasPdf || isGoogleDrive ? 'text-rose-300' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
+                        <Book className={`w-8 h-8 transition-colors ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
                       )}
 
                       {isGoogleDrive && (
