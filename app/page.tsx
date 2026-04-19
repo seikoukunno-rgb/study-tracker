@@ -584,9 +584,8 @@ export default function Home() {
                       )}
 
                       {isGoogleDrive && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-red-600/80 backdrop-blur-sm text-white text-[9px] font-black px-1 py-1 flex items-center justify-center gap-1 z-20">
-                          <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"/></svg>
-                          Drive PDF
+                        <div className="absolute top-1.5 right-1.5 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow z-20">
+                          PDF
                         </div>
                       )}
 
