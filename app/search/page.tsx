@@ -65,8 +65,18 @@ export default function SearchPage() {
             const isbn10 = info.industryIdentifiers.find((id: any) => id.type === "ISBN_10");
             isbn = isbn13 ? isbn13.identifier : (isbn10 ? isbn10.identifier : "");
           }
-          const amazonUrl = isbn ? `https://www.amazon.co.jp/s?k=${isbn}` : null;
-          const rakutenUrl = isbn ? `https://books.rakuten.co.jp/search?sitem=${isbn}` : null;
+
+          const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG;
+          const rakutenTag = process.env.NEXT_PUBLIC_RAKUTEN_TAG;
+          const mercariAfid = process.env.NEXT_PUBLIC_MERCARI_AFID;
+          const encodedIsbn = isbn ? encodeURIComponent(isbn) : "";
+          const encodedTitle = encodeURIComponent(info.title);
+
+          // ISBN優先、なければタイトル検索にフォールバック
+          const amazonKeyword = isbn ? encodedIsbn : encodedTitle;
+          const amazonUrl = `https://www.amazon.co.jp/gp/search?ie=UTF8&tag=${amazonTag}&keywords=${amazonKeyword}`;
+          const rakutenUrl = `https://hb.afl.rakuten.co.jp/hgc/${rakutenTag}/?pc=https%3A%2F%2Fsearch.rakuten.co.jp%2Fsearch%2Fmall%2F${isbn ? encodedIsbn : encodedTitle}%2F`;
+          const mercariUrl = `https://jp.mercari.com/search?keyword=${encodedTitle}${mercariAfid ? `&afid=${mercariAfid}` : ""}`;
 
           return {
             id: item.id,
@@ -75,8 +85,9 @@ export default function SearchPage() {
             image_url: thumbnail ? thumbnail.replace("http://", "https://") : null,
             rating: rating,
             reviewCount: reviewCount,
-            amazonUrl: amazonUrl,
-            rakutenUrl: rakutenUrl
+            amazonUrl,
+            rakutenUrl,
+            mercariUrl,
           };
         });
         setResults(formatted);
@@ -283,31 +294,37 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        {item.amazonUrl && (
-                          <a 
-                            href={item.amazonUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            onTouchStart={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 text-[10px] font-black bg-[#FF9900] text-white px-3 py-2 rounded-lg hover:opacity-80 transition-opacity"
-                          >
-                            <ShoppingCart className="w-3 h-3" /> Amazon
-                          </a>
-                        )}
-                        {item.rakutenUrl && (
-                          <a 
-                            href={item.rakutenUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            onTouchStart={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 text-[10px] font-black bg-[#BF0000] text-white px-3 py-2 rounded-lg hover:opacity-80 transition-opacity"
-                          >
-                            <ExternalLink className="w-3 h-3" /> 楽天
-                          </a>
-                        )}
+                      <div className="flex gap-1.5 mt-1">
+                        <a
+                          href={item.amazonUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black bg-[#FF9900] text-white py-2 rounded-lg active:opacity-70 transition-opacity"
+                        >
+                          <ShoppingCart className="w-3 h-3 shrink-0" /> Amazon
+                        </a>
+                        <a
+                          href={item.rakutenUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black bg-[#BF0000] text-white py-2 rounded-lg active:opacity-70 transition-opacity"
+                        >
+                          <ExternalLink className="w-3 h-3 shrink-0" /> 楽天
+                        </a>
+                        <a
+                          href={item.mercariUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black bg-[#FF0211] text-white py-2 rounded-lg active:opacity-70 transition-opacity"
+                        >
+                          <ShoppingCart className="w-3 h-3 shrink-0" /> メルカリ
+                        </a>
                       </div>
 
                       {/* ========================================== */}
