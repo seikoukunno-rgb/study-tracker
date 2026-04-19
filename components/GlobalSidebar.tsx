@@ -36,6 +36,9 @@ const [isAdmin, setIsAdmin] = useState(false); // ←これを追加！
     const handleOpen = () => setShowProfileMenu(true);
     window.addEventListener('openSidebar', handleOpen);
 
+    const handleProfileUpdated = () => fetchProfile();
+    window.addEventListener('profileUpdated', handleProfileUpdated);
+
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     checkDarkMode();
     window.addEventListener('darkModeChanged', checkDarkMode);
@@ -51,6 +54,7 @@ const [isAdmin, setIsAdmin] = useState(false); // ←これを追加！
     return () => {
       window.removeEventListener('openSidebar', handleOpen);
       window.removeEventListener('darkModeChanged', checkDarkMode);
+      window.removeEventListener('profileUpdated', handleProfileUpdated);
       clearInterval(timer);
     };
   }, []);

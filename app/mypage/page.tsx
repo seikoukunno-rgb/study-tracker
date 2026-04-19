@@ -183,6 +183,7 @@ export default function MyPage() {
       setShowEditModal(false); // 🌟 保存成功時にモーダルを閉じる
       setTimeout(() => setShowSuccess(false), 3000);
       fetchProfileAndStats();
+      window.dispatchEvent(new Event('profileUpdated'));
     }
     setIsSaving(false);
   };
