@@ -112,17 +112,8 @@ function TimerContent() {
       const fileId = pdfList[currentIndex];
 
       if (storageType === 'google_drive') {
-        // OAuthトークン取得：Supabaseセッション優先、なければsessionStorageから
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.provider_token ?? sessionStorage.getItem('drive_provider_token');
-        if (!token) throw new Error("Google Drive のアクセストークンが見つかりません。一度ログアウトして再ログインしてください。");
-
-        const res = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
         if (res.status === 403 || res.status === 401) {
-          sessionStorage.removeItem('drive_provider_token');
           throw new Error(`Google Drive の認証が期限切れです。再度 Google 連携を行ってください。`);
         }
         if (!res.ok) throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);

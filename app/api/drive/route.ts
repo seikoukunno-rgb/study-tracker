@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
     );
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 || response.status === 403) {
         return NextResponse.json(
-          { error: 'Unauthorized: Session expired' },
+          { error: 'Unauthorized: Session expired or insufficient permissions' },
           { status: 401 }
         );
       }
@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
           { status: 404 }
         );
       }
-      throw new Error(`Google Drive API error: ${response.status}`);
+      const body = await response.text().catch(() => '');
+      throw new Error(`Google Drive API error: ${response.status} ${body}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
