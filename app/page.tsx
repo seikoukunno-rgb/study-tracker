@@ -14,6 +14,7 @@ export default function Home() {
   const router = useRouter();
   const [materials, setMaterials] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [totalTime, setTotalTime] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPdfs, setSelectedPdfs] = useState<File[]>([]);
@@ -225,6 +226,7 @@ export default function Home() {
       router.push('/onboarding');
       return; // ここで処理をストップ！下には進ませない
     }
+    setIsAuthChecked(true);
     // ==========================================
 
     const { data: matData } = await supabase.from('materials').select('*').eq('student_id', user.id).order('created_at', { ascending: false });
@@ -343,6 +345,10 @@ export default function Home() {
   const textMain = isDarkMode ? "text-white" : "text-slate-800";
   const textSub = isDarkMode ? "text-slate-400" : "text-slate-500";
   const bgInput = isDarkMode ? "bg-[#2c2c2e] border-[#38383a] text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-indigo-500";
+
+  if (!isAuthChecked) {
+    return <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-black" />;
+  }
 
   return (
     <div className={`min-h-screen pb-24 font-sans transition-colors duration-300 ${bgPage}`}>

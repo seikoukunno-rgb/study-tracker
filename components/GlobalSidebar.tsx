@@ -176,6 +176,8 @@ const { data: profile } = await supabase.from('profiles').select('*').eq('id', u
     return null; 
   }
 
+  if (pathname === '/onboarding') return null;
+
   return (
     <div className="z-[9999]">
       <div 
