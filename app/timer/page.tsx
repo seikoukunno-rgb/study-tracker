@@ -63,6 +63,12 @@ function TimerContent() {
       if (dbError) throw new Error("教材データの取得に失敗しました");
       
       // Google Drive からの取得
+      console.log('📋 material from DB:', {
+        storage_type: material?.storage_type,
+        google_drive_file_id: material?.google_drive_file_id,
+        pdf_url: material?.pdf_url,
+      });
+
       if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
         let fileIds: string[];
         try {
@@ -71,9 +77,9 @@ function TimerContent() {
         } catch {
           fileIds = [material.google_drive_file_id];
         }
+        console.log('📂 Google Drive fileIds to use:', fileIds);
         setPdfList(fileIds);
         setStorageType('google_drive');
-        // isInitializing は fetchDriveFile の finally で false にする
         return;
       }
 
@@ -112,12 +118,23 @@ function TimerContent() {
       const fileId = pdfList[currentIndex];
 
       if (storageType === 'google_drive') {
+        console.log('🚀 Fetching Drive file with fileId:', fileId);
         const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}`);
+        console.log('📡 Drive API response:', res.status, res.headers.get('Content-Type'));
         if (res.status === 403 || res.status === 401) {
           throw new Error(`Google Drive の認証が期限切れです。再度 Google 連携を行ってください。`);
         }
-        if (!res.ok) throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);
-
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          console.error('❌ Drive API error body:', errText);
+          throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);
+        }
+        const contentType = res.headers.get('Content-Type') ?? '';
+        if (!contentType.includes('pdf')) {
+          const body = await res.text().catch(() => '');
+          console.error('❌ Expected PDF but got:', contentType, body);
+          throw new Error(`取得したファイルがPDFではありません (${contentType})`);
+        }
         const blob = await res.blob();
         setSecurePdfUrl(URL.createObjectURL(blob));
       } else {
