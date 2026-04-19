@@ -575,8 +575,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden border-2 shadow-inner pointer-events-none
-                      ${isGoogleDrive ? 'border-red-500' : hasPdf ? 'border-rose-100' : bgSubCard}`}>
+                    <div className={`relative w-24 h-32 rounded-xl mb-4 flex items-center justify-center overflow-hidden shadow-inner pointer-events-none`}>
                       {material.image_url ? (
                         <img src={material.image_url} alt={material.title} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
                       ) : (
