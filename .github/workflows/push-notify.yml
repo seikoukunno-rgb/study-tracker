@@ -1,0 +1,17 @@
+name: Push Notification Cron
+
+on:
+  schedule:
+    # 5分ごとに実行（GitHub Actions の最短間隔）
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send push notifications
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/push/send"
