@@ -37,6 +37,7 @@ function TimerContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [connectedAccountId, setConnectedAccountId] = useState<string | null>(null);
+  const [fileAccountMap, setFileAccountMap] = useState<{ fileId: string; accountId: string }[]>([]);
 
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   
@@ -57,7 +58,7 @@ function TimerContent() {
     try {
       const { data: material, error: dbError } = await supabase
         .from('materials')
-        .select('pdf_url, google_drive_file_id, storage_type, connected_account_id')
+        .select('pdf_url, google_drive_file_id, storage_type, connected_account_id, file_account_map')
         .eq('id', materialId)
         .single();
 
@@ -72,6 +73,9 @@ function TimerContent() {
 
       if (material?.connected_account_id) {
         setConnectedAccountId(material.connected_account_id);
+      }
+      if (Array.isArray(material?.file_account_map)) {
+        setFileAccountMap(material.file_account_map);
       }
 
       if (material?.google_drive_file_id && material?.storage_type === 'google_drive') {
@@ -124,7 +128,8 @@ function TimerContent() {
 
       if (storageType === 'google_drive') {
         console.log('🚀 Fetching Drive file with fileId:', fileId);
-        const accountParam = connectedAccountId ? `&accountId=${connectedAccountId}` : '';
+        const perFileAccount = fileAccountMap.find(m => m.fileId === fileId)?.accountId ?? connectedAccountId;
+        const accountParam = perFileAccount ? `&accountId=${perFileAccount}` : '';
         const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}${accountParam}`);
         console.log('📡 Drive API response:', res.status, res.headers.get('Content-Type'));
         if (res.status === 403 || res.status === 401) {
@@ -159,7 +164,7 @@ function TimerContent() {
     } finally {
       setIsInitializing(false);
     }
-  }, [pdfList, currentIndex, storageType, connectedAccountId]);
+  }, [pdfList, currentIndex, storageType, connectedAccountId, fileAccountMap]);
 
   useEffect(() => {
     return () => {
