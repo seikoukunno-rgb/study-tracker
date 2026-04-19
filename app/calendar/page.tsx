@@ -122,11 +122,47 @@ export default function CalendarPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+  const subscribeToPush = async (userId: string) => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: existing.toJSON(), userId }),
+        });
+        return;
+      }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub.toJSON(), userId }),
+      });
+    } catch (e) {
+      console.warn('Push subscribe failed:', e);
     }
-    
+  };
+
+  useEffect(() => {
+    const requestAndSubscribe = async () => {
+      if (!("Notification" in window)) return;
+      let permission = Notification.permission;
+      if (permission === "default") {
+        permission = await Notification.requestPermission();
+      }
+      if (permission === "granted") {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await subscribeToPush(user.id);
+      }
+    };
+    requestAndSubscribe();
+
     const checkReminders = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -475,8 +511,8 @@ export default function CalendarPage() {
     if (error) {
       alert(`エラー: ${error.message}`);
     } else {
-      setReminders(prev => [...prev, newReminder]); 
-      
+      setReminders(prev => [...prev, newReminder]);
+      await subscribeToPush(user.id);
       setToastMessage("通知をセットしました！");
       setTimeout(() => setToastMessage(null), 3000);
     }

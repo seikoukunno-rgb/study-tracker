@@ -22,7 +22,7 @@ if (!self.define) {
   const singleRequire = (uri, parentUri) => {
     uri = new URL(uri + ".js", parentUri).href;
     return registry[uri] || (
-      
+
         new Promise(resolve => {
           if ("document" in self) {
             const script = document.createElement("script");
@@ -35,11 +35,11 @@ if (!self.define) {
             resolve();
           }
         })
-      
+
       .then(() => {
         let promise = registry[uri];
         if (!promise) {
-          throw new Error(`Module ${uri} didn’t register its module`);
+          throw new Error(`Module ${uri} didn't register its module`);
         }
         return promise;
       })
@@ -98,3 +98,53 @@ define(['./workbox-e43f5367'], (function (workbox) { 'use strict';
   }), 'GET');
 
 }));
+
+// Push notification handler
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: 'Mercury', body: event.data.text() };
+  }
+
+  const title = payload.title || 'Mercury リマインダー';
+  const options = {
+    body: payload.body || '',
+    icon: '/icon.png',
+    badge: '/icon.png',
+    vibrate: [200, 100, 200, 100, 200],
+    requireInteraction: true,
+    data: { url: payload.url || '/calendar' },
+    actions: [
+      { action: 'open', title: '開く' },
+      { action: 'dismiss', title: '閉じる' }
+    ]
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'dismiss') return;
+
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/calendar';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
