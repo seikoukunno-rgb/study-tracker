@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!response || !response.ok) {
+      console.error(`❌ Drive API failed — fileId: ${fileId}, status: ${response?.status}`);
       if (response?.status === 401 || response?.status === 403) {
         return NextResponse.json(
           { error: 'Unauthorized: Please re-authenticate with Google.' },
@@ -90,7 +91,11 @@ export async function GET(request: NextRequest) {
       throw new Error(`Google Drive API error: ${response?.status} ${body}`);
     }
 
+    const contentType = response.headers.get('Content-Type') ?? 'unknown';
+    console.log(`✅ Drive API success — fileId: ${fileId}, status: ${response.status}, Content-Type: ${contentType}`);
+
     const arrayBuffer = await response.arrayBuffer();
+    console.log(`📦 arrayBuffer size: ${arrayBuffer.byteLength} bytes`);
 
     return new NextResponse(arrayBuffer, {
       headers: {

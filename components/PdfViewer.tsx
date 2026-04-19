@@ -39,6 +39,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
+  useEffect(() => {
+    console.log('🔍 PDF URL:', pdfUrl);
+  }, [pdfUrl]);
+
   const file = useMemo(() => ({ url: pdfUrl }), [pdfUrl]);
 
   useImperativeHandle(ref, () => ({
@@ -71,6 +75,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(({
           file={file}
           options={pdfOptions}
           onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+          onLoadError={(error) => console.error('🚨 PDF Load Error:', error)}
           className="flex flex-col items-center gap-2 w-full"
           loading={<div className="mt-32 text-indigo-400 font-black animate-pulse">LOADING...</div>}
         >
