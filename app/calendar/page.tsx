@@ -240,7 +240,7 @@ export default function CalendarPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        scopes: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
+        scopes: 'https://www.googleapis.com/auth/calendar.events',
         redirectTo: window.location.origin + '/calendar',
         queryParams: { access_type: 'offline', prompt: 'consent' }
       }

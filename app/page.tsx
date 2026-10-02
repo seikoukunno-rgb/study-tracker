@@ -328,7 +328,7 @@ export default function Home() {
       provider: "google",
       options: {
         redirectTo,
-        scopes: "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+        scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
