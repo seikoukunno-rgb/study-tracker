@@ -5,7 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
-  ChevronDown, ChevronUp, X, Minus, RefreshCcw, ChevronRight as ChevronRightIcon,
+  ChevronDown, ChevronUp, X, Minus, ChevronRight as ChevronRightIcon,
   Menu 
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -43,7 +43,6 @@ export default function CalendarPage() {
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
 
-  const [googleToken, setGoogleToken] = useState<string | null>(null);
 
   const [selectedReminderTask, setSelectedReminderTask] = useState<any>(null);
   const [selectedTask, setSelectedTask] = useState<Event | null>(null);
@@ -85,30 +84,10 @@ export default function CalendarPage() {
     { id: "custom", label: "カスタム（日時を指定）..." },
   ];
 
-  const getGoogleAllDayDates = (dateStr: string) => {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const nextDay = new Date(y, m - 1, d + 1);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return {
-      start: dateStr,
-      end: `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`
-    };
-  };
-
   useEffect(() => {
     isMounted.current = true;
     fetchData();
     
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.provider_token) setGoogleToken(session.provider_token);
-    };
-    getSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.provider_token) setGoogleToken(session.provider_token);
-    });
-
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     checkDarkMode();
     window.addEventListener('storage', checkDarkMode);
@@ -116,7 +95,6 @@ export default function CalendarPage() {
     
     return () => {
       isMounted.current = false;
-      authListener.subscription.unsubscribe();
       window.removeEventListener('storage', checkDarkMode);
       window.removeEventListener('darkModeChanged', checkDarkMode);
     };
@@ -236,105 +214,6 @@ export default function CalendarPage() {
     if (isMounted.current) setIsLoading(false);
   };
 
-  const linkGoogleCalendar = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        scopes: 'https://www.googleapis.com/auth/calendar.events',
-        redirectTo: window.location.origin + '/calendar',
-        queryParams: { access_type: 'offline', prompt: 'consent' }
-      }
-    });
-    if (error) alert("Google連携エラー: " + error.message);
-  };
-
-  const getOrCreateStudyTrackerCalendar = async (token: string) => {
-    const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!listRes.ok) {
-      const errorData = await listRes.json().catch(() => ({}));
-      if (errorData?.error?.message?.includes('Calendar API has not been used')) {
-        alert("Google Cloud Consoleで「Google Calendar API」を有効化してください！");
-      }
-      throw new Error("AUTH_ERROR");
-    }
-
-    const listData = await listRes.json();
-    const existing = listData.items?.find((c: any) => c.summary === 'StudyTracker');
-    if (existing) return existing.id;
-
-    const createRes = await fetch('https://www.googleapis.com/calendar/v3/calendars', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: 'StudyTracker' })
-    });
-    if (!createRes.ok) throw new Error("AUTH_ERROR");
-
-    const newData = await createRes.json();
-    return newData.id;
-  };
-
-  const syncAllToGoogle = async () => {
-    if (!googleToken) return linkGoogleCalendar();
-    setToastMessage("Googleカレンダーと同期中...");
-    
-    try {
-      const calendarId = await getOrCreateStudyTrackerCalendar(googleToken);
-      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
-        headers: { 'Authorization': `Bearer ${googleToken}` }
-      });
-      
-      if (!res.ok) throw new Error("AUTH_ERROR");
-
-      const googleData = await res.json();
-      let syncCount = 0;
-
-      for (const ev of events) {
-        const isAlreadySynced = googleData.items?.some((i:any) => {
-          if (i.summary !== ev.title) return false;
-          if (i.start?.date === ev.date) return true;
-          if (i.start?.dateTime) {
-            const dt = new Date(i.start.dateTime);
-            const pad = (n: number) => String(n).padStart(2, '0');
-            return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` === ev.date;
-          }
-          return false;
-        });
-
-        if (isAlreadySynced) continue;
-
-        const gDates = getGoogleAllDayDates(ev.date);
-        const bodyObj: any = { 
-          summary: ev.title, 
-          description: "StudyTrackerから追加",
-          start: { date: gDates.start },
-          end: { date: gDates.end }
-        };
-
-        const postRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyObj)
-        });
-        
-        if (postRes.ok) syncCount++;
-        else {
-          const errText = await postRes.text();
-          console.error(`Sync Error for ${ev.title}:`, errText);
-        }
-      }
-      setToastMessage(`${syncCount}件の予定をGoogleに同期しました！`);
-      setTimeout(() => setToastMessage(null), 3000);
-    } catch(e) { 
-      console.error(e);
-      setToastMessage(null);
-      setGoogleToken(null);
-      alert("同期に失敗しました。再連携をお試しください。");
-    }
-  };
-
   const handleAddEvent = async () => {
     if (!newEventTitle.trim()) return;
     const { data: { session } } = await supabase.auth.getSession();
@@ -364,46 +243,10 @@ export default function CalendarPage() {
 
     const { error } = await supabase.from('calendar_events').insert([newEventObj]);
 
-    const currentToken = session?.provider_token || googleToken;
-    let googleSynced = false;
-
-    if (!error && currentToken) {
-      try {
-        const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-        const gDates = getGoogleAllDayDates(eventDateStr);
-        
-        const googleEvent = {
-          summary: newEventTitle,
-          description: "StudyTrackerアプリから追加されました",
-          start: { date: gDates.start },
-          end: { date: gDates.end },
-        };
-        
-        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(googleEvent)
-        });
-
-        if (res.ok) {
-          googleSynced = true;
-        } else {
-          const errText = await res.text();
-          console.error("Google Calendar Error:", errText);
-          alert(`【Google追加エラー】\n${errText}`);
-          if (res.status === 401 || res.status === 403) setGoogleToken(null);
-        }
-      } catch (e) { console.error("Google Sync Catch Error", e); }
-    }
-
     if (!error) {
       fetchData(); 
       setShowAddModal(false);
-      if (currentToken && !googleSynced) {
-        setToastMessage("アプリに保存しました。Google反映に失敗したため再連携してください。");
-      } else {
-        setToastMessage(googleSynced ? "予定を追加し、Googleに反映しました！" : "予定を追加しました！");
-      }
+      setToastMessage("予定を追加しました！");
       setTimeout(() => setToastMessage(null), 3000);
     }
   };
@@ -425,57 +268,9 @@ export default function CalendarPage() {
 
     const { error } = await supabase.from('calendar_events').delete().eq('id', targetId);
     
-    const { data: { session } } = await supabase.auth.getSession();
-    const currentToken = session?.provider_token || googleToken;
-    let googleDeleted = false;
-
-    if (!error && currentToken) {
-      try {
-        const calendarId = await getOrCreateStudyTrackerCalendar(currentToken);
-        const [y, m, d] = evToDelete.date.split('-').map(Number);
-        
-        const timeMin = encodeURIComponent(new Date(y, m - 2, 1).toISOString()); 
-        const timeMax = encodeURIComponent(new Date(y, m + 1, 0).toISOString()); 
-        
-        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true`,
-          { headers: { 'Authorization': `Bearer ${currentToken}` } }
-        );
-        
-        if (res.ok) {
-          const data = await res.json();
-          const gEvent = data.items?.find((i: any) => {
-            if (i.summary !== evToDelete.title) return false;
-            if (i.start?.date === evToDelete.date) return true;
-            if (i.start?.dateTime) {
-              const dt = new Date(i.start.dateTime);
-              const pad = (n: number) => String(n).padStart(2, '0');
-              const eventDateStr = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-              return eventDateStr === evToDelete.date;
-            }
-            return false;
-          });
-          
-          if (gEvent) {
-            const delRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${gEvent.id}`, { 
-              method: 'DELETE', 
-              headers: { 'Authorization': `Bearer ${currentToken}` } 
-            });
-            if (delRes.ok) googleDeleted = true;
-          }
-        } else {
-          if (res.status === 401 || res.status === 403) {
-            setGoogleToken(null);
-            alert("Googleとの連携が切れました。再度「Google連携」ボタンを押してください。");
-          } else {
-            alert(`Googleカレンダーの検索に失敗しました: ${res.status}`);
-          }
-        }
-      } catch (e) { console.error(e); }
-    }
-    
     if (!error) { 
       fetchData(); 
-      setToastMessage(googleDeleted ? "Googleカレンダーからも削除しました！" : "削除しました"); 
+      setToastMessage("削除しました"); 
       setTimeout(() => setToastMessage(null), 3000); 
     }
   };
@@ -571,15 +366,6 @@ export default function CalendarPage() {
             )}
           </button>
 
-          {googleToken ? (
-            <button onClick={syncAllToGoogle} className="p-2.5 rounded-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-all flex items-center gap-2 shadow-sm">
-              <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Googleへ反映</span>
-            </button>
-          ) : (
-            <button onClick={linkGoogleCalendar} className="p-2.5 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all flex items-center gap-2 shadow-sm">
-              <RefreshCcw className="w-4 h-4" /><span className="text-[10px] font-black tracking-wider uppercase">Google連携</span>
-            </button>
-          )}
         </div>
       </header>
 
@@ -826,7 +612,7 @@ export default function CalendarPage() {
           <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[401] w-[85%] max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}`}>
             <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 className="w-8 h-8 text-rose-500" /></div>
             <h3 className={`text-lg font-black text-center mb-2 ${textMain}`}>予定の削除</h3>
-            <p className={`text-sm font-bold text-center mb-8 ${textSub}`}>この予定をカレンダーから削除しますか？<br/>※Googleカレンダーからも削除されます</p>
+            <p className={`text-sm font-bold text-center mb-8 ${textSub}`}>この予定をカレンダーから削除しますか？</p>
             <div className="flex gap-3">
               <button onClick={() => setEventToDelete(null)} className={`flex-1 py-3 rounded-xl font-black ${isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>キャンセル</button>
               <button onClick={confirmDeleteEvent} className="flex-1 py-3 rounded-xl font-black bg-rose-500 text-white">削除する</button>
