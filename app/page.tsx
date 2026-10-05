@@ -9,12 +9,14 @@ import {
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import PdfThumbnail from "../components/PdfThumbnail";
+import LandingPage from "../components/LandingPage";
 
 export default function Home() {
   const router = useRouter();
   const [materials, setMaterials] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const [showLanding, setShowLanding] = useState(false);
   const [totalTime, setTotalTime] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPdfs, setSelectedPdfs] = useState<File[]>([]);
@@ -210,7 +212,7 @@ export default function Home() {
   const fetchData = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.push("/login"); return; }
+    if (!user) { setShowLanding(true); setIsLoading(false); return; }
 
     // ==========================================
     // 🌟 ここに追加！【関所システム】
@@ -345,6 +347,10 @@ export default function Home() {
   const textMain = isDarkMode ? "text-white" : "text-slate-800";
   const textSub = isDarkMode ? "text-slate-400" : "text-slate-500";
   const bgInput = isDarkMode ? "bg-[#2c2c2e] border-[#38383a] text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-indigo-500";
+
+  if (showLanding) {
+    return <LandingPage />;
+  }
 
   if (!isAuthChecked) {
     return <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-black" />;
