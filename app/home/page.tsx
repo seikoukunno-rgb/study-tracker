@@ -9,6 +9,8 @@ import {
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import PdfThumbnail from "@/components/PdfThumbnail";
+import MaterialTitleEditor from "@/components/MaterialTitleEditor";
+import { renameMaterial } from "@/lib/materials/rename";
 
 export default function Home() {
   const router = useRouter();
@@ -649,8 +651,13 @@ export default function Home() {
                 )}
               </div>
               
-              <div className="flex flex-col justify-center">
-                <p className={`text-sm font-black line-clamp-2 leading-snug ${textMain}`}>{selectedMaterial.title}</p>
+              <div className="flex flex-col justify-center min-w-0 flex-1">
+                <MaterialTitleEditor key={selectedMaterial.id} title={selectedMaterial.title} dark={isDarkMode} onRename={async newTitle => {
+                  const id = selectedMaterial.id;
+                  const savedTitle = await renameMaterial(id, newTitle);
+                  setMaterials(current => current.map(material => material.id === id ? { ...material, title: savedTitle } : material));
+                  setSelectedMaterial((current: { id: string; title: string } | null) => current?.id === id ? { ...current, title: savedTitle } : current);
+                }} />
                 <div className={`flex items-center gap-1 mt-2 text-xs font-bold px-2 py-1 rounded-md self-start ${isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                   <History className="w-3 h-3" /> 前回: {lastStudiedDate || "読込中..."}
                 </div>

@@ -11,6 +11,9 @@ import {
 import PdfViewer, { PdfViewerHandle } from "@/components/PdfViewer";
 import PdfSidebar from "@/components/PdfSidebar";
 import PdfToolbar from "@/components/PdfToolbar";
+import MaterialTitleEditor from "@/components/MaterialTitleEditor";
+import { renameMaterial } from "@/lib/materials/rename";
+import { createPdfDocumentLoader, type PdfDocumentState } from "@/lib/pdf-document-loader";
 
 function TimerContent() {
   const searchParams = useSearchParams();
@@ -31,7 +34,9 @@ function TimerContent() {
 
   const [pdfList, setPdfList] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [securePdfUrl, setSecurePdfUrl] = useState<string | null>(null);
+  const [pdfDocument, setPdfDocument] = useState<PdfDocumentState>({ key: '', url: null, loading: false, error: null });
+  const [documentLoader] = useState(() => createPdfDocumentLoader(setPdfDocument));
+  const [reloadPdf, setReloadPdf] = useState(0);
   const [storageType, setStorageType] = useState<'supabase' | 'google_drive'>('supabase');
   
   const [isInitializing, setIsInitializing] = useState(true);
@@ -59,12 +64,13 @@ function TimerContent() {
     try {
       const { data: material, error: dbError } = await supabase
         .from('materials')
-        .select('pdf_url, google_drive_file_id, storage_type, connected_account_id, file_account_map')
+        .select('title, pdf_url, google_drive_file_id, storage_type, connected_account_id, file_account_map')
         .eq('id', materialId)
         .single();
 
       if (dbError) throw new Error("教材データの取得に失敗しました");
       
+      setMaterialTitle(material.title || title);
       // Google Drive からの取得
       console.log('📋 material from DB:', {
         storage_type: material?.storage_type,
@@ -90,6 +96,7 @@ function TimerContent() {
         console.log('📂 Google Drive fileIds to use:', fileIds);
         setPdfList(fileIds);
         setStorageType('google_drive');
+        setIsInitializing(false);
         return;
       }
 
@@ -113,66 +120,40 @@ function TimerContent() {
       }
       setPdfList(paths);
       setStorageType('supabase');
+      setIsInitializing(false);
     } catch (e: any) { setPdfError(e.message); setIsInitializing(false); } 
-  }, [materialId]);
+  }, [materialId, title]);
 
-  const fetchDriveFile = useCallback(async () => {
-    if (pdfList.length === 0) return;
-    setPdfError(null);
-    
-    if (securePdfUrl && securePdfUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(securePdfUrl);
-    }
+  const fileId = pdfList[currentIndex];
+  const perFileAccount = fileAccountMap.find(m => m.fileId === fileId)?.accountId ?? connectedAccountId;
+  const documentKey = JSON.stringify([materialId, storageType, fileId, perFileAccount]);
+  const securePdfUrl = pdfDocument.key === documentKey ? pdfDocument.url : null;
+  const documentError = pdfDocument.key === documentKey ? pdfDocument.error : null;
+  const pdfLoading = !securePdfUrl && !documentError;
+  const fetchDriveFile = () => setReloadPdf(value => value + 1);
 
-    try {
-      const fileId = pdfList[currentIndex];
-
+  useEffect(() => { void fetchMaterialPaths(); }, [fetchMaterialPaths]);
+  useEffect(() => {
+    if (!fileId) return;
+    void documentLoader.load(documentKey, async signal => {
       if (storageType === 'google_drive') {
-        console.log('🚀 Fetching Drive file with fileId:', fileId);
-        const perFileAccount = fileAccountMap.find(m => m.fileId === fileId)?.accountId ?? connectedAccountId;
-        const accountParam = perFileAccount ? `&accountId=${perFileAccount}` : '';
-        const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}${accountParam}`);
-        console.log('📡 Drive API response:', res.status, res.headers.get('Content-Type'));
+        const accountParam = perFileAccount ? `&accountId=${encodeURIComponent(perFileAccount)}` : '';
+        const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}${accountParam}`, { signal });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || `Google Driveからのファイル取得に失敗しました (${res.status})`);
         }
-        const contentType = res.headers.get('Content-Type') ?? '';
-        if (!contentType.includes('pdf')) {
-          const body = await res.text().catch(() => '');
-          console.error('❌ Expected PDF but got:', contentType, body);
-          throw new Error(`取得したファイルがPDFではありません (${contentType})`);
-        }
+        if (!res.headers.get('Content-Type')?.includes('pdf')) throw new Error('取得したファイルがPDFではありません。');
         const blob = await res.blob();
-        const textPreview = await blob.slice(0, 10).text();
-        console.log('🔍 Blob Header (Should be %PDF-):', textPreview);
-        setSecurePdfUrl(URL.createObjectURL(blob));
-      } else {
-        // Supabase Storage から取得
-        const { data, error } = await supabase.storage
-          .from('materials')
-          .createSignedUrl(fileId, 3600);
-
-        if (error || !data?.signedUrl) throw new Error("Supabase からのファイル取得に失敗しました。");
-        setSecurePdfUrl(data.signedUrl);
+        return { url: URL.createObjectURL(blob) };
       }
-    } catch (e: any) {
-      setPdfError(e.message);
-    } finally {
-      setIsInitializing(false);
-    }
-  }, [pdfList, currentIndex, storageType, connectedAccountId, fileAccountMap]);
-
-  useEffect(() => {
-    return () => {
-      if (securePdfUrl && securePdfUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(securePdfUrl);
-      }
-    };
-  }, [securePdfUrl]);
-
-  useEffect(() => { fetchMaterialPaths(); }, [fetchMaterialPaths]);
-  useEffect(() => { fetchDriveFile(); }, [fetchDriveFile]);
+      const { data, error } = await supabase.storage.from('materials').createSignedUrl(fileId, 3600);
+      if (error || !data?.signedUrl) throw new Error('Supabaseからのファイル取得に失敗しました。');
+      return { url: data.signedUrl, expiresAt: Date.now() + 50 * 60 * 1000 };
+    });
+    return () => documentLoader.cancel();
+  }, [documentLoader, documentKey, fileId, perFileAccount, storageType, reloadPdf]);
+  useEffect(() => () => documentLoader.dispose(), [documentLoader]);
 
   const fetchNotes = useCallback(async () => {
     if (!materialId) return;
@@ -250,8 +231,8 @@ function TimerContent() {
 
   const handleRenameTitle = async (newTitle: string) => {
     if (!materialId || !newTitle.trim()) return;
-    await supabase.from('materials').update({ title: newTitle.trim() }).eq('id', materialId);
-    setMaterialTitle(newTitle.trim());
+    const savedTitle = await renameMaterial(materialId, newTitle);
+    setMaterialTitle(savedTitle);
   };
 
   if (isInitializing) return <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col items-center justify-center"><Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" /><p className="text-[10px] font-black text-white/50 tracking-[0.2em] uppercase">INITIALIZING WORKSPACE...</p></div>;
@@ -268,7 +249,7 @@ function TimerContent() {
     </div>
   );
 
-  if (pdfList.length > 0 && securePdfUrl) {
+  if (pdfList.length > 0) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0a] overflow-hidden text-white font-sans">
         
@@ -285,7 +266,8 @@ function TimerContent() {
         <div className="flex-1 flex overflow-hidden relative">
           
           <div className="flex-1 relative border-r border-[#2c2c2e]">
-            <PdfViewer
+            {securePdfUrl ? <PdfViewer
+              key={documentKey}
               ref={pdfViewerRef}
               pdfUrl={securePdfUrl}
               pdfId={`${materialId}-${currentIndex}`}
@@ -294,7 +276,9 @@ function TimerContent() {
               penWidth={penWidth}
               markerWidth={markerWidth}
               eraserWidth={eraserWidth}
-            />
+            /> : <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center" role="status" aria-live="polite">
+              {pdfLoading ? <><Loader2 className="w-8 h-8 text-indigo-400 animate-spin" /><p className="text-sm text-white/60">選択したPDFを読み込んでいます...</p></> : <><AlertCircle className="w-8 h-8 text-rose-400" /><p className="text-sm text-rose-400">{documentError}</p><button onClick={fetchDriveFile} className="px-4 py-2 rounded-xl bg-white/10 font-bold">再試行する</button></>}
+            </div>}
 
             <button
               onClick={() => router.back()}
@@ -387,15 +371,13 @@ function TimerContent() {
             <BookOpen className="w-4 h-4" /> CURRENT SUBJECT
           </div>
           {imageUrl ? (
-            <img src={imageUrl} alt={title} className="w-20 h-28 object-cover rounded-lg shadow-sm border border-slate-200 mb-4" />
+            <img src={imageUrl} alt={materialTitle} className="w-20 h-28 object-cover rounded-lg shadow-sm border border-slate-200 mb-4" />
           ) : (
             <div className="w-20 h-28 bg-slate-100 rounded-lg shadow-sm border border-slate-200 mb-4 flex items-center justify-center">
               <BookOpen className="w-8 h-8 text-slate-300" />
             </div>
           )}
-          <h2 className="text-base font-black text-slate-800 text-center px-4 leading-relaxed line-clamp-3">
-            {title}
-          </h2>
+          {materialId ? <MaterialTitleEditor title={materialTitle} onRename={handleRenameTitle} /> : <h2 className="text-base font-black text-slate-800">{materialTitle}</h2>}
         </div>
 
         <div className="mb-8 font-black tabular-nums tracking-tighter text-indigo-600" style={{ fontSize: seconds >= 3600 ? '4rem' : '5rem', lineHeight: '1' }}>
