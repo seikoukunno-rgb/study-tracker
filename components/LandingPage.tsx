@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { supabase } from "@/lib/supabase";
 import {
   FileText,
   PenTool,
@@ -185,16 +186,28 @@ export default function LandingPage() {
   const [lang, setLang] = useState<"ja" | "en">("ja");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [ctaHref, setCtaHref] = useState("/login");
 
   const g = (key: string) => t[lang][key] ?? key;
 
-  // scroll listener
-  if (typeof window !== "undefined") {
-    if (!scrolled) {
-      const handler = () => setScrolled(window.scrollY > 20);
-      window.addEventListener("scroll", handler, { passive: true });
-    }
-  }
+  // スクロールで nav の見た目を変える
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    handler();
+    window.addEventListener("scroll", handler, { passive: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
+
+  // ログイン済みなら CTA をアプリ(/home)へ、未ログインなら /login へ
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active && data.user) setCtaHref("/home");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const features = [
     { icon: FileText, title: g("features.c1t"), description: g("features.c1d") },
@@ -260,7 +273,7 @@ export default function LandingPage() {
               {g("lang.toggle")}
             </button>
             <Link
-              href="/login"
+              href={ctaHref}
               className="rounded-full bg-[#0F172A] px-6 py-2 font-bold text-white shadow-md transition-all hover:scale-105 hover:bg-[#2563EB] active:scale-95"
             >
               {g("nav.start")}
@@ -285,7 +298,7 @@ export default function LandingPage() {
             <a href="#trust" className="text-lg text-[#0F172A]" onClick={() => setMobileOpen(false)}>{g("nav.trust")}</a>
             <a href="#faq" className="text-lg text-[#0F172A]" onClick={() => setMobileOpen(false)}>{g("nav.faq")}</a>
             <Link
-              href="/login"
+              href={ctaHref}
               onClick={() => setMobileOpen(false)}
               className="w-full rounded-xl bg-gradient-to-r from-[#2563EB] to-[#06B6D4] py-4 font-bold text-white"
             >
@@ -330,7 +343,7 @@ export default function LandingPage() {
 
             <div className="flex flex-col items-center justify-center gap-6 md:flex-row">
               <Link
-                href="/login"
+                href={ctaHref}
                 className="group flex w-full items-center justify-center gap-3 rounded-2xl bg-[#0F172A] px-12 py-5 text-xl font-bold text-white shadow-2xl transition-all hover:scale-105 active:scale-95 md:w-auto"
               >
                 {g("hero.cta")}
@@ -458,7 +471,7 @@ export default function LandingPage() {
           </h2>
           <div className="flex flex-col items-center justify-center gap-4 md:flex-row">
             <Link
-              href="/login"
+              href={ctaHref}
               className="flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-12 py-5 text-xl font-bold text-[#0F172A] shadow-xl transition-all hover:scale-105 hover:bg-[#06B6D4] hover:text-white active:scale-95 md:w-auto"
             >
               {g("hero.cta")} <ArrowRight size={24} />

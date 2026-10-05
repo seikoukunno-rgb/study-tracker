@@ -15,6 +15,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   const [user, setUser] = useState<any>(null);
 
   const isRoomDetail = pathname.startsWith("/rooms/") && pathname !== "/rooms";
+  const isLanding = pathname === "/"; // ルートは常にランディングページ（アプリchrome無し）
 
   // 1. マウントと初期設定
   useEffect(() => {
@@ -75,7 +76,12 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     };
   }, [mounted]);
 
-  const showNav = pathname !== "/login" && !isRoomDetail && !pathname.startsWith("/viewer");
+  const showNav = pathname !== "/login" && !isLanding && !isRoomDetail && !pathname.startsWith("/viewer");
+
+  // ランディング（ルート）はアプリchrome・認証ローディング・初期化画面を挟まず即表示する
+  if (isLanding) {
+    return <>{children}</>;
+  }
 
   if (!mounted) {
     return (

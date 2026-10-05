@@ -165,7 +165,7 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
     
     setTimeout(() => {
       setToastMessage(null);
-      router.push('/'); 
+      router.push('/home'); 
     }, 400);
   };
 

@@ -29,7 +29,7 @@ export default function BottomNav() {
 
   // 🌟 カレンダーを左から3番目に追加（合計5つのメニュー）
   const navItems = [
-    { name: "記録", path: "/", icon: PenTool },
+    { name: "記録", path: "/home", icon: PenTool },
     { name: "レポート", path: "/report", icon: BarChart2 },
     { name: "カレンダー", path: "/calendar", icon: CalendarDays },
     { name: "ルーム", path: "/rooms", icon: Users },

@@ -35,12 +35,12 @@ function NfcSetupContent() {
     
     // IDをトップ画面に渡し、?record=ID の形式にする
     if (subjectId) {
-      return `${window.location.origin}/?record=${subjectId}`;
+      return `${window.location.origin}/home?record=${subjectId}`;
     }
     
     // 万が一IDがない場合の予備ルートもトップ画面へ向ける
     const shortName = subjectName.substring(0, 3);
-    return `${window.location.origin}/?record=${encodeURIComponent(shortName)}`;
+    return `${window.location.origin}/home?record=${encodeURIComponent(shortName)}`;
   };
 
   const handleWriteNfc = async () => {

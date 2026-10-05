@@ -56,7 +56,7 @@ export default function OnboardingPage() {
       } else {
         setUserId(user.id);
         const { data } = await supabase.from('profiles').select('is_setup_completed, nickname').eq('id', user.id).single();
-        if (data?.is_setup_completed) router.push('/');
+        if (data?.is_setup_completed) router.push('/home');
         if (data?.nickname) setFormData(prev => ({ ...prev, nickname: data.nickname }));
       }
     };
@@ -90,7 +90,7 @@ export default function OnboardingPage() {
         .eq('id', userId);
 
       if (error) throw error;
-      router.push('/');
+      router.push('/home');
       
     } catch (error) {
       console.error('更新エラー:', error);

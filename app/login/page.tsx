@@ -16,7 +16,7 @@ export default function LoginPage() {
     
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) router.push("/");
+      if (user) router.push("/home");
     }
     checkUser();
   }, [router]);

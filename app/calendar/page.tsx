@@ -476,7 +476,7 @@ export default function CalendarPage() {
                           return;
                         }
                         if (mat) {
-                          router.push(`/?record=${mat.id}`);
+                          router.push(`/home?record=${mat.id}`);
                         }
                       }}
                       className={`relative flex items-center justify-between p-4 border transition-all duration-300 ease-out 

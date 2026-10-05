@@ -161,7 +161,7 @@ export default function GoogleDriveSetup() {
       if (insertError) throw insertError;
 
       setSuccess(true);
-      setTimeout(() => router.push("/"), 3000);
+      setTimeout(() => router.push("/home"), 3000);
     } catch (e: any) {
       setError(e.message || "登録に失敗しました");
     } finally {
