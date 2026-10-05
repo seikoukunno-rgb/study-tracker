@@ -1,12 +1,19 @@
 // next.config.ts
-// @ts-ignore
 import withPWAInit from 'next-pwa';
+import defaultRuntimeCaching from 'next-pwa/cache';
 
 const withPWA = withPWAInit({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development', // 開発環境では無効化
   register: true,
   skipWaiting: true,
+  runtimeCaching: [
+    {
+      urlPattern: ({ url }: { url: URL }) => /^\/api\/(?:drive(?:\/|$)|google-drive(?:\/|$)|auth(?:\/|$))/.test(url.pathname),
+      handler: 'NetworkOnly',
+    },
+    ...defaultRuntimeCaching,
+  ],
 });
 
 const nextConfig = {

@@ -27,7 +27,7 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo: `${location.origin}/auth/callback`,
-        scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+        scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

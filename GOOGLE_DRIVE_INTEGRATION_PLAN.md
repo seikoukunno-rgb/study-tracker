@@ -1,3 +1,5 @@
+> この文書は旧スコープを前提とした過去の設計案です。現行のdrive.file + Google Picker実装と設定は [GOOGLE_DRIVE_FIX.md](GOOGLE_DRIVE_FIX.md) を参照してください。
+
 # Google Drive 連携フロー改善案
 
 ## 現在の問題点

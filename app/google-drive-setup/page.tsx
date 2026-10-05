@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { selectDrivePdfs, type DrivePdf } from "@/lib/google-drive/picker";
 import {
   ChevronRight, AlertCircle, CheckCircle2, Loader2,
   UserCircle, Plus, Trash2, X, Sun, Moon
@@ -15,9 +16,9 @@ const PRESET_ICONS = [
 ];
 
 type ConnectedAccount = { id: string; google_email: string };
-type SelectedFile = { id: string; name: string; createdTime: string; accountId: string };
+type SelectedFile = { id: string; name: string; createdTime?: string; accountId: string };
 
-export default function GoogleDriveSetup() {
+function GoogleDriveSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -31,8 +32,10 @@ export default function GoogleDriveSetup() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(true);
 
-  const [files, setFiles] = useState<any[]>([]);
+  const [files, setFiles] = useState<DrivePdf[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [fileSearch, setFileSearch] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
 
@@ -43,6 +46,8 @@ export default function GoogleDriveSetup() {
 
   useEffect(() => {
     const stored = localStorage.getItem("dark_mode");
+    // Hydrate the persisted theme after the browser becomes available.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDarkMode(stored !== "false");
   }, []);
 
@@ -54,51 +59,76 @@ export default function GoogleDriveSetup() {
 
   const fetchConnectedAccounts = useCallback(async () => {
     setAccountsLoading(true);
-    const { data } = await supabase
-      .from("user_connected_google_accounts")
-      .select("id, google_email")
-      .order("created_at", { ascending: true });
-
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setAccountsLoading(false); router.push('/login'); return; }
+    const { data, error: accountError } = await supabase
+      .from("user_connected_google_accounts").select("id, google_email")
+      .eq("user_id", user.id).order("created_at", { ascending: true });
+    if (accountError) setError("連携アカウントの取得に失敗しました");
     const accounts = data ?? [];
     setConnectedAccounts(accounts);
-    if (accounts.length > 0 && !selectedAccountId) {
-      setSelectedAccountId(accounts[0].id);
-    }
+    setSelectedAccountId(current => accounts.some(a => a.id === current) ? current : accounts[0]?.id ?? null);
     setAccountsLoading(false);
-  }, [selectedAccountId]);
+  }, [router]);
 
-  const fetchFiles = useCallback(async (accountId: string) => {
+  const fetchFiles = useCallback(async (accountId: string, signal?: AbortSignal) => {
     setFilesLoading(true);
     setFiles([]);
     setFileSearch("");
-    setError(null);
+    setFilesError(null);
     try {
-      const res = await fetch(
-        `/api/google-drive/list?accountId=${accountId}&query=${encodeURIComponent("mimeType='application/pdf'")}`
-      );
-      if (!res.ok) throw new Error("ファイル取得に失敗しました");
+      const res = await fetch(`/api/google-drive/list?accountId=${encodeURIComponent(accountId)}`, { signal, cache: 'no-store' });
       const data = await res.json();
-      setFiles(data.files ?? []);
-    } catch (e: any) {
-      setError(e.message);
+      if (!res.ok) throw new Error(data.error || "ファイル取得に失敗しました");
+      if (!signal?.aborted) setFiles(data.files ?? []);
+    } catch (e) {
+      if (!signal?.aborted) setFilesError(e instanceof Error ? e.message : "ファイル取得に失敗しました");
     } finally {
-      setFilesLoading(false);
+      if (!signal?.aborted) setFilesLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchConnectedAccounts(); }, []);
-  useEffect(() => { if (selectedAccountId) fetchFiles(selectedAccountId); }, [selectedAccountId]);
+  // Load authenticated external data when this page mounts.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void fetchConnectedAccounts(); }, [fetchConnectedAccounts]);
+  useEffect(() => {
+    const controller = new AbortController();
+    // Reset loading state while synchronizing with the selected account.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (selectedAccountId) void fetchFiles(selectedAccountId, controller.signal);
+    return () => controller.abort();
+  }, [selectedAccountId, fetchFiles]);
+
+  const handlePickFiles = async () => {
+    const account = connectedAccounts.find(a => a.id === selectedAccountId);
+    if (!account) return;
+    setPickerLoading(true);
+    setError(null);
+    try {
+      const picked = await selectDrivePdfs(account.id, account.google_email);
+      if (picked.length === 0) return;
+      setFiles(current => [...current.filter(f => !picked.some(p => p.id === f.id)), ...picked]);
+      setSelectedFiles(current => [...current.filter(f => !picked.some(p => p.id === f.id)),
+        ...picked.map(file => ({ ...file, accountId: account.id }))]);
+      setFilesError(null);
+    } catch (e) { setError(e instanceof Error ? e.message : "PDFの選択に失敗しました"); }
+    finally { setPickerLoading(false); }
+  };
 
   useEffect(() => {
+    // OAuth redirects supply one-time feedback from an external system.
     const connected = searchParams.get("connected");
     const err = searchParams.get("error");
     if (connected === "true") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setToastMessage("Googleアカウントを連携しました！");
-      fetchConnectedAccounts();
       setTimeout(() => setToastMessage(null), 4000);
     }
     if (err) {
       const messages: Record<string, string> = {
+        invalid_state: "認証の有効期限が切れました。もう一度連携してください。",
+        scope_missing: "Driveの権限が許可されませんでした。再連携してください。",
+        oauth_failed: "Google連携に失敗しました。再試行してください。",
         oauth_cancelled: "Google認証がキャンセルされました",
         token_exchange_failed: "トークン交換に失敗しました",
         no_refresh_token: "更新トークンを取得できませんでした。再試行してください。",
@@ -107,19 +137,22 @@ export default function GoogleDriveSetup() {
       };
       setError(messages[err] ?? "エラーが発生しました");
     }
-  }, [searchParams]);
+  }, [searchParams, fetchConnectedAccounts]);
 
   const handleConnectAccount = () => { window.location.href = "/api/auth/google-drive-link"; };
 
   const handleDisconnectAccount = async (accountId: string, email: string) => {
     if (!window.confirm(`「${email}」の連携を解除しますか？`)) return;
-    await supabase.from("user_connected_google_accounts").delete().eq("id", accountId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error: deleteError } = await supabase.from("user_connected_google_accounts").delete().eq("id", accountId).eq("user_id", user.id);
+    if (deleteError) { setError("連携解除に失敗しました"); return; }
     setSelectedFiles(prev => prev.filter(f => f.accountId !== accountId));
     if (selectedAccountId === accountId) setSelectedAccountId(null);
     fetchConnectedAccounts();
   };
 
-  const toggleFile = (file: any, accountId: string) => {
+  const toggleFile = (file: DrivePdf, accountId: string) => {
     setSelectedFiles(prev =>
       prev.some(f => f.id === file.id)
         ? prev.filter(f => f.id !== file.id)
@@ -162,8 +195,8 @@ export default function GoogleDriveSetup() {
 
       setSuccess(true);
       setTimeout(() => router.push("/home"), 3000);
-    } catch (e: any) {
-      setError(e.message || "登録に失敗しました");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "登録に失敗しました");
     } finally {
       setRegistering(false);
     }
@@ -289,6 +322,7 @@ export default function GoogleDriveSetup() {
                   <div key={account.id} className="flex items-center gap-1">
                     <button
                       onClick={() => setSelectedAccountId(account.id)}
+                      disabled={pickerLoading}
                       className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm font-bold ${
                         isActive
                           ? "bg-indigo-600/20 border-indigo-500 text-indigo-300"
@@ -307,6 +341,7 @@ export default function GoogleDriveSetup() {
                     </button>
                     <button
                       onClick={() => handleDisconnectAccount(account.id, account.google_email)}
+                      disabled={pickerLoading}
                       className={`p-1.5 transition-colors rounded-lg ${textSub} hover:text-rose-500`}
                       title="連携解除"
                     >
@@ -329,7 +364,16 @@ export default function GoogleDriveSetup() {
         {/* ── ファイル一覧 ── */}
         {selectedAccountId && connectedAccounts.length > 0 && (
           <section>
-            {filesLoading ? (
+            <p className={`text-sm mb-3 ${textSub}`}>Google DriveからPDFを選択して、Mercuryでの利用を許可してください。一覧には許可済みのPDFが表示されます。</p>
+            <div className="flex gap-2 mb-4">
+              <button onClick={handlePickFiles} disabled={pickerLoading || filesLoading || registering} className="px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm disabled:opacity-50 flex items-center gap-2">
+                {pickerLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Google DriveからPDFを選択
+              </button>
+              <button onClick={handleConnectAccount} disabled={pickerLoading} className={`text-sm font-bold ${textSub}`}>再連携</button>
+            </div>
+            {filesError ? (
+              <p role="alert" className="text-rose-400 text-sm">{filesError}</p>
+            ) : filesLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
               </div>
@@ -375,7 +419,7 @@ export default function GoogleDriveSetup() {
                           <div className="flex-1 min-w-0">
                             <p className={`font-bold truncate text-sm ${textMain}`}>{file.name}</p>
                             <p className={`text-xs mt-0.5 ${textSub}`}>
-                              {new Date(file.createdTime).toLocaleDateString("ja-JP")}
+                              {file.createdTime ? new Date(file.createdTime).toLocaleDateString("ja-JP") : "Google Driveで選択したPDF"}
                             </p>
                           </div>
                         </button>
@@ -385,7 +429,7 @@ export default function GoogleDriveSetup() {
               </div>
             ) : (
               <div className={`p-4 rounded-xl text-center border ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-white border-slate-200'}`}>
-                <p className={`text-sm ${textSub}`}>PDF ファイルが見つかりません</p>
+                <p className={`text-sm ${textSub}`}>許可済みのPDFはまだありません。「Google DriveからPDFを選択」で追加してください。</p>
               </div>
             )}
           </section>
@@ -453,4 +497,8 @@ export default function GoogleDriveSetup() {
       </div>
     </div>
   );
+}
+
+export default function GoogleDriveSetup() {
+  return <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}><GoogleDriveSetupContent /></Suspense>;
 }

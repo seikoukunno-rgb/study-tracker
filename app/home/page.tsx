@@ -30,7 +30,6 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customTitle, setCustomTitle] = useState("");
-  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
 
   const PRESET_ICONS = [
     "/icons/blue.png", "/icons/black.png", "/icons/gold.png", "/icons/green.png",
@@ -171,7 +170,6 @@ export default function Home() {
     };
     checkDarkMode();
     fetchData();
-    setIsGoogleConnected(localStorage.getItem('google_drive_connected') === 'true');
     window.addEventListener('storage', checkDarkMode);
     window.addEventListener('darkModeChanged', checkDarkMode);
     return () => {
@@ -317,25 +315,7 @@ export default function Home() {
   const handleAddCustomMaterial = async () => {
     const driveSetupPath = `/google-drive-setup?title=${encodeURIComponent(customTitle)}&icon=${encodeURIComponent(selectedIconUrl)}`;
 
-    if (isGoogleConnected) {
-      router.push(driveSetupPath);
-      return;
-    }
-
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(driveSetupPath)}`;
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        scopes: "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
-        queryParams: { access_type: "offline", prompt: "consent" },
-      },
-    });
-
-    if (error) {
-      alert("Google 認証に失敗しました: " + error.message);
-    }
+    router.push(driveSetupPath);
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-800";
@@ -453,7 +433,7 @@ export default function Home() {
                   disabled={isUploading}
                   className={`w-full py-5 rounded-[2rem] font-black text-lg shadow-lg transition-all flex items-center justify-center gap-3 active:scale-95 ${isUploading ? 'bg-slate-400 cursor-not-allowed text-slate-600' : 'bg-green-600 text-white shadow-green-500/30'}`}
                 >
-                  {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : isGoogleConnected ? <><Plus className="w-5 h-5" /><span>GoogleドライブからPDFを追加</span></> : <><Plus className="w-5 h-5" /><span>Google Drive 認証</span></>}
+                  {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /><span>処理中...</span></> : <><Plus className="w-5 h-5" /><span>GoogleドライブからPDFを追加</span></>}
                 </button>
 
                 <button 

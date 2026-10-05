@@ -133,13 +133,9 @@ function TimerContent() {
         const accountParam = perFileAccount ? `&accountId=${perFileAccount}` : '';
         const res = await fetch(`/api/drive?fileId=${encodeURIComponent(fileId)}${accountParam}`);
         console.log('📡 Drive API response:', res.status, res.headers.get('Content-Type'));
-        if (res.status === 403 || res.status === 401) {
-          throw new Error(`Google Drive の認証が期限切れです。再度 Google 連携を行ってください。`);
-        }
         if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          console.error('❌ Drive API error body:', errText);
-          throw new Error(`Google Drive からのファイル取得に失敗しました (${res.status})`);
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Google Driveからのファイル取得に失敗しました (${res.status})`);
         }
         const contentType = res.headers.get('Content-Type') ?? '';
         if (!contentType.includes('pdf')) {

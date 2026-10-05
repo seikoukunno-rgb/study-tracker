@@ -131,7 +131,7 @@ const { data: profile } = await supabase.from('profiles').select('*').eq('id', u
     const shareData = {
       title: 'Mercury',
       text: '学習とタスクを管理するアプリ「Mercury」を一緒に使おう！',
-      url: 'https://mercury-study47.com',
+      url: window.location.origin,
     };
 
     if (navigator.share) {
