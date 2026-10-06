@@ -71,7 +71,6 @@ function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
 function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string }) {
   const [open, setOpen] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
-  const [expanded, setExpanded] = useState(true); // 「表示を折りたたむ」で収納できる
 
   // 無限ループ用に2周ぶん並べる
   const loop = [...SCREENS, ...SCREENS];
@@ -85,15 +84,9 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
           </span>
           <h2 className="text-3xl font-bold md:text-5xl">{title}</h2>
           <p className="mt-3 max-w-xl text-sm text-[#64748B] md:text-base">{subtitle}</p>
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-[#475569] shadow-sm transition-all hover:border-[#2563EB]/30 hover:text-[#2563EB]"
-          >
-            {expanded ? "画面プレビューを隠す" : "画面プレビューを見る"}
-          </button>
         </div>
 
-        {expanded && (
+        {(
           <div
             className="relative"
             onMouseEnter={() => setPaused(true)}
@@ -129,7 +122,7 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
         )}
 
         {/* 機能一覧（コンパクト） */}
-        {expanded && (
+        {(
           <div className="mt-20">
             <h3 className="mb-6 text-center text-xs font-black uppercase tracking-widest text-[#64748B]">All Features</h3>
             <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -170,10 +163,12 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
             <ArrowRight className="h-5 w-5 rotate-180" />
           </button>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <div className="relative h-[70vh] max-h-[720px] w-auto rounded-[2.5rem] border border-white/10 bg-white p-[8px] shadow-2xl">
-              <div className="relative h-full w-auto overflow-hidden rounded-[2rem]" style={{ aspectRatio: "9 / 19.5" }}>
-                <img src={SCREENS[open].src} alt={SCREENS[open].label} className="h-full w-full object-cover object-top" />
-              </div>
+            <div className="mx-auto w-fit rounded-[2.5rem] border border-white/10 bg-white p-[8px] shadow-2xl">
+              <img
+                src={SCREENS[open].src}
+                alt={SCREENS[open].label}
+                className="block h-auto max-h-[62vh] w-auto max-w-[80vw] rounded-[2rem] object-contain"
+              />
             </div>
             {/* 画像の下に機能説明 */}
             <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
