@@ -218,7 +218,7 @@ function TimerContent() {
     }]);
 
     if (error) { alert("保存エラー: " + error.message); setIsSaving(false); } 
-    else { setIsSaved(true); setIsRunning(false); setShowSaveModal(false); setTimeout(() => router.push("/home"), 1500); }
+    else { window.dispatchEvent(new Event('badgeChanged')); setIsSaved(true); setIsRunning(false); setShowSaveModal(false); setTimeout(() => router.push("/home"), 1500); }
   };
 
   const handleNoteClick = (pageNumber: number) => {

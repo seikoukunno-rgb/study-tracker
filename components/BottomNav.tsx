@@ -35,19 +35,21 @@ export default function BottomNav() {
 
       // 1. マイページ: レベルアップしているかチェック
       try {
-        const raw = localStorage.getItem(`last_seen_level_${uid}`);
-        if (raw !== null) {
-          const storedLevel = Number(raw);
-          if (!isNaN(storedLevel)) {
-            const { data: logs } = await supabase
-              .from('study_logs')
-              .select('duration_minutes')
-              .eq('student_id', uid);
-            if (logs) {
-              const total = logs.reduce((s: number, l: any) => s + l.duration_minutes, 0);
-              const currentLevel = calculateLevel(total);
-              if (currentLevel > storedLevel) b["/mypage"] = true;
-            }
+        const key = `last_seen_level_${uid}`;
+        const raw = localStorage.getItem(key);
+        const storedLevel = raw === null ? NaN : Number(raw);
+        const { data: logs } = await supabase
+          .from('study_logs')
+          .select('duration_minutes')
+          .eq('student_id', uid);
+        if (logs) {
+          const total = logs.reduce((s: number, l: any) => s + l.duration_minutes, 0);
+          const currentLevel = calculateLevel(total);
+          if (isNaN(storedLevel)) {
+            // この端末で未記録なら、現在のレベルを基準として保存（初回に赤点が出ないように）
+            localStorage.setItem(key, String(currentLevel));
+          } else if (currentLevel > storedLevel) {
+            b["/mypage"] = true;
           }
         }
       } catch {}

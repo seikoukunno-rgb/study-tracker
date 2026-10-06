@@ -340,6 +340,7 @@ export default function Home() {
     }]);
 
     if (!error) {
+      window.dispatchEvent(new Event('badgeChanged')); // レベルアップ時にマイページへ赤点
       closeModal();
       setTimeInput("");
       setMemoInput("");
