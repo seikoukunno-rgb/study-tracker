@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, UserPlus, Clock, BarChart3, TrendingUp, Search, ChevronLeft, ChevronRight, CalendarDays, Flame, ArrowUpDown } from 'lucide-react';
+import { Users, UserPlus, Clock, BarChart3, TrendingUp, Search, ChevronLeft, ChevronRight, CalendarDays, Flame, ArrowUpDown, Globe } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function DashboardClient({ 
-  allUsers, totalUsers, dauCount, mauCount, newUsersToday, totalStudyMinutesToday, totalStudyRecordsToday, chartData, toggleAdminRoleAction 
+  allUsers, totalUsers, dauCount, mauCount, newUsersToday, totalStudyMinutesToday, totalStudyRecordsToday, chartData, visitStats, toggleAdminRoleAction 
 }: any) {
   // --- 状態管理 ---
   const [activeView, setActiveView] = useState<'overview' | 'users' | 'chart'>('overview');
@@ -71,6 +71,46 @@ export default function DashboardClient({
           <p className="text-3xl font-black text-slate-800 dark:text-white">{newUsersToday}</p>
         </div>
       </div>
+
+      {/* 1.5 サイト訪問者数（未ログインの閲覧者を含む） */}
+      <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 tracking-widest uppercase mb-4">Site Visitors <span className="text-xs font-normal ml-2 text-slate-400">(ブラウザ単位・ログイン不要で計測)</span></h2>
+      {visitStats ? (
+        <div className="mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {[
+              { label: '今日の訪問者', value: visitStats.today, sub: `昨日 ${visitStats.yesterday}` },
+              { label: '直近7日（ユニーク）', value: visitStats.week_unique },
+              { label: '直近30日（ユニーク）', value: visitStats.month_unique },
+              { label: '累計（ユニーク）', value: visitStats.total_unique },
+            ].map((c) => (
+              <div key={c.label} className="bg-white dark:bg-[#1c1c1e] p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-[#2c2c2e]">
+                <div className="flex items-center gap-2 mb-2 text-slate-500 dark:text-slate-400"><Globe className="w-4 h-4 text-sky-500" /><h3 className="text-xs font-bold">{c.label}</h3></div>
+                <p className="text-3xl font-black text-slate-800 dark:text-white">{c.value}</p>
+                {c.sub && <p className="mt-1 text-[11px] font-bold text-slate-400">{c.sub}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="bg-white dark:bg-[#1c1c1e] shadow-sm rounded-2xl border border-slate-100 dark:border-[#2c2c2e] p-6">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-4">訪問者トレンド（過去30日）</h3>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={(visitStats.daily || []).map((d: any) => ({ date: d.date.slice(5).replace('-', '/'), 訪問者: d.visitors, 訪問回数: d.sessions }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                  <XAxis dataKey="date" stroke="#888" fontSize={11} tickMargin={8} interval={4} />
+                  <YAxis stroke="#888" fontSize={11} allowDecimals={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1c1c1e', borderColor: '#2c2c2e', borderRadius: '8px', color: '#fff' }} />
+                  <Line type="monotone" dataKey="訪問者" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="訪問回数" stroke="#94a3b8" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-400">
+          訪問者数の集計がまだ有効になっていません。Supabase の SQL Editor で <code className="rounded bg-white/60 px-1 dark:bg-black/30">supabase/site_visits.sql</code> を実行してください。
+        </div>
+      )}
 
       {/* --- グラフ表示 --- */}
       {activeView === 'chart' && (

@@ -3,6 +3,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import ClientWrapper from '@/components/ClientWrapper';
 import GlobalSidebar from '@/components/GlobalSidebar';
+import VisitTracker from '@/components/VisitTracker';
 
 export const metadata: Metadata = {
   title: "Mercury",
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja" suppressHydrationWarning>
       <body suppressHydrationWarning>
+        <VisitTracker />
         <ClientWrapper>
           <div className="flex min-h-screen">
             <main className="flex-1 relative overflow-hidden">

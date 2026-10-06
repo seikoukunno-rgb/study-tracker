@@ -33,6 +33,10 @@ export default async function AdminPage() {
     supabase.from('study_logs').select('duration_minutes').gte('created_at', `${todayStr}T00:00:00Z`)
   ]);
 
+  // 🌐 サイト訪問者数（未実行の SQL がある場合は null → 画面側で案内を出す）
+  const { data: visitStats, error: visitError } = await supabase.rpc('get_visit_stats');
+  if (visitError) console.error('get_visit_stats failed:', visitError.message);
+
   // 🧮 ユーザーごとの統計計算（ここが修正のキモ！）
   const enrichedUsers = allUsers?.map(u => {
     // このユーザーの学習ログだけを抽出
@@ -111,6 +115,7 @@ export default async function AdminPage() {
         totalStudyMinutesToday={totalStudyMinutesToday}
         totalStudyRecordsToday={todayStudyRecords?.length || 0}
         chartData={chartData}
+        visitStats={visitError ? null : visitStats}
         toggleAdminRoleAction={toggleAdminRole}
       />
     </div>
