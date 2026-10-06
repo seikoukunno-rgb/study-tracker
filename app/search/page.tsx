@@ -6,40 +6,23 @@ import { supabase } from "../../lib/supabase";
 import { startMouseDrag } from "../../lib/mouse-drag";
 import { Search, ChevronLeft, Book, Loader2, Plus, CheckCircle2, AlertCircle, Star, ShoppingCart, ExternalLink } from "lucide-react";
 
-// 一時的な通信エラー（ネットワーク切断・429・5xx）は自動で再試行する
-const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 3;
-const REQUEST_TIMEOUT_MS = 10000;
+// サーバー経由の検索（/api/books/search）。サーバー側で Google Books → 国立国会図書館 の順に試す。
+const REQUEST_TIMEOUT_MS = 25000;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchBooksWithRetry(url: string, signal: AbortSignal): Promise<Response> {
-  let lastError: unknown = null;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    // 1回ごとにタイムアウト用のコントローラを作り、画面側の中断(signal)とも連動させる
-    const controller = new AbortController();
-    const onAbort = () => controller.abort();
-    signal.addEventListener("abort", onAbort);
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (res.ok || !RETRY_STATUS.has(res.status)) return res;
-      lastError = new Error(`検索サーバーエラー (${res.status})`);
-    } catch (err) {
-      // 新しい検索に置き換えられた場合は再試行せず即終了
-      if (signal.aborted) throw err;
-      lastError = err; // ネットワークエラー or タイムアウト → 再試行
-    } finally {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", onAbort);
-    }
-
-    if (attempt < MAX_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1)); // 0.5秒 → 1秒
+async function fetchBooks(q: string, signal: AbortSignal): Promise<any[]> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal.addEventListener("abort", onAbort);
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/books/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`検索サーバーエラー (${res.status})`);
+    const data = await res.json();
+    return data.items || [];
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
   }
-
-  throw lastError instanceof Error ? lastError : new Error("通信に失敗しました");
 }
 
 export default function SearchPage() {
@@ -82,40 +65,16 @@ export default function SearchPage() {
     setResults([]);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
-      const keyParam = apiKey ? `&key=${apiKey}` : "";
-      const res = await fetchBooksWithRetry(
-        `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30&country=JP${keyParam}`,
-        abortController.signal
-      );
+      const books = await fetchBooks(query.trim(), abortController.signal);
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("サーバーエラー詳細:", res.status, errorText);
-        throw new Error(`検索サーバーエラー (${res.status}): 詳細を確認してください`);
-      }
-
-      const data = await res.json();
-      
-      if (data.items && data.items.length > 0) {
-        const formatted = data.items.map((item: any) => {
-          const info = item.volumeInfo;
-          const thumbnail = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-          
-          const rating = info.averageRating || 0;
-          const reviewCount = info.ratingsCount || 0;
-          let isbn = "";
-          if (info.industryIdentifiers) {
-            const isbn13 = info.industryIdentifiers.find((id: any) => id.type === "ISBN_13");
-            const isbn10 = info.industryIdentifiers.find((id: any) => id.type === "ISBN_10");
-            isbn = isbn13 ? isbn13.identifier : (isbn10 ? isbn10.identifier : "");
-          }
-
+      if (books.length > 0) {
+        const formatted = books.map((b: any) => {
+          const isbn: string = b.isbn || "";
           const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG;
           const rakutenTag = process.env.NEXT_PUBLIC_RAKUTEN_TAG;
           const mercariAfid = process.env.NEXT_PUBLIC_MERCARI_AFID;
           const encodedIsbn = isbn ? encodeURIComponent(isbn) : "";
-          const encodedTitle = encodeURIComponent(info.title);
+          const encodedTitle = encodeURIComponent(b.title);
 
           // ISBN優先、なければタイトル検索にフォールバック
           const amazonKeyword = isbn ? encodedIsbn : encodedTitle;
@@ -124,12 +83,12 @@ export default function SearchPage() {
           const mercariUrl = `https://jp.mercari.com/search?keyword=${encodedTitle}${mercariAfid ? `&afid=${mercariAfid}` : ""}`;
 
           return {
-            id: item.id,
-            title: info.title,
-            author: info.authors ? info.authors.join(", ") : "著者不明",
-            image_url: thumbnail ? thumbnail.replace("http://", "https://") : null,
-            rating: rating,
-            reviewCount: reviewCount,
+            id: b.id,
+            title: b.title,
+            author: b.authors && b.authors.length ? b.authors.join(", ") : "著者不明",
+            image_url: b.thumbnail || null,
+            rating: b.rating || 0,
+            reviewCount: b.ratingsCount || 0,
             amazonUrl,
             rakutenUrl,
             mercariUrl,
@@ -170,7 +129,7 @@ export default function SearchPage() {
       // 新しい検索に置き換えられた場合は何も表示しない
       if (abortController.signal.aborted) return;
       console.error("Search Error:", err);
-      setErrorMsg("検索中にエラーが発生しました。通信環境を確認して、もう一度検索してください。");
+      setErrorMsg("検索サービスに接続できませんでした。少し時間をおいて、もう一度検索してください。");
     } finally {
       if (searchAbortRef.current === abortController) {
         setIsLoading(false);
