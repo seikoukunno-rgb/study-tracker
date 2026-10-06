@@ -28,39 +28,40 @@ import {
  * - ホバー/タップで停止、クリックで拡大表示（ライトボックス）
  * - 普段は邪魔にならないよう、やや小さめ（高さ約360px）に収めて、興味がある人だけ見られる
  */
-const SCREENS: { src: string; label: string }[] = [
-  { src: "/screens/shelf.jpg", label: "本棚（教材一覧）" },
-  { src: "/screens/search.jpg", label: "教材を検索" },
-  { src: "/screens/report.jpg", label: "学習レポート" },
-  { src: "/screens/timeline.jpg", label: "タイムライン・リアクション" },
-  { src: "/screens/materials.jpg", label: "教材別の最終学習日" },
-  { src: "/screens/calendar.jpg", label: "カレンダー・Todo" },
-  { src: "/screens/rooms.jpg", label: "ルーム一覧" },
-  { src: "/screens/chat.jpg", label: "ルーム内チャット" },
-  { src: "/screens/starun.jpg", label: "スタラン ランキング" },
-  { src: "/screens/connections.jpg", label: "フォロワー・フォロー" },
-  { src: "/screens/mypage.jpg", label: "マイページ（レベル）" },
+type Screen = { src: string; label: string; icon: React.ElementType; description: string };
+const SCREENS: Screen[] = [
+  { src: "/screens/shelf.jpg",       label: "本棚",             icon: FileText,   description: "教材をまとめて管理。PDFも市販の本も、本棚にアイコンで並べてワンタップで記録を開始できる。" },
+  { src: "/screens/search.jpg",      label: "教材を検索",         icon: PenTool,    description: "書籍名から検索して本棚に追加。見つからなければ入力した言葉でそのまま教材を作成できる。" },
+  { src: "/screens/report.jpg",      label: "学習レポート",        icon: TrendingUp, description: "週・月単位の勉強時間グラフと、教材別の内訳をひと目で確認。自分の学習傾向が見える。" },
+  { src: "/screens/timeline.jpg",    label: "タイムライン",        icon: UserPlus,   description: "自分や仲間の学習記録が時系列で流れる。絵文字でリアクションして互いに励まし合える。" },
+  { src: "/screens/materials.jpg",   label: "教材別ログ",         icon: ListTodo,   description: "いつ何を何分やったかを教材単位で振り返り。累計学習時間と最終学習日が並ぶ。" },
+  { src: "/screens/calendar.jpg",    label: "カレンダー・Todo",    icon: Calendar,   description: "日ごとに課題と予定を管理。通知が飛ぶので忘れない。終わった課題は打ち消し線で見える化。" },
+  { src: "/screens/rooms.jpg",       label: "ルーム",             icon: Users,      description: "同じ目標の仲間とルームを作って一緒に勉強。6文字のコードを送るだけで簡単に招待できる。" },
+  { src: "/screens/chat.jpg",        label: "ルーム内チャット",    icon: Users,      description: "ルームの中でメッセージとスタンプで交流。リアルタイムで仲間の存在を感じながら勉強できる。" },
+  { src: "/screens/starun.jpg",      label: "スタラン",           icon: Trophy,     description: "勉強時間ランキング。期間を決めて競い合う。1人週1回まで誰でも開催でき、同時開催はルームに1つだけ。" },
+  { src: "/screens/connections.jpg", label: "フォロー",           icon: UserPlus,   description: "気になる人をフォローして学習記録をチェック。高め合える繋がりを広げる。" },
+  { src: "/screens/mypage.jpg",      label: "レベルアップ",        icon: ShieldCheck,description: "勉強時間が経験値に。レベルが上がると演出が走る。累計時間と連続日数も表示。" },
 ];
 
-function PhoneFrame({ src, label, onClick }: { src: string; label: string; onClick: () => void }) {
+function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="group relative shrink-0 cursor-zoom-in focus:outline-none"
-      aria-label={`${label}を拡大`}
-    >
-      {/* 電話フレーム */}
+    <button onClick={onClick} className="group relative shrink-0 cursor-pointer focus:outline-none" aria-label={`${s.label}の機能を見る`}>
       <div className="relative h-[360px] w-[172px] rounded-[2.2rem] border border-slate-200/80 bg-white p-[6px] shadow-[0_18px_45px_-20px_rgba(37,99,235,0.35)] transition-all duration-500 group-hover:-translate-y-1 group-hover:shadow-[0_28px_55px_-20px_rgba(37,99,235,0.5)]">
         <div className="relative h-full w-full overflow-hidden rounded-[1.75rem] bg-slate-100">
-          <img src={src} alt={label} loading="lazy" className="h-full w-full object-cover object-top" />
+          <img src={s.src} alt={s.label} loading="lazy" className="h-full w-full object-cover object-top" />
         </div>
-        {/* ノッチ風の飾り */}
         <div className="pointer-events-none absolute left-1/2 top-[8px] h-[8px] w-[52px] -translate-x-1/2 rounded-full bg-slate-900/85" />
+        {/* ホバー時に浮かび上がる「タップで機能を見る」バッジ */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <div className="absolute inset-0 rounded-[1.75rem] bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          <span className="relative rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-[#2563EB] shadow-lg">
+            タップして機能を確認
+          </span>
+        </div>
       </div>
-      {/* キャプション */}
       <div className="mt-4 flex justify-center">
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-[#475569] shadow-sm">
-          {label}
+          {s.label}
         </span>
       </div>
     </button>
@@ -112,14 +113,42 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
                 }}
               >
                 {loop.map((s, i) => (
-                  <PhoneFrame key={i} src={s.src} label={s.label} onClick={() => setOpen(i % SCREENS.length)} />
+                  <PhoneFrame key={i} s={s} onClick={() => setOpen(i % SCREENS.length)} />
                 ))}
               </div>
             </div>
 
-            <p className="mt-6 text-center text-[11px] font-bold tracking-widest text-[#94A3B8]">
-              TAP / CLICK TO ENLARGE
-            </p>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <div className="h-[1px] w-10 bg-slate-200" />
+              <p className="text-center text-xs font-black tracking-wider text-[#2563EB]">
+                👆 タップして機能を確認
+              </p>
+              <div className="h-[1px] w-10 bg-slate-200" />
+            </div>
+          </div>
+        )}
+
+        {/* 機能一覧（コンパクト） */}
+        {expanded && (
+          <div className="mt-20">
+            <h3 className="mb-6 text-center text-xs font-black uppercase tracking-widest text-[#64748B]">All Features</h3>
+            <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+              {SCREENS.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setOpen(i)}
+                    className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#2563EB]/30 hover:shadow-md"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/5 text-[#2563EB] transition-colors group-hover:bg-[#2563EB] group-hover:text-white">
+                      <Icon size={18} />
+                    </div>
+                    <span className="text-sm font-black text-[#0F172A] line-clamp-1">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -146,11 +175,14 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
                 <img src={SCREENS[open].src} alt={SCREENS[open].label} className="h-full w-full object-cover object-top" />
               </div>
             </div>
-            <div className="mt-4 text-center text-sm font-bold tracking-wide text-white">
-              {SCREENS[open].label}
-              <span className="ml-3 text-[11px] font-normal text-white/50">
-                {open + 1} / {SCREENS.length}
-              </span>
+            {/* 画像の下に機能説明 */}
+            <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+              <div className="mb-2 flex items-center gap-2">
+                {(() => { const Icon = SCREENS[open].icon; return <Icon size={18} className="text-[#60A5FA]" />; })()}
+                <h3 className="text-base font-black text-white">{SCREENS[open].label}</h3>
+                <span className="ml-auto text-[11px] font-bold text-white/40">{open + 1} / {SCREENS.length}</span>
+              </div>
+              <p className="text-xs leading-relaxed text-white/80">{SCREENS[open].description}</p>
             </div>
           </div>
           <button
@@ -315,37 +347,6 @@ const t: Record<string, Record<string, string>> = {
   },
 };
 
-/* ───────── Feature card ───────── */
-function FeatureCard({
-  icon: Icon,
-  title,
-  description,
-  badge,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  badge?: string;
-}) {
-  return (
-    <div className="group relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-8 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.05)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)]">
-      <div className="absolute -mr-16 -mt-16 right-0 top-0 h-32 w-32 rounded-full bg-[#2563EB]/5 blur-3xl transition-all group-hover:bg-[#2563EB]/10" />
-      <div className="mb-6 inline-flex rounded-2xl bg-slate-50 p-4 text-[#2563EB] transition-all duration-300 group-hover:bg-[#2563EB] group-hover:text-white">
-        <Icon size={28} />
-      </div>
-      {badge && (
-        <span className="absolute right-8 top-8 rounded-md border border-[#7C3AED]/20 bg-[#7C3AED]/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-[#7C3AED]">
-          {badge}
-        </span>
-      )}
-      <h3 className="mb-4 text-xl font-bold text-[#0F172A] transition-colors group-hover:text-[#2563EB]">
-        {title}
-      </h3>
-      <p className="text-sm leading-relaxed text-[#64748B]">{description}</p>
-    </div>
-  );
-}
-
 /* ───────── Main component ───────── */
 export default function LandingPage() {
   const [lang, setLang] = useState<"ja" | "en">("ja");
@@ -373,17 +374,6 @@ export default function LandingPage() {
       active = false;
     };
   }, []);
-
-  const features = [
-    { icon: FileText, title: g("features.c1t"), description: g("features.c1d") },
-    { icon: PenTool, title: g("features.c2t"), description: g("features.c2d"), badge: "Safe" },
-    { icon: Calendar, title: g("features.c3t"), description: g("features.c3d") },
-    { icon: ListTodo, title: "Todoリスト", description: "一日のやるべき事を最小単位に分解。" },
-    { icon: Users, title: "ルーム機能", description: "同じ目標の仲間とルームを作成。" },
-    { icon: Trophy, title: "スタラン", description: "勉強時間ランキング機能。" },
-    { icon: TrendingUp, title: "レベルアップ", description: "学習時間＝経験値システム。" },
-    { icon: UserPlus, title: "フォロー・交流", description: "高め合えるSNS体験。" },
-  ];
 
   const reasons = [
     { color: "text-[#2563EB]", title: g("abstract.r1t"), desc: g("abstract.r1d") },
@@ -563,18 +553,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ═══════════ FEATURES ═══════════ */}
-      <section id="features" className="px-6 py-32">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-20 text-center">
-            <h2 className="text-3xl font-bold md:text-6xl">{g("features.title")}</h2>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {features.map((f, i) => (
-              <FeatureCard key={i} icon={f.icon} title={f.title} description={f.description} badge={f.badge} />
-            ))}
-          </div>
-        </div>
+      {/* ═══════════ FEATURES タイトルのみ（カードは Screens 側で機能一覧として表示） ═══════════ */}
+      <section id="features" className="px-6 pt-32 pb-6 text-center">
+        <h2 className="text-3xl font-bold md:text-6xl">{g("features.title")}</h2>
       </section>
 
       {/* ═══════════ SCREENS ═══════════ */}
