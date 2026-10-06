@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase"; 
 import { ChevronLeft, Send, Users, Loader2, Smile, Trash2, UserPlus, UserMinus, Trophy, Clock, Flame, History, BookOpen, LogOut, Settings, Calendar, Play, Plus, Flag, CheckCircle2, Edit2, X, Share2 } from "lucide-react";
 
+// 日本時間(JST)の「今日」と日付計算（YYYY-MM-DD 文字列で扱う）
+const todayJst = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().split('T')[0];
+const addDays = (ymd: string, n: number) => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().split('T')[0];
+};
+const fmtMd = (ymd: string) => `${Number(ymd.slice(5, 7))}月${Number(ymd.slice(8, 10))}日`;
+
 export default function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const resolvedParams = use(params);
@@ -32,6 +41,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const [staruns, setStaruns] = useState<any[]>([]);
   const [selectedStarunId, setSelectedStarunId] = useState<string | null>(null);
   const [isCreatingStarun, setIsCreatingStarun] = useState(false);
+  const [myLastStarunStart, setMyLastStarunStart] = useState<string | null>(null); // 自分が最後に開催したスタランの開始日（全ルーム通算）
   const [newStarunName, setNewStarunName] = useState("");
   const [newStarunStart, setNewStarunStart] = useState("");
   const [newStarunEnd, setNewStarunEnd] = useState("");
@@ -180,6 +190,12 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
 
   const fetchStaruns = async () => {
     const { data } = await supabase.from('staruns').select('*').eq('group_id', roomId).order('start_date', { ascending: false });
+    // 週1回ルール用：自分が最後に開催した日（他のルームでの開催も含む）
+    const { data: { user: me } } = await supabase.auth.getUser();
+    if (me) {
+      const { data: mine } = await supabase.from('staruns').select('start_date').eq('created_by', me.id).order('start_date', { ascending: false }).limit(1);
+      setMyLastStarunStart(mine && mine.length > 0 ? mine[0].start_date : null);
+    }
     if (data && data.length > 0) {
       setStaruns(data);
       const now = new Date().toISOString().split('T')[0];
@@ -251,25 +267,32 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
     if (!newStarunName.trim() || !newStarunStart || !newStarunEnd) return showToast("全て入力してください");
     if (newStarunStart > newStarunEnd) return showToast("終了日は開始日以降に設定してください");
 
-    const startDate = new Date(newStarunStart);
-    const endDate = new Date(newStarunEnd);
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    
+    const diffDays = Math.round((new Date(`${newStarunEnd}T00:00:00Z`).getTime() - new Date(`${newStarunStart}T00:00:00Z`).getTime()) / 86400000);
     if (diffDays > 7) return showToast("スタランの期間は最大1週間（7日間）に設定してください");
 
+    // 開催ルール：①ルーム内で同時開催は1つまで ②1人あたり週1回まで
+    const today = todayJst();
+    if (newStarunStart < today) return showToast("開始日は今日以降に設定してください");
+    const latestEnd = staruns.reduce((m, st) => (st.end_date > m ? st.end_date : m), "");
+    if (latestEnd && latestEnd >= today) return showToast(`このルームでは開催中のスタランがあります。${fmtMd(addDays(latestEnd, 1))}以降に開催できます`);
+    if (myLastStarunStart && addDays(myLastStarunStart, 7) > today) return showToast(`スタランの開催は1人週1回までです。${fmtMd(addDays(myLastStarunStart, 7))}以降に開催できます`);
+
     const { data, error } = await supabase.from('staruns').insert([{
-      group_id: roomId, name: newStarunName, start_date: newStarunStart, end_date: newStarunEnd, created_by: currentUser?.id
+      group_id: roomId, name: newStarunName.trim(), start_date: newStarunStart, end_date: newStarunEnd, created_by: currentUser?.id
     }]).select().single();
 
     if (!error && data) {
       setStaruns(prev => [data, ...prev].sort((a, b) => b.start_date.localeCompare(a.start_date)));
       setSelectedStarunId(data.id);
+      setMyLastStarunStart(newStarunStart);
       setIsCreatingStarun(false);
       setNewStarunName(""); setNewStarunStart(""); setNewStarunEnd("");
       showToast("新しいスタランを開催しました！");
     } else {
-      showToast("作成に失敗しました");
+      console.error("スタラン作成エラー:", error);
+      // DB側のルール違反（STARUN:〜）はそのまま表示する
+      const msg = error?.message || "";
+      showToast(msg.startsWith("STARUN:") ? msg.replace("STARUN:", "").trim() : "作成に失敗しました");
     }
   };
 
@@ -424,6 +447,11 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
 
     const aggregated: Record<string, { totalTime: number, name: string, avatarUrl: string | null, id: string }> = {};
 
+    // 参加者は学習時間0分でもランキングに載せる
+    members.filter(m => m.is_ranking_participant).forEach(m => {
+      aggregated[m.user_id] = { totalTime: 0, name: m.profiles?.display_name || "ユーザー", avatarUrl: m.profiles?.avatar_url || null, id: m.user_id };
+    });
+
     studyLogs.forEach(log => {
       let isTarget = false;
       if (rankingPeriod === 'total') isTarget = true;
@@ -435,7 +463,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
         aggregated[log.student_id].totalTime += (log.duration_minutes || 0);
       }
     });
-    return Object.values(aggregated).filter(r => r.totalTime > 0).sort((a, b) => b.totalTime - a.totalTime);
+    return Object.values(aggregated).sort((a, b) => b.totalTime - a.totalTime);
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
@@ -449,6 +477,16 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const isHost = room?.created_by === currentUser?.id;
   const rankings = getRankings();
   const selectedStarunData = staruns.find(s => s.id === selectedStarunId);
+
+  // スタラン開催の可否：ルーム内で同時開催は1つまで／1人週1回まで
+  const todayStr = todayJst();
+  const latestEndDate = staruns.reduce((m, st) => (st.end_date > m ? st.end_date : m), "");
+  const groupFreeFrom = latestEndDate && latestEndDate >= todayStr ? addDays(latestEndDate, 1) : null;
+  const myFreeFrom = myLastStarunStart ? addDays(myLastStarunStart, 7) : null;
+  const blockedByGroup = !!groupFreeFrom && groupFreeFrom > todayStr;
+  const blockedByWeek = !!myFreeFrom && myFreeFrom > todayStr;
+  const canCreateStarun = !blockedByGroup && !blockedByWeek;
+  const availableFrom = [groupFreeFrom, myFreeFrom, todayStr].filter(Boolean).sort().pop() as string;
 
   return (
     <div className={`flex flex-col h-[100dvh] w-full font-sans transition-colors duration-300 overflow-hidden ${bgPage}`} onClick={() => setActiveMessageId(null)}>
@@ -712,7 +750,7 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                     {st.name}
                   </button>
                 ))}
-                {isHost && (
+                {(
                   <button 
                     onClick={() => setIsCreatingStarun(true)}
                     className={`px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all border border-dashed flex items-center gap-1 shadow-sm active:scale-95 ${isCreatingStarun ? 'bg-amber-500 text-white border-transparent' : (isDarkMode ? 'bg-transparent text-amber-500 border-amber-500/50' : 'bg-transparent text-amber-600 border-amber-300')}`}
@@ -726,7 +764,19 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex-1 overflow-y-auto px-4 py-6">
               {isCreatingStarun ? (
                 <div className={`p-6 rounded-[2rem] shadow-sm border ${bgCard}`}>
-                  <h3 className={`text-base font-black mb-6 ${textMain}`}>新しいスタランを開催</h3>
+                  <h3 className={`text-base font-black mb-3 ${textMain}`}>新しいスタランを開催</h3>
+                  <div className={`mb-5 p-3 rounded-xl text-xs font-bold leading-relaxed ${canCreateStarun ? (isDarkMode ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700')}`}>
+                    {canCreateStarun ? (
+                      <>今日から開催できます。</>
+                    ) : (
+                      <>
+                        {blockedByGroup && <p>このルームは開催中のスタランがあります（同時開催は1つまで）。</p>}
+                        {blockedByWeek && <p>開催は1人週1回までです。</p>}
+                        <p className="mt-1">👉 {fmtMd(availableFrom)} から開催できます</p>
+                      </>
+                    )}
+                    <p className="mt-1 opacity-70">※ ルームのメンバーなら誰でも開催できます（1人週1回・ルーム内で同時に1つまで）</p>
+                  </div>
                   <div className="space-y-4">
                     <div>
                       <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>イベント名</label>
@@ -735,22 +785,22 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
                     <div className="flex gap-4">
                       <div className="flex-1">
                         <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>開始日</label>
-                        <input type="date" value={newStarunStart} onChange={e => setNewStarunStart(e.target.value)} onClick={(e) => e.currentTarget.showPicker && e.currentTarget.showPicker()} style={{ colorScheme: isDarkMode ? 'dark' : 'light' }} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all cursor-pointer ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-amber-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-amber-500'}`} />
+                        <input type="date" min={availableFrom} value={newStarunStart} onChange={e => setNewStarunStart(e.target.value)} onClick={(e) => e.currentTarget.showPicker && e.currentTarget.showPicker()} style={{ colorScheme: isDarkMode ? 'dark' : 'light' }} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all cursor-pointer ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-amber-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-amber-500'}`} />
                       </div>
                       <div className="flex-1">
                         <label className={`text-[10px] font-black uppercase tracking-widest block mb-2 ${textSub}`}>終了日</label>
-                        <input type="date" value={newStarunEnd} onChange={e => setNewStarunEnd(e.target.value)} onClick={(e) => e.currentTarget.showPicker && e.currentTarget.showPicker()} style={{ colorScheme: isDarkMode ? 'dark' : 'light' }} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all cursor-pointer ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-amber-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-amber-500'}`} />
+                        <input type="date" min={newStarunStart || availableFrom} value={newStarunEnd} onChange={e => setNewStarunEnd(e.target.value)} onClick={(e) => e.currentTarget.showPicker && e.currentTarget.showPicker()} style={{ colorScheme: isDarkMode ? 'dark' : 'light' }} className={`w-full p-4 rounded-2xl text-sm font-bold outline-none border transition-all cursor-pointer ${isDarkMode ? 'bg-[#0a0a0a] border-[#38383a] text-white focus:border-amber-500' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-amber-500'}`} />
                       </div>
                     </div>
-                    <button onClick={handleCreateStarun} className="w-full bg-amber-500 text-white mt-4 py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20 active:scale-95 transition-all">開催する</button>
+                    <button onClick={handleCreateStarun} disabled={!canCreateStarun} className="w-full bg-amber-500 text-white mt-4 py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:shadow-none disabled:active:scale-100">{canCreateStarun ? "開催する" : `${fmtMd(availableFrom)}から開催できます`}</button>
                   </div>
                 </div>
               ) : staruns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center px-4">
                   <Trophy className={`w-16 h-16 mb-4 opacity-50 ${isDarkMode ? 'text-slate-600' : 'text-slate-300'}`} />
                   <p className={`text-lg font-black mb-2 ${textMain}`}>まだスタランがありません</p>
-                  <p className={`text-sm font-bold mb-8 ${textSub}`}>ホストがイベントを作成すると、<br/>ここにランキングが表示されます。</p>
-                  {isHost && <button onClick={() => setIsCreatingStarun(true)} className="bg-amber-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20 active:scale-95">最初のスタランを開催する</button>}
+                  <p className={`text-sm font-bold mb-8 ${textSub}`}>メンバーがイベントを開催すると、<br/>ここにランキングが表示されます。</p>
+                  <button onClick={() => setIsCreatingStarun(true)} className="bg-amber-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-amber-500/20 active:scale-95">最初のスタランを開催する</button>
                 </div>
               ) : (
                 <div className="flex flex-col h-full">
