@@ -1,9 +1,46 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase"; 
+import { startMouseDrag } from "../../lib/mouse-drag";
 import { Search, ChevronLeft, Book, Loader2, Plus, CheckCircle2, AlertCircle, Star, ShoppingCart, ExternalLink } from "lucide-react";
+
+// 一時的な通信エラー（ネットワーク切断・429・5xx）は自動で再試行する
+const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 10000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchBooksWithRetry(url: string, signal: AbortSignal): Promise<Response> {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // 1回ごとにタイムアウト用のコントローラを作り、画面側の中断(signal)とも連動させる
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal.addEventListener("abort", onAbort);
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (res.ok || !RETRY_STATUS.has(res.status)) return res;
+      lastError = new Error(`検索サーバーエラー (${res.status})`);
+    } catch (err) {
+      // 新しい検索に置き換えられた場合は再試行せず即終了
+      if (signal.aborted) throw err;
+      lastError = err; // ネットワークエラー or タイムアウト → 再試行
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    }
+
+    if (attempt < MAX_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1)); // 0.5秒 → 1秒
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("通信に失敗しました");
+}
 
 export default function SearchPage() {
   const router = useRouter();
@@ -22,6 +59,7 @@ export default function SearchPage() {
     isSwiping: false,
   });
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
@@ -34,14 +72,21 @@ export default function SearchPage() {
     if (e) e.preventDefault();
     if (!query.trim()) return;
 
+    // 前の検索がまだ走っていたら中断（古い結果で上書きされるのを防ぐ）
+    searchAbortRef.current?.abort();
+    const abortController = new AbortController();
+    searchAbortRef.current = abortController;
+
     setIsLoading(true);
     setErrorMsg(null);
     setResults([]);
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
-      const res = await fetch(
-        `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30&country=JP&key=${apiKey}`
+      const keyParam = apiKey ? `&key=${apiKey}` : "";
+      const res = await fetchBooksWithRetry(
+        `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=30&country=JP${keyParam}`,
+        abortController.signal
       );
 
       if (!res.ok) {
@@ -122,10 +167,15 @@ export default function SearchPage() {
         setErrorMsg("教材が見つかりませんでした。別の言葉で試してください。");
       }
     } catch (err) {
+      // 新しい検索に置き換えられた場合は何も表示しない
+      if (abortController.signal.aborted) return;
       console.error("Search Error:", err);
-      setErrorMsg("検索中にエラーが発生しました。通信環境を確認してください。");
+      setErrorMsg("検索中にエラーが発生しました。通信環境を確認して、もう一度検索してください。");
     } finally {
-      setIsLoading(false);
+      if (searchAbortRef.current === abortController) {
+        setIsLoading(false);
+        searchAbortRef.current = null;
+      }
     }
   };
 
@@ -194,6 +244,25 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
       setSwipeState({ id: null, offset: 0, isSwiping: false });
     }
     setTouchStartX(null);
+  };
+
+  // PC（マウス）用：ドラッグで左へスワイプして追加（タッチ操作は上のハンドラのまま）
+  const handleCardPointerDown = (e: React.PointerEvent<HTMLElement>, item: any) => {
+    // Amazon/楽天/メルカリのリンクは通常のクリックとして動かす
+    if ((e.target as HTMLElement).closest("a, button")) return;
+    startMouseDrag(e, {
+      onStart: () => setSwipeState({ id: item.id, offset: 0, isSwiping: true }),
+      onMove: (dx) =>
+        setSwipeState((prev) => (prev.id === item.id ? { ...prev, offset: dx < 0 ? dx : 0 } : prev)),
+      onEnd: (dx) => {
+        if (dx < -80) {
+          setSwipeState({ id: item.id, offset: -window.innerWidth, isSwiping: false });
+          handleAddMaterial(item);
+        } else {
+          setSwipeState({ id: null, offset: 0, isSwiping: false });
+        }
+      },
+    });
   };
 
   const bgPage = isDarkMode ? "bg-[#0a0a0a] text-slate-100" : "bg-slate-50 text-slate-900";
@@ -268,13 +337,15 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
                     onTouchStart={(e) => handleTouchStart(e, item.id)}
                     onTouchMove={(e) => handleTouchMove(e, item.id)}
                     onTouchEnd={() => handleTouchEnd(item)}
+                    onPointerDown={(e) => handleCardPointerDown(e, item)}
+                    onDragStart={(e) => e.preventDefault()}
                     style={{
                       transform: swipeState.id === item.id ? `translateX(${swipeState.offset}px)` : undefined,
                       transition: swipeState.isSwiping && swipeState.id === item.id ? 'none' : 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
                       touchAction: 'pan-y'
                     }}
                     // 🌟 改善ポイント2：影(Polish)の強化。スワイプ中は影が濃くなり浮き上がる！
-                    className={`relative z-10 flex items-start gap-4 p-4 border transition-shadow duration-300 ${bgCard} ${swipeState.id === item.id ? (isDarkMode ? 'shadow-2xl shadow-black/60' : 'shadow-xl shadow-indigo-900/10') : 'shadow-sm'}`}
+                    className={`relative z-10 flex items-start gap-4 p-4 border transition-shadow duration-300 select-none ${bgCard} ${swipeState.id === item.id ? (isDarkMode ? 'shadow-2xl shadow-black/60' : 'shadow-xl shadow-indigo-900/10') : 'shadow-sm'}`}
                   >
                     <div className="w-16 h-24 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-200/50 mt-1">
                       {item.image_url ? (

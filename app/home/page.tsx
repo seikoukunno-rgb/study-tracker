@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import PdfThumbnail from "@/components/PdfThumbnail";
 import MaterialTitleEditor from "@/components/MaterialTitleEditor";
 import { renameMaterial } from "@/lib/materials/rename";
+import { startMouseDrag } from "@/lib/mouse-drag";
 
 export default function Home() {
   const router = useRouter();
@@ -45,6 +46,8 @@ export default function Home() {
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
+  // PCのマウスドラッグ直後に click が走って教材が開いてしまうのを防ぐ
+  const suppressMaterialClickRef = useRef(false);
   
   // 削除モーダル用のState
   const [deleteTarget, setDeleteTarget] = useState<{id: string, title: string} | null>(null);
@@ -117,6 +120,40 @@ export default function Home() {
       setSwipingMaterialId(null);
     }
     setTouchStart(null);
+  };
+
+  // PC（マウス）用：ドラッグで左へスワイプして削除（タッチ操作は上のハンドラのまま）
+  const handleMaterialPointerDown = (e: React.PointerEvent<HTMLElement>, materialId: string, title: string) => {
+    startMouseDrag(e, {
+      onStart: () => {
+        setSwipingMaterialId(materialId);
+        setSwipeOffset(0);
+        setIsSwiping(true);
+      },
+      onMove: (dx) => {
+        setSwipeOffset(dx < 0 ? dx : 0);
+      },
+      onEnd: (dx, _dy, didDrag) => {
+        setIsSwiping(false);
+        if (didDrag) {
+          suppressMaterialClickRef.current = true;
+          setTimeout(() => { suppressMaterialClickRef.current = false; }, 50);
+        }
+        if (dx < -60) {
+          setSwipeOffset(-window.innerWidth);
+          setTimeout(() => {
+            setDeleteTarget({ id: materialId, title });
+            setTimeout(() => {
+              setSwipeOffset(0);
+              setSwipingMaterialId(null);
+            }, 300);
+          }, 200);
+        } else {
+          setSwipeOffset(0);
+          setSwipingMaterialId(null);
+        }
+      },
+    });
   };
 
   const handleModalTouchStart = (e: React.TouchEvent) => {
@@ -548,7 +585,10 @@ export default function Home() {
                     onTouchStart={(e) => handleMaterialTouchStart(e, material.id)}
                     onTouchMove={handleMaterialTouchMove}
                     onTouchEnd={() => handleMaterialTouchEnd(material.id, material.title)}
+                    onPointerDown={(e) => handleMaterialPointerDown(e, material.id, material.title)}
+                    onDragStart={(e) => e.preventDefault()}
                     onClick={() => {
+                      if (suppressMaterialClickRef.current) return;
                       if (Math.abs(swipeOffset) < 10) setSelectedMaterial(material);
                     }}
                     style={{ 
@@ -556,7 +596,7 @@ export default function Home() {
                       opacity: swipingMaterialId === material.id ? Math.max(1 + swipeOffset / 150, 0.3) : 1,
                       transition: isSwiping && swipingMaterialId === material.id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s' 
                     }}
-                    className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2
+                    className={`relative z-10 w-full h-full flex flex-col items-center text-center p-4 rounded-3xl transition-all border-2 select-none
                       ${isDarkMode ? 'bg-[#1c1c1e]' : 'bg-white'}
                       ${isGoogleDrive
                         ? (swipingMaterialId === material.id && Math.abs(swipeOffset) > 10)

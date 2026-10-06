@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase"; 
+import { startMouseDrag } from "../../lib/mouse-drag";
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, 
   CheckCircle2, Circle, Bell, Target, Book, Flame, Trash2, 
@@ -42,6 +43,8 @@ export default function CalendarPage() {
   const [swipedEventId, setSwipedEventId] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
+  // PCのマウスドラッグ直後に click が走ってスワイプが戻ってしまうのを防ぐ
+  const suppressEventClickRef = useRef(false);
 
 
   const [selectedReminderTask, setSelectedReminderTask] = useState<any>(null);
@@ -323,6 +326,22 @@ export default function CalendarPage() {
     if (xDiff < -40 && swipedEventId === id) setSwipedEventId(null); 
   };
 
+  // PC（マウス）用：ドラッグで左へスワイプして削除/リマインドを表示（タッチ操作は上のハンドラのまま）
+  const handleEventPointerDown = (e: React.PointerEvent<HTMLElement>, id: string) => {
+    // 完了チェックなどのボタン上では通常のクリックとして動かす
+    if ((e.target as HTMLElement).closest("button")) return;
+    startMouseDrag(e, {
+      onEnd: (dx, dy, didDrag) => {
+        if (!didDrag) return;
+        suppressEventClickRef.current = true;
+        setTimeout(() => { suppressEventClickRef.current = false; }, 50);
+        if (Math.abs(dy) > Math.abs(dx)) return; // 縦方向の動きはスワイプ扱いにしない
+        if (dx < -40) setSwipedEventId(id);
+        else if (dx > 40) setSwipedEventId((prev) => (prev === id ? null : prev));
+      },
+    });
+  };
+
   const formatDateStr = (d: Date) => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
   const days = Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }, (_, i) => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i + 1));
   const firstDayIndex = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
@@ -470,7 +489,10 @@ export default function CalendarPage() {
                       onTouchStart={handleTouchStart} 
                       onTouchMove={handleTouchMove} 
                       onTouchEnd={() => handleTouchEnd(event.id)} 
+                      onPointerDown={(e) => handleEventPointerDown(e, event.id)}
+                      onDragStart={(e) => e.preventDefault()}
                       onClick={() => { 
+                        if (suppressEventClickRef.current) return;
                         if (swipedEventId === event.id) {
                           setSwipedEventId(null);
                           return;
@@ -479,7 +501,7 @@ export default function CalendarPage() {
                           router.push(`/home?record=${mat.id}`);
                         }
                       }}
-                      className={`relative flex items-center justify-between p-4 border transition-all duration-300 ease-out 
+                      className={`relative flex items-center justify-between p-4 border transition-all duration-300 ease-out select-none 
                         ${swipedEventId === event.id ? '-translate-x-[160px]' : 'translate-x-0'} 
                         ${event.is_completed ? (isDarkMode ? 'bg-[#1c1c1e] border-[#2c2c2e]' : 'bg-slate-50 border-slate-200') : bgCard}
                         ${mat ? 'cursor-pointer active:scale-[0.98]' : ''} 
