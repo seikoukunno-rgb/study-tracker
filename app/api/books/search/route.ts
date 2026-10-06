@@ -17,14 +17,16 @@ type BookItem = {
 };
 
 const TIMEOUT_MS = 8000;
+// APIキーに「HTTPリファラ制限」がかかっていても通るよう、サーバーからも本番サイトのリファラを付ける
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mercury-study47.com';
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+async function fetchWithTimeout(url: string, headers?: Record<string, string>): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: controller.signal, cache: 'no-store' });
+    return await fetch(url, { signal: controller.signal, cache: 'no-store', headers });
   } finally {
     clearTimeout(timer);
   }
@@ -42,7 +44,7 @@ async function searchGoogleBooks(q: string, debug: Debug): Promise<BookItem[]> {
   for (const url of urls) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const res = await fetchWithTimeout(url);
+        const res = await fetchWithTimeout(url, { Referer: SITE_URL + '/' });
         if (res.ok) {
           const data = await res.json();
           debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} 200 total=${data.totalItems ?? '?'} items=${(data.items || []).length}`);
@@ -69,7 +71,7 @@ async function searchGoogleBooks(q: string, debug: Debug): Promise<BookItem[]> {
         const bodyText = (await res.text()).slice(0, 300);
         debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} ${res.status} ${bodyText.replace(/\s+/g, ' ').slice(0, 160)}`);
         console.error('Google Books error:', res.status, bodyText);
-        if (!RETRY_STATUS.has(res.status)) break; // 400/403など → 次のURL(キーなし)へ
+        if (res.status === 429 || !RETRY_STATUS.has(res.status)) break; // 400/403など → 次のURL(キーなし)へ
       } catch (e) {
         lastErr = e;
         debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} exception ${String(e).slice(0, 80)}`);
@@ -91,14 +93,22 @@ const decode = (s: string) =>
     .trim();
 
 async function searchNdl(q: string, debug: Debug): Promise<BookItem[]> {
-  const url = `https://ndlsearch.ndl.go.jp/api/opensearch?any=${encodeURIComponent(q)}&cnt=30&mediatype=1`;
-  const res = await fetchWithTimeout(url);
-  const xml = await res.text();
-  debug.push(`ndl ${res.status} len=${xml.length} head=${xml.slice(0, 120).replace(/\s+/g, ' ')}`);
-  if (!res.ok) throw new Error(`ndl ${res.status}`);
+  // 検索方式を順に試す（全文 → タイトル）。0件なら次へ
+  const urls = [
+    `https://ndlsearch.ndl.go.jp/api/opensearch?any=${encodeURIComponent(q)}&cnt=30`,
+    `https://ndlsearch.ndl.go.jp/api/opensearch?title=${encodeURIComponent(q)}&cnt=30`,
+  ];
+  let xml = '';
+  for (const url of urls) {
+    const res = await fetchWithTimeout(url);
+    xml = await res.text();
+    debug.push(`ndl ${res.status} len=${xml.length} items=${(xml.match(/<item[ >]/g) || []).length}`);
+    if (!res.ok) throw new Error(`ndl ${res.status}`);
+    if (/<item[ >]/.test(xml)) break;
+  }
   const items: BookItem[] = [];
   const seen = new Set<string>();
-  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+  for (const m of xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g)) {
     const block = m[1];
     const title = decode(block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '');
     if (!title) continue;
