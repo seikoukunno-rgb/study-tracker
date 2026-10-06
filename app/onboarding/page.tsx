@@ -107,8 +107,8 @@ export default function OnboardingPage() {
 
   return (
     <>
-    <div className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-black overflow-y-auto flex items-start sm:items-center justify-center p-4 py-10">
-      <div className="w-full max-w-xl bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-2xl border border-slate-100 dark:border-[#2c2c2e] overflow-hidden my-auto">
+    <div className="fixed inset-0 z-[9999] bg-slate-50 text-slate-900 [color-scheme:light] overflow-y-auto flex items-start sm:items-center justify-center p-4 py-10">
+      <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden my-auto">
         
         {/* ヘッダー部分 */}
         <div className="bg-indigo-600 p-8 text-center">
@@ -123,65 +123,65 @@ export default function OnboardingPage() {
           {/* --- 本名入力 --- */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <label className="block text-sm font-black text-slate-800 dark:text-white">お名前</label>
+              <label className="block text-sm font-black text-slate-800">お名前</label>
               <span className="text-[10px] font-bold text-slate-400">※アプリ内では公開されません</span>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-500 mb-1">姓 <span className="text-red-500">*</span></label>
-                <input required type="text" name="lastName" value={formData.lastName} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="山田" />
+                <input required type="text" name="lastName" value={formData.lastName} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="山田" />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-500 mb-1">名 <span className="text-red-500">*</span></label>
-                <input required type="text" name="firstName" value={formData.firstName} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="太郎" />
+                <input required type="text" name="firstName" value={formData.firstName} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="太郎" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-500 mb-1">セイ <span className="text-red-500">*</span></label>
-                <input required type="text" name="lastNameKana" value={formData.lastNameKana} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="ヤマダ" />
+                <input required type="text" name="lastNameKana" value={formData.lastNameKana} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="ヤマダ" />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-500 mb-1">メイ <span className="text-red-500">*</span></label>
-                <input required type="text" name="firstNameKana" value={formData.firstNameKana} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="タロウ" />
+                <input required type="text" name="firstNameKana" value={formData.firstNameKana} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="タロウ" />
               </div>
             </div>
           </div>
 
-          <hr className="border-slate-100 dark:border-[#2c2c2e]" />
+          <hr className="border-slate-100" />
 
           {/* --- ニックネーム & 年齢 --- */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-black text-slate-500 mb-1">ニックネーム <span className="text-red-500">*</span></label>
               <p className="text-[9px] text-slate-400 mb-2">※アプリ内で表示されます</p>
-              <input required type="text" name="nickname" value={formData.nickname} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="たろー" />
+              <input required type="text" name="nickname" value={formData.nickname} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="たろー" />
             </div>
             <div>
               <label className="block text-xs font-black text-slate-500 mb-1">年齢 <span className="text-red-500">*</span></label>
               <p className="text-[9px] text-slate-400 mb-2">※同世代の仲間を見つけやすくします</p>
-              <input required type="number" name="age" value={formData.age} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" placeholder="20" min="10" max="100" />
+              <input required type="number" name="age" value={formData.age} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" placeholder="20" min="10" max="100" />
             </div>
           </div>
 
-          <hr className="border-slate-100 dark:border-[#2c2c2e]" />
+          <hr className="border-slate-100" />
 
           {/* --- 属性選択 --- */}
           <div>
             <label className="block text-xs font-black text-slate-500 mb-3">現在のステータス <span className="text-red-500">*</span></label>
             <div className="grid grid-cols-2 gap-4">
-              <label className={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${formData.user_type === 'student' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-indigo-200'}`}>
+              <label className={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${formData.user_type === 'student' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200'}`}>
                 <input type="radio" name="user_type" value="student" checked={formData.user_type === 'student'} onChange={handleChange} className="hidden" />
                 <GraduationCap className={`w-8 h-8 ${formData.user_type === 'student' ? 'text-indigo-500' : 'text-slate-400'}`} />
-                <span className={`text-sm font-bold ${formData.user_type === 'student' ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500'}`}>学生</span>
+                <span className={`text-sm font-bold ${formData.user_type === 'student' ? 'text-indigo-700' : 'text-slate-500'}`}>学生</span>
               </label>
               
-              <label className={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${formData.user_type === 'worker' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' : 'border-slate-100 dark:border-[#38383a] hover:border-emerald-200'}`}>
+              <label className={`cursor-pointer flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${formData.user_type === 'worker' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 hover:border-emerald-200'}`}>
                 <input type="radio" name="user_type" value="worker" checked={formData.user_type === 'worker'} onChange={handleChange} className="hidden" />
                 <Briefcase className={`w-8 h-8 ${formData.user_type === 'worker' ? 'text-emerald-500' : 'text-slate-400'}`} />
-                <span className={`text-sm font-bold ${formData.user_type === 'worker' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>社会人・その他</span>
+                <span className={`text-sm font-bold ${formData.user_type === 'worker' ? 'text-emerald-700' : 'text-slate-500'}`}>社会人・その他</span>
               </label>
             </div>
           </div>
@@ -201,14 +201,14 @@ export default function OnboardingPage() {
                     onChange={(e) => { handleChange(e); setShowUniDropdown(true); }} 
                     onFocus={() => setShowUniDropdown(true)}
                     onBlur={() => setTimeout(() => setShowUniDropdown(false), 200)}
-                    className="w-full pl-10 pr-3 py-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500" 
+                    className="w-full pl-10 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500" 
                     placeholder="大学名を検索、または直接入力" 
                   />
                 </div>
                 
                 {/* 🌟 爆速サジェスト機能（通信なし） */}
                 {showUniDropdown && formData.university && (
-                  <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-[#2c2c2e] border border-slate-200 dark:border-[#38383a] rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                  <ul className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                     {filteredUnis.length > 0 ? (
                       filteredUnis.map(uni => (
                         <li 
@@ -218,7 +218,7 @@ export default function OnboardingPage() {
                             setFormData({...formData, university: uni});
                             setShowUniDropdown(false);
                           }} 
-                          className="p-3 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                          className="p-3 hover:bg-indigo-50 cursor-pointer text-sm font-bold text-slate-700 transition-colors"
                         >
                           {uni}
                         </li>
@@ -234,7 +234,7 @@ export default function OnboardingPage() {
 
               <div>
                 <label className="block text-xs font-black text-slate-500 mb-2">学年 <span className="text-red-500">*</span></label>
-                <select required name="grade" value={formData.grade} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-indigo-500 cursor-pointer">
+                <select required name="grade" value={formData.grade} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 cursor-pointer">
                   <option value="">選択してください</option>
                   <option value="大学1年生">大学1年生</option>
                   <option value="大学2年生">大学2年生</option>
@@ -252,30 +252,30 @@ export default function OnboardingPage() {
           {formData.user_type === 'worker' && (
             <div className="animate-in fade-in slide-in-from-top-4">
               <label className="block text-xs font-black text-slate-500 mb-2">職業・属性 <span className="text-red-500">*</span></label>
-              <input required type="text" name="occupation" value={formData.occupation} onChange={handleChange} className="w-full p-3 bg-slate-50 dark:bg-[#2c2c2e]/50 border border-slate-200 dark:border-[#38383a] rounded-xl text-sm font-bold focus:outline-none focus:border-emerald-500" placeholder="例：ITエンジニア、弁護士、公務員など" />
+              <input required type="text" name="occupation" value={formData.occupation} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500" placeholder="例：ITエンジニア、弁護士、公務員など" />
             </div>
           )}
 
           {/* --- 利用規約・プライバシーポリシー同意 --- */}
-          <div className="space-y-3 bg-slate-50 dark:bg-[#2c2c2e]/50 rounded-2xl p-4 border border-slate-100 dark:border-[#38383a]">
-            <p className="text-xs font-black text-slate-500 dark:text-slate-400 mb-3">ご利用前にご確認ください</p>
+          <div className="space-y-3 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-xs font-black text-slate-500 mb-3">ご利用前にご確認ください</p>
             <label className="flex items-start gap-3 cursor-pointer group">
-              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedTerms ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'}`}
+              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedTerms ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}
                 onClick={() => setAgreedTerms(v => !v)}>
                 {agreedTerms && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
               </div>
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
-                <button type="button" onClick={() => setShowTermsModal(true)} className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800">利用規約</button>
+              <span className="text-xs font-bold text-slate-600 leading-relaxed">
+                <button type="button" onClick={() => setShowTermsModal(true)} className="text-indigo-600 underline underline-offset-2 hover:text-indigo-800">利用規約</button>
                 を読み、同意します
               </span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer group">
-              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedPrivacy ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'}`}
+              <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${agreedPrivacy ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}
                 onClick={() => setAgreedPrivacy(v => !v)}>
                 {agreedPrivacy && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
               </div>
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
-                <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800">プライバシーポリシー</button>
+              <span className="text-xs font-bold text-slate-600 leading-relaxed">
+                <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-indigo-600 underline underline-offset-2 hover:text-indigo-800">プライバシーポリシー</button>
                 を読み、同意します
               </span>
             </label>
@@ -296,14 +296,14 @@ export default function OnboardingPage() {
     {/* 利用規約モーダル */}
     {showTermsModal && (
       <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowTermsModal(false)}>
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-[#2c2c2e] flex-shrink-0">
+        <div className="bg-white text-slate-900 [color-scheme:light] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-slate-100 flex-shrink-0">
             <h2 className="text-base font-black">Mercury 利用規約</h2>
-            <button type="button" onClick={() => setShowTermsModal(false)} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <button type="button" onClick={() => setShowTermsModal(false)} className="p-1 rounded-full hover:bg-slate-100 transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-slate-600 dark:text-slate-300 space-y-4 leading-relaxed">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-slate-600 space-y-4 leading-relaxed">
             <p className="text-slate-400">制定日：2026年10月5日</p>
             <p><strong>第1条（適用）</strong><br/>1. 本利用規約（以下「本規約」という。）は、運営者が提供する学習管理アプリ「Mercury」（以下「本アプリ」という。）の利用条件を定めるものである。<br/>2. 本規約は、本アプリを利用するすべての者（以下「ユーザー」という。）に適用される。<br/>3. 運営者が本アプリ上で別途定める注意事項、ガイドラインその他の規定は、本規約の一部を構成する。本規約と矛盾する場合は、当該規定が優先する。</p>
             <p><strong>第2条（利用の開始）</strong><br/>1. ユーザーは、Googleアカウントでログインし、本規約に同意したうえで、本アプリの利用を開始するものとする。<br/>2. ログインして利用を開始した時点で、ユーザーは本規約に同意したものとみなす。<br/>3. 未成年者は、保護者の同意を得たうえで利用すること。</p>
@@ -323,7 +323,7 @@ export default function OnboardingPage() {
             <p><strong>第16条（準拠法・管轄）</strong><br/>本規約は日本法に準拠する。本アプリに関して紛争が生じた場合は、民事訴訟法に定める管轄裁判所を第一審の裁判所とする。</p>
             <p><strong>第17条（連絡先）</strong><br/>本規約および本アプリに関する問い合わせは、次の連絡先に行うこと。運営者：Mercury運営局／メール：admin.mercury@gmail.com</p>
           </div>
-          <div className="p-4 border-t border-slate-100 dark:border-[#2c2c2e] flex-shrink-0">
+          <div className="p-4 border-t border-slate-100 flex-shrink-0">
             <button type="button" onClick={() => { setAgreedTerms(true); setShowTermsModal(false); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95">
               読んで同意する
             </button>
@@ -335,14 +335,14 @@ export default function OnboardingPage() {
     {/* プライバシーポリシーモーダル */}
     {showPrivacyModal && (
       <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowPrivacyModal(false)}>
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-[#2c2c2e] flex-shrink-0">
+        <div className="bg-white text-slate-900 [color-scheme:light] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-slate-100 flex-shrink-0">
             <h2 className="text-base font-black">Mercury プライバシーポリシー</h2>
-            <button type="button" onClick={() => setShowPrivacyModal(false)} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <button type="button" onClick={() => setShowPrivacyModal(false)} className="p-1 rounded-full hover:bg-slate-100 transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-slate-600 dark:text-slate-300 space-y-4 leading-relaxed">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-slate-600 space-y-4 leading-relaxed">
             <p className="text-slate-400">制定日：2026年10月5日</p>
             <p>Mercury運営局（以下「運営者」という。）は、学習管理アプリ「Mercury」（以下「本アプリ」という。）におけるユーザーの個人情報およびデータの取扱いについて、本プライバシーポリシー（以下「本ポリシー」という。）を定める。</p>
             <p><strong>第1条（基本方針）</strong><br/>運営者は、個人情報の保護に関する法律その他の関連法令、およびGoogle API Services User Data Policy（Limited Use の要件を含む。）を遵守し、必要な範囲で適正に個人情報を取り扱う。</p>
@@ -359,7 +359,7 @@ export default function OnboardingPage() {
             <p><strong>第12条（本ポリシーの変更）</strong><br/>1. 運営者は、必要に応じて本ポリシーを変更することがある。2. 変更後の本ポリシーは、本アプリまたはウェブサイトに掲載した時点から効力を生じる。重要な変更を行う場合は、掲載を通じて事前に知らせる。</p>
             <p><strong>第13条（連絡先）</strong><br/>本ポリシーおよび個人情報の取扱いに関する問い合わせは、次の連絡先に行うこと。運営者：Mercury運営局／メール：admin.mercury@gmail.com</p>
           </div>
-          <div className="p-4 border-t border-slate-100 dark:border-[#2c2c2e] flex-shrink-0">
+          <div className="p-4 border-t border-slate-100 flex-shrink-0">
             <button type="button" onClick={() => { setAgreedPrivacy(true); setShowPrivacyModal(false); }} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all active:scale-95">
               読んで同意する
             </button>
