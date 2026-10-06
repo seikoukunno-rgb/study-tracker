@@ -52,13 +52,16 @@ export default function LevelUpCelebration({ fromLevel, toLevel, onClose }: Prop
       <style>{`
         @keyframes lvup-backdrop { from { opacity: 0 } to { opacity: 1 } }
         @keyframes lvup-card {
-          0% { opacity: 0; transform: scale(0.6) translateY(24px) }
-          60% { opacity: 1; transform: scale(1.06) translateY(0) }
+          0% { opacity: 0; transform: scale(0.1) translateY(40px) }
+          50% { opacity: 1; transform: scale(1.15) translateY(-8px) }
+          70% { transform: scale(0.95) translateY(2px) }
+          85% { transform: scale(1.04) translateY(0) }
           100% { opacity: 1; transform: scale(1) translateY(0) }
         }
         @keyframes lvup-glow {
-          0% { opacity: 0.9; transform: scale(0.4) }
-          100% { opacity: 0; transform: scale(2.2) }
+          0% { opacity: 1; transform: scale(0.2) }
+          40% { opacity: 0.8; transform: scale(1.5) }
+          100% { opacity: 0; transform: scale(2.8) }
         }
         @keyframes lvup-number {
           0% { transform: scale(1) }
@@ -71,10 +74,12 @@ export default function LevelUpCelebration({ fromLevel, toLevel, onClose }: Prop
         }
         @keyframes lvup-shake {
           0%, 100% { transform: translateX(0) }
-          20% { transform: translateX(-5px) }
-          40% { transform: translateX(5px) }
-          60% { transform: translateX(-3px) }
-          80% { transform: translateX(3px) }
+          15% { transform: translateX(-8px) }
+          30% { transform: translateX(8px) }
+          45% { transform: translateX(-6px) }
+          60% { transform: translateX(6px) }
+          75% { transform: translateX(-3px) }
+          90% { transform: translateX(3px) }
         }
         @media (prefers-reduced-motion: reduce) {
           .lvup-anim, .lvup-anim * { animation-duration: 0.01ms !important; animation-delay: 0ms !important; }
@@ -104,7 +109,7 @@ export default function LevelUpCelebration({ fromLevel, toLevel, onClose }: Prop
         ))}
       </div>
 
-      <div className="lvup-anim relative w-full max-w-xs" style={{ animation: "lvup-card 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) both, lvup-shake 0.4s ease-in-out 0.15s both" }}>
+      <div className="lvup-anim relative w-full max-w-xs" style={{ animation: "lvup-card 0.6s cubic-bezier(0.16, 1.2, 0.3, 1) both, lvup-shake 0.5s ease-in-out 0.12s both" }}>
         <span
           className="pointer-events-none absolute left-1/2 top-1/2 -ml-32 -mt-32 h-64 w-64 rounded-full"
           style={{

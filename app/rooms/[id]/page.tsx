@@ -51,7 +51,27 @@ export default function RoomDetailPage({ params }: { params: Promise<{ id: strin
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const myUserIdRef = useRef<string | null>(null);
   const stampList = ["👍", "🔥", "🎉", "👀", "🚀", "🙏", "💯", "✅", "💡", "😭"];
+
+  // ルームを開いたら既読にし、離れるときも最新まで既読にする
+  useEffect(() => {
+    const markRead = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      myUserIdRef.current = user.id;
+      try { localStorage.setItem(`room_last_read_${roomId}_${user.id}`, new Date().toISOString()); } catch {}
+      window.dispatchEvent(new Event('badgeChanged'));
+    };
+    markRead();
+
+    return () => {
+      const uid = myUserIdRef.current;
+      if (uid) {
+        try { localStorage.setItem(`room_last_read_${roomId}_${uid}`, new Date().toISOString()); } catch {}
+      }
+    };
+  }, [roomId]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);

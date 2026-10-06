@@ -25,6 +25,8 @@ export default function RoomsPage() {
 
   // 🌟 ダークモード用のステートを追加
   const [isDarkMode, setIsDarkMode] = useState(false);
+  // 新着メッセージ数（ルームごと）
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   // ==========================================
   // 🌟 共通サイドバー呼び出し処理 (極限までシンプル化)
@@ -63,6 +65,15 @@ export default function RoomsPage() {
 
     fetchRooms();
 
+    // ルームページを開いたらバッジをクリア
+    const clearRoomsBadge = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      try { localStorage.setItem(`rooms_badge_seen_${user.id}`, new Date().toISOString()); } catch {}
+      window.dispatchEvent(new Event('badgeChanged'));
+    };
+    clearRoomsBadge();
+
     return () => {
       window.removeEventListener('storage', checkDarkMode);
       window.removeEventListener('darkModeChanged', checkDarkMode);
@@ -89,6 +100,22 @@ export default function RoomsPage() {
     if (data) {
       const formattedRooms = data.map((item: any) => item.groups).filter(Boolean);
       setRooms(formattedRooms);
+
+      // 各ルームの未読メッセージ数を取得
+      const counts: Record<string, number> = {};
+      await Promise.all(formattedRooms.map(async (room: any) => {
+        const lastRead = localStorage.getItem(`room_last_read_${room.id}_${user.id}`);
+        if (!lastRead) return; // 初回は未読カウントなし
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('room_id', room.id)
+          .neq('user_id', user.id)
+          .eq('is_system', false)
+          .gt('created_at', lastRead);
+        if (count && count > 0) counts[room.id] = count;
+      }));
+      setUnreadCounts(counts);
     }
     setIsLoading(false);
   };
@@ -234,8 +261,15 @@ export default function RoomsPage() {
             {rooms.map((room) => (
               <button key={room.id} onClick={() => router.push(`/rooms/${room.id}`)} className={`w-full p-5 rounded-[2rem] shadow-sm border flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] group ${bgCard}`}>
                 <div className="flex items-center gap-4">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${isDarkMode ? 'bg-indigo-500/20' : 'bg-gradient-to-br from-indigo-100 to-blue-100'}`}>
-                    <span className={`font-black text-xl ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{room.name.charAt(0)}</span>
+                  <div className="relative">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${isDarkMode ? 'bg-indigo-500/20' : 'bg-gradient-to-br from-indigo-100 to-blue-100'}`}>
+                      <span className={`font-black text-xl ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>{room.name.charAt(0)}</span>
+                    </div>
+                    {unreadCounts[room.id] > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 bg-rose-500 rounded-full flex items-center justify-center px-1 shadow-sm">
+                        <span className="text-[10px] font-black text-white leading-none">{unreadCounts[room.id] > 99 ? '99+' : unreadCounts[room.id]}</span>
+                      </span>
+                    )}
                   </div>
                   <div className="text-left">
                     <h3 className={`text-base font-black ${textMain}`}>{room.name}</h3>

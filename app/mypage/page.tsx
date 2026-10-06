@@ -140,6 +140,8 @@ export default function MyPage() {
       setLevelUp({ from: stored, to: current });
       save(); // 表示した時点で記録し、同じレベルアップを二度出さない
     }
+    // BottomNav のバッジを更新
+    window.dispatchEvent(new Event('badgeChanged'));
   }, [isLoading, myUserId, stats.totalMinutes]);
 
   const fetchProfileAndStats = async () => {

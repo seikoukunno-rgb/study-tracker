@@ -90,12 +90,22 @@ export default function CalendarPage() {
   useEffect(() => {
     isMounted.current = true;
     fetchData();
-    
+
     const checkDarkMode = () => setIsDarkMode(localStorage.getItem('dark_mode') === 'true');
     checkDarkMode();
     window.addEventListener('storage', checkDarkMode);
     window.addEventListener('darkModeChanged', checkDarkMode);
-    
+
+    // カレンダーを開いたらバッジをクリア
+    const clearCalendarBadge = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const today = new Date().toISOString().split('T')[0];
+      try { localStorage.setItem(`badge_calendar_seen_${user.id}`, today); } catch {}
+      window.dispatchEvent(new Event('badgeChanged'));
+    };
+    clearCalendarBadge();
+
     return () => {
       isMounted.current = false;
       window.removeEventListener('storage', checkDarkMode);
