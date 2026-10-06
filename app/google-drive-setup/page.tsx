@@ -18,6 +18,49 @@ const PRESET_ICONS = [
 type ConnectedAccount = { id: string; google_email: string };
 type SelectedFile = { id: string; name: string; createdTime?: string; accountId: string };
 
+// Supabase(PostgREST)のエラーは Error インスタンスではなく { code, message } の普通のオブジェクトなので、
+// instanceof Error では判定できない。ここで原因が分かるメッセージに変換する。
+function describeRegisterError(e: unknown): { message: string; duplicate: boolean } {
+  const err = (e ?? {}) as { code?: string; message?: string; details?: string };
+  const raw = err.message || (e instanceof Error ? e.message : "");
+
+  if (err.code === "23505" || /duplicate key|unique constraint/i.test(raw)) {
+    return { message: "同じ名前の教材がすでに本棚にあります。別の教材名にしてください。", duplicate: true };
+  }
+  if (err.code === "42501" || /row-level security|permission denied/i.test(raw)) {
+    return { message: "保存する権限がありません。一度ログアウトして、ログインし直してください。", duplicate: false };
+  }
+  if (err.code === "PGRST301" || /jwt|not authenticated|ユーザー情報/i.test(raw)) {
+    return { message: "ログインの有効期限が切れました。ログインし直してください。", duplicate: false };
+  }
+  if (/failed to fetch|networkerror|network request failed/i.test(raw)) {
+    return { message: "通信に失敗しました。ネットワークを確認して、もう一度お試しください。", duplicate: false };
+  }
+  return { message: raw ? `登録に失敗しました：${raw}` : "登録に失敗しました", duplicate: false };
+}
+
+// 「教材名」「教材名 (2)」「教材名 (3)」… のうち、まだ使われていない名前を返す
+async function suggestFreeTitle(baseTitle: string): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from("materials")
+      .select("title")
+      .eq("student_id", user.id)
+      .ilike("title", `${baseTitle.replace(/[%_]/g, "\\$&")}%`);
+    if (error || !data) return null;
+    const used = new Set(data.map((m: { title: string }) => m.title));
+    for (let n = 2; n < 100; n++) {
+      const candidate = `${baseTitle} (${n})`;
+      if (!used.has(candidate)) return candidate;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function GoogleDriveSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -196,7 +239,20 @@ function GoogleDriveSetupContent() {
       setSuccess(true);
       setTimeout(() => router.push("/home"), 3000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "登録に失敗しました");
+      console.error("教材登録エラー:", e);
+      const info = describeRegisterError(e);
+      if (info.duplicate) {
+        // 同名の教材がすでにあるときは、空いている名前を提案して入力欄に入れる
+        const suggested = await suggestFreeTitle(materialTitle.trim());
+        if (suggested) {
+          setMaterialTitle(suggested);
+          setError(`「${materialTitle.trim()}」という名前の教材はすでに本棚にあります。「${suggested}」に変更したので、このままもう一度「登録」を押してください。`);
+        } else {
+          setError(info.message);
+        }
+      } else {
+        setError(info.message);
+      }
     } finally {
       setRegistering(false);
     }
