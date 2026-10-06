@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
@@ -46,7 +46,7 @@ const SCREENS: Screen[] = [
 
 function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group relative shrink-0 cursor-pointer focus:outline-none snap-start" aria-label={`${s.label}の機能を見る`}>
+    <button onClick={onClick} className="group relative shrink-0 cursor-pointer focus:outline-none" aria-label={`${s.label}の機能を見る`}>
       <div className="relative h-[360px] w-[172px] rounded-[2.2rem] border border-slate-200/80 bg-white p-[6px] shadow-[0_18px_45px_-20px_rgba(37,99,235,0.35)] transition-all duration-500 group-hover:-translate-y-1 group-hover:shadow-[0_28px_55px_-20px_rgba(37,99,235,0.5)]">
         <div className="relative h-full w-full overflow-hidden rounded-[1.75rem] bg-slate-100">
           <img src={s.src} alt={s.label} loading="lazy" draggable={false} className="h-full w-full object-cover object-top pointer-events-none select-none" />
@@ -67,53 +67,67 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef(0);
+  const posRef = useRef(0); // 小数を保持する現在位置（scrollLeft は小数が切り捨てられるため別管理）
   const pausedRef = useRef(false);
+  const touchingRef = useRef(false);
   const resumeTimerRef = useRef<number | null>(null);
   const SPEED = 40; // px/sec
 
-  // 自動スクロール：ネイティブ scrollLeft を少しずつ進める
-  const tick = useCallback((time: number) => {
-    const el = scrollRef.current;
-    if (!el) { rafRef.current = requestAnimationFrame(tick); return; }
-    if (lastTimeRef.current === 0) lastTimeRef.current = time;
-    const dt = (time - lastTimeRef.current) / 1000;
-    lastTimeRef.current = time;
-
-    if (!pausedRef.current) {
-      const half = el.scrollWidth / 2;
-      let next = el.scrollLeft + SPEED * dt;
-      if (next >= half) next -= half;
-      el.scrollLeft = next;
-    }
-    rafRef.current = requestAnimationFrame(tick);
+  // 自動スクロール：位置を小数で積算して scrollLeft に反映
+  useEffect(() => {
+    const step = (time: number) => {
+      const el = scrollRef.current;
+      if (el) {
+        if (lastTimeRef.current === 0) lastTimeRef.current = time;
+        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.1);
+        lastTimeRef.current = time;
+        if (!pausedRef.current) {
+          const half = el.scrollWidth / 2;
+          if (half > 0) {
+            let next = posRef.current + SPEED * dt;
+            if (next >= half) next -= half;
+            posRef.current = next;
+            el.scrollLeft = next;
+          }
+        }
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
   }, []);
 
-  useEffect(() => {
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [tick]);
-
-  // ユーザーが触れている間は停止、離してから少し待って再開（慣性スクロールと喧嘩しないため）
+  // ユーザー操作中は停止。離したあと、慣性スクロールが落ち着いてから再開
   const pause = () => {
     pausedRef.current = true;
     if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
   };
-  const scheduleResume = () => {
+  const scheduleResume = (delay = 800) => {
     if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     resumeTimerRef.current = window.setTimeout(() => {
-      pausedRef.current = false;
+      const el = scrollRef.current;
+      if (el) posRef.current = el.scrollLeft; // 指で動かした位置から再開
       lastTimeRef.current = 0;
-    }, 1500);
+      pausedRef.current = false;
+      resumeTimerRef.current = null;
+    }, delay);
   };
 
-  // 無限ループが途切れないように、ユーザーがスクロールしたときも範囲を補正
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    // 無限ループの継ぎ目補正（手動スクロール時）
     const half = el.scrollWidth / 2;
-    if (el.scrollLeft >= half) el.scrollLeft -= half;
-    else if (el.scrollLeft < 0) el.scrollLeft += half;
+    if (half > 0 && el.scrollLeft >= half) el.scrollLeft -= half;
+    // 手動スクロール中（慣性含む）は再開タイマーを延長
+    if (pausedRef.current && !touchingRef.current) scheduleResume();
   };
+  const onTouchStart = () => { touchingRef.current = true; pause(); };
+  const onTouchEnd = () => { touchingRef.current = false; scheduleResume(1200); };
+  const onWheel = () => { pause(); scheduleResume(1200); };
 
   /* ─── ライトボックス内スワイプ ─── */
   const lbStartX = useRef<number | null>(null);
@@ -154,8 +168,8 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
 
         <div
           className="relative"
-          onMouseEnter={pause}
-          onMouseLeave={scheduleResume}
+          onPointerEnter={(e) => { if (e.pointerType === "mouse") pause(); }}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse") scheduleResume(300); }}
         >
           {/* 左右フェード */}
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white to-transparent" />
@@ -163,16 +177,16 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
 
           <div
             ref={scrollRef}
-            className="screens-scroll overflow-x-auto overflow-y-hidden snap-x"
+            className="screens-scroll overflow-x-auto overflow-y-hidden"
             onScroll={onScroll}
-            onPointerDown={pause}
-            onPointerUp={scheduleResume}
-            onPointerCancel={scheduleResume}
-            onTouchStart={pause}
-            onTouchEnd={scheduleResume}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+            onTouchCancel={onTouchEnd}
+            onWheel={onWheel}
             style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}
           >
-            <div className="flex gap-8 py-6 px-2" style={{ width: "max-content" }}>
+            {/* 2周ぶんの幅がちょうど「1周×2」になるよう、右端に gap 分の余白（継ぎ目のズレ防止） */}
+            <div className="flex gap-8 py-6 pr-8" style={{ width: "max-content" }}>
               {loop.map((s, i) => (
                 <PhoneFrame key={i} s={s} onClick={() => setOpen(i % SCREENS.length)} />
               ))}
