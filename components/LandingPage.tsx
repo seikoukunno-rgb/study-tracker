@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
@@ -70,9 +70,68 @@ function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
 
 function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string }) {
   const [open, setOpen] = useState<number | null>(null);
-  const [paused, setPaused] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
+  const offsetRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartOffset = useRef(0);
+  const dragMoved = useRef(0);
+  const isPaused = useRef(false);
 
-  // 無限ループ用に2周ぶん並べる
+  // 各アイテムの幅（172px phone + 32px gap）
+  const ITEM_W = 204;
+  const HALF = SCREENS.length * ITEM_W;
+  const SPEED = HALF / 60; // px/sec — 元の60秒アニメーションと同じ速度
+
+  const tick = useCallback((time: number) => {
+    if (!trackRef.current) { rafRef.current = requestAnimationFrame(tick); return; }
+    if (lastTimeRef.current === 0) lastTimeRef.current = time;
+    const dt = (time - lastTimeRef.current) / 1000;
+    lastTimeRef.current = time;
+
+    if (!isDragging.current && !isPaused.current) {
+      offsetRef.current -= SPEED * dt;
+      if (offsetRef.current <= -HALF) offsetRef.current += HALF;
+      trackRef.current.style.transform = `translateX(${offsetRef.current}px)`;
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, [HALF, SPEED]);
+
+  useEffect(() => {
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [tick]);
+
+  /* ─── ドラッグ（pointer events で touch/mouse 両対応） ─── */
+  const onPointerDown = (e: React.PointerEvent) => {
+    isDragging.current = true;
+    dragStartX.current = e.clientX;
+    dragStartOffset.current = offsetRef.current;
+    dragMoved.current = 0;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current || !trackRef.current) return;
+    const dx = e.clientX - dragStartX.current;
+    dragMoved.current = Math.abs(dx);
+    let next = dragStartOffset.current + dx;
+    if (next <= -HALF) next += HALF;
+    if (next > 0) next -= HALF;
+    offsetRef.current = next;
+    trackRef.current.style.transform = `translateX(${next}px)`;
+  };
+  const onPointerUp = () => {
+    isDragging.current = false;
+    lastTimeRef.current = 0; // dt リセット（ジャンプ防止）
+  };
+
+  // クリックとドラッグを区別（5px以上動いたらドラッグ）
+  const handleFrameClick = (idx: number) => {
+    if (dragMoved.current < 5) setOpen(idx % SCREENS.length);
+  };
+
   const loop = [...SCREENS, ...SCREENS];
 
   return (
@@ -86,64 +145,71 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
           <p className="mt-3 max-w-xl text-sm text-[#64748B] md:text-base">{subtitle}</p>
         </div>
 
-        {(
+        {/* タップ案内（目立つ版） */}
+        <div className="mb-6 flex items-center justify-center">
+          <div className="animate-[tapPulse_2s_ease-in-out_infinite] rounded-full border-2 border-[#2563EB]/30 bg-gradient-to-r from-[#2563EB]/10 via-[#06B6D4]/10 to-[#2563EB]/10 px-5 py-2.5 shadow-lg shadow-[#2563EB]/10">
+            <p className="flex items-center gap-2 text-sm font-black tracking-wide text-[#2563EB] md:text-base">
+              <span className="inline-block animate-[tapBounce_1.5s_ease-in-out_infinite] text-lg">👆</span>
+              タップして機能を確認
+              <span className="inline-block animate-[tapBounce_1.5s_ease-in-out_0.3s_infinite] text-lg">👆</span>
+            </p>
+          </div>
+        </div>
+
+        <div
+          className="relative"
+          onMouseEnter={() => { isPaused.current = true; }}
+          onMouseLeave={() => { if (!isDragging.current) isPaused.current = false; }}
+        >
+          {/* 左右フェード */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent" />
+
           <div
-            className="relative"
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
+            className="overflow-hidden touch-pan-y"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            style={{ cursor: isDragging.current ? "grabbing" : "grab" }}
           >
-            {/* 左右フェード */}
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent" />
-
-            <div className="overflow-hidden">
-              <div
-                className="flex gap-8 py-6"
-                style={{
-                  width: "max-content",
-                  animation: `screens-marquee 60s linear infinite`,
-                  animationPlayState: paused ? "paused" : "running",
-                }}
-              >
-                {loop.map((s, i) => (
-                  <PhoneFrame key={i} s={s} onClick={() => setOpen(i % SCREENS.length)} />
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-8 flex items-center justify-center gap-3">
-              <div className="h-[1px] w-10 bg-slate-200" />
-              <p className="text-center text-xs font-black tracking-wider text-[#2563EB]">
-                👆 タップして機能を確認
-              </p>
-              <div className="h-[1px] w-10 bg-slate-200" />
+            <div
+              ref={trackRef}
+              className="flex gap-8 py-6 select-none"
+              style={{ width: "max-content" }}
+            >
+              {loop.map((s, i) => (
+                <PhoneFrame key={i} s={s} onClick={() => handleFrameClick(i)} />
+              ))}
             </div>
           </div>
-        )}
+
+          <div className="mt-6 flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400">
+            <span>← スワイプで閲覧 →</span>
+          </div>
+        </div>
 
         {/* 機能一覧（コンパクト） */}
-        {(
-          <div className="mt-20">
-            <h3 className="mb-6 text-center text-xs font-black uppercase tracking-widest text-[#64748B]">All Features</h3>
-            <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-              {SCREENS.map((s, i) => {
-                const Icon = s.icon;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setOpen(i)}
-                    className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#2563EB]/30 hover:shadow-md"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/5 text-[#2563EB] transition-colors group-hover:bg-[#2563EB] group-hover:text-white">
-                      <Icon size={18} />
-                    </div>
-                    <span className="text-sm font-black text-[#0F172A] line-clamp-1">{s.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="mt-20">
+          <h3 className="mb-6 text-center text-xs font-black uppercase tracking-widest text-[#64748B]">All Features</h3>
+          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {SCREENS.map((s, i) => {
+              const Icon = s.icon;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setOpen(i)}
+                  className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#2563EB]/30 hover:shadow-md"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/5 text-[#2563EB] transition-colors group-hover:bg-[#2563EB] group-hover:text-white">
+                    <Icon size={18} />
+                  </div>
+                  <span className="text-sm font-black text-[#0F172A] line-clamp-1">{s.label}</span>
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
       </div>
 
       {/* ライトボックス */}
@@ -201,9 +267,13 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
       )}
 
       <style jsx>{`
-        @keyframes screens-marquee {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
+        @keyframes tapPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37,99,235,0.2); }
+          50% { transform: scale(1.03); box-shadow: 0 0 20px 4px rgba(37,99,235,0.15); }
+        }
+        @keyframes tapBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
         }
       `}</style>
     </section>
