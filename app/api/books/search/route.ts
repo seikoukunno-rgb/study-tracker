@@ -30,7 +30,9 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-async function searchGoogleBooks(q: string): Promise<BookItem[]> {
+type Debug = string[];
+
+async function searchGoogleBooks(q: string, debug: Debug): Promise<BookItem[]> {
   const key = process.env.GOOGLE_BOOKS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY || '';
   const base = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=30&printType=books`;
   // キーが原因で弾かれた場合に備え、キーなしでも試す
@@ -43,6 +45,7 @@ async function searchGoogleBooks(q: string): Promise<BookItem[]> {
         const res = await fetchWithTimeout(url);
         if (res.ok) {
           const data = await res.json();
+          debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} 200 total=${data.totalItems ?? '?'} items=${(data.items || []).length}`);
           return (data.items || []).map((item: any): BookItem => {
             const info = item.volumeInfo || {};
             const ids: any[] = info.industryIdentifiers || [];
@@ -63,10 +66,13 @@ async function searchGoogleBooks(q: string): Promise<BookItem[]> {
           });
         }
         lastErr = new Error(`google books ${res.status}`);
-        console.error('Google Books error:', res.status, (await res.text()).slice(0, 300));
+        const bodyText = (await res.text()).slice(0, 300);
+        debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} ${res.status} ${bodyText.replace(/\s+/g, ' ').slice(0, 160)}`);
+        console.error('Google Books error:', res.status, bodyText);
         if (!RETRY_STATUS.has(res.status)) break; // 400/403など → 次のURL(キーなし)へ
       } catch (e) {
         lastErr = e;
+        debug.push(`google ${url.includes('key=') ? 'key' : 'nokey'} exception ${String(e).slice(0, 80)}`);
       }
       await sleep(400);
     }
@@ -84,11 +90,12 @@ const decode = (s: string) =>
     .replace(/&#39;|&apos;/g, "'")
     .trim();
 
-async function searchNdl(q: string): Promise<BookItem[]> {
+async function searchNdl(q: string, debug: Debug): Promise<BookItem[]> {
   const url = `https://ndlsearch.ndl.go.jp/api/opensearch?any=${encodeURIComponent(q)}&cnt=30&mediatype=1`;
   const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`ndl ${res.status}`);
   const xml = await res.text();
+  debug.push(`ndl ${res.status} len=${xml.length} head=${xml.slice(0, 120).replace(/\s+/g, ' ')}`);
+  if (!res.ok) throw new Error(`ndl ${res.status}`);
   const items: BookItem[] = [];
   const seen = new Set<string>();
   for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
@@ -120,18 +127,19 @@ export async function GET(request: NextRequest) {
   if (!q) return NextResponse.json({ items: [], source: 'none' });
   if (q.length > 200) return NextResponse.json({ error: '検索ワードが長すぎます' }, { status: 400 });
 
+  const debug: Debug = [];
   try {
-    const items = await searchGoogleBooks(q);
+    const items = await searchGoogleBooks(q, debug);
     if (items.length > 0) return NextResponse.json({ items, source: 'google' });
   } catch (e) {
     console.error('Google Books failed, falling back to NDL:', e);
   }
 
   try {
-    const items = await searchNdl(q);
-    return NextResponse.json({ items, source: 'ndl' });
+    const items = await searchNdl(q, debug);
+    return NextResponse.json({ items, source: 'ndl', debug });
   } catch (e) {
     console.error('NDL failed:', e);
-    return NextResponse.json({ error: '検索サービスに接続できませんでした' }, { status: 502 });
+    return NextResponse.json({ error: '検索サービスに接続できませんでした', debug }, { status: 502 });
   }
 }
