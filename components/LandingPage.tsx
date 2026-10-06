@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 
 /* ───────── Screens showcase ─────────
@@ -45,19 +46,12 @@ const SCREENS: Screen[] = [
 
 function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group relative shrink-0 cursor-pointer focus:outline-none" aria-label={`${s.label}の機能を見る`}>
+    <button onClick={onClick} className="group relative shrink-0 cursor-pointer focus:outline-none snap-start" aria-label={`${s.label}の機能を見る`}>
       <div className="relative h-[360px] w-[172px] rounded-[2.2rem] border border-slate-200/80 bg-white p-[6px] shadow-[0_18px_45px_-20px_rgba(37,99,235,0.35)] transition-all duration-500 group-hover:-translate-y-1 group-hover:shadow-[0_28px_55px_-20px_rgba(37,99,235,0.5)]">
         <div className="relative h-full w-full overflow-hidden rounded-[1.75rem] bg-slate-100">
-          <img src={s.src} alt={s.label} loading="lazy" className="h-full w-full object-cover object-top" />
+          <img src={s.src} alt={s.label} loading="lazy" draggable={false} className="h-full w-full object-cover object-top pointer-events-none select-none" />
         </div>
         <div className="pointer-events-none absolute left-1/2 top-[8px] h-[8px] w-[52px] -translate-x-1/2 rounded-full bg-slate-900/85" />
-        {/* ホバー時に浮かび上がる「タップで機能を見る」バッジ */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-          <div className="absolute inset-0 rounded-[1.75rem] bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-          <span className="relative rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-[#2563EB] shadow-lg">
-            タップして機能を確認
-          </span>
-        </div>
       </div>
       <div className="mt-4 flex justify-center">
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-[#475569] shadow-sm">
@@ -70,66 +64,68 @@ function PhoneFrame({ s, onClick }: { s: Screen; onClick: () => void }) {
 
 function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string }) {
   const [open, setOpen] = useState<number | null>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
-  const offsetRef = useRef(0);
   const lastTimeRef = useRef(0);
-  const isDragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartOffset = useRef(0);
-  const dragMoved = useRef(0);
-  const isPaused = useRef(false);
+  const pausedRef = useRef(false);
+  const resumeTimerRef = useRef<number | null>(null);
+  const SPEED = 40; // px/sec
 
-  // 各アイテムの幅（172px phone + 32px gap）
-  const ITEM_W = 204;
-  const HALF = SCREENS.length * ITEM_W;
-  const SPEED = HALF / 60; // px/sec — 元の60秒アニメーションと同じ速度
-
+  // 自動スクロール：ネイティブ scrollLeft を少しずつ進める
   const tick = useCallback((time: number) => {
-    if (!trackRef.current) { rafRef.current = requestAnimationFrame(tick); return; }
+    const el = scrollRef.current;
+    if (!el) { rafRef.current = requestAnimationFrame(tick); return; }
     if (lastTimeRef.current === 0) lastTimeRef.current = time;
     const dt = (time - lastTimeRef.current) / 1000;
     lastTimeRef.current = time;
 
-    if (!isDragging.current && !isPaused.current) {
-      offsetRef.current -= SPEED * dt;
-      if (offsetRef.current <= -HALF) offsetRef.current += HALF;
-      trackRef.current.style.transform = `translateX(${offsetRef.current}px)`;
+    if (!pausedRef.current) {
+      const half = el.scrollWidth / 2;
+      let next = el.scrollLeft + SPEED * dt;
+      if (next >= half) next -= half;
+      el.scrollLeft = next;
     }
     rafRef.current = requestAnimationFrame(tick);
-  }, [HALF, SPEED]);
+  }, []);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [tick]);
 
-  /* ─── ドラッグ（pointer events で touch/mouse 両対応） ─── */
-  const onPointerDown = (e: React.PointerEvent) => {
-    isDragging.current = true;
-    dragStartX.current = e.clientX;
-    dragStartOffset.current = offsetRef.current;
-    dragMoved.current = 0;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  // ユーザーが触れている間は停止、離してから少し待って再開（慣性スクロールと喧嘩しないため）
+  const pause = () => {
+    pausedRef.current = true;
+    if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
   };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current || !trackRef.current) return;
-    const dx = e.clientX - dragStartX.current;
-    dragMoved.current = Math.abs(dx);
-    let next = dragStartOffset.current + dx;
-    if (next <= -HALF) next += HALF;
-    if (next > 0) next -= HALF;
-    offsetRef.current = next;
-    trackRef.current.style.transform = `translateX(${next}px)`;
-  };
-  const onPointerUp = () => {
-    isDragging.current = false;
-    lastTimeRef.current = 0; // dt リセット（ジャンプ防止）
+  const scheduleResume = () => {
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = window.setTimeout(() => {
+      pausedRef.current = false;
+      lastTimeRef.current = 0;
+    }, 1500);
   };
 
-  // クリックとドラッグを区別（5px以上動いたらドラッグ）
-  const handleFrameClick = (idx: number) => {
-    if (dragMoved.current < 5) setOpen(idx % SCREENS.length);
+  // 無限ループが途切れないように、ユーザーがスクロールしたときも範囲を補正
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const half = el.scrollWidth / 2;
+    if (el.scrollLeft >= half) el.scrollLeft -= half;
+    else if (el.scrollLeft < 0) el.scrollLeft += half;
+  };
+
+  /* ─── ライトボックス内スワイプ ─── */
+  const lbStartX = useRef<number | null>(null);
+  const onLbPointerDown = (e: React.PointerEvent) => { lbStartX.current = e.clientX; };
+  const onLbPointerUp = (e: React.PointerEvent) => {
+    if (lbStartX.current === null) return;
+    const dx = e.clientX - lbStartX.current;
+    lbStartX.current = null;
+    if (Math.abs(dx) > 50) {
+      if (dx > 0) setOpen((o) => (o === null ? o : (o - 1 + SCREENS.length) % SCREENS.length));
+      else setOpen((o) => (o === null ? o : (o + 1) % SCREENS.length));
+    }
   };
 
   const loop = [...SCREENS, ...SCREENS];
@@ -145,47 +141,42 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
           <p className="mt-3 max-w-xl text-sm text-[#64748B] md:text-base">{subtitle}</p>
         </div>
 
-        {/* タップ案内（目立つ版） */}
-        <div className="mb-6 flex items-center justify-center">
-          <div className="animate-[tapPulse_2s_ease-in-out_infinite] rounded-full border-2 border-[#2563EB]/30 bg-gradient-to-r from-[#2563EB]/10 via-[#06B6D4]/10 to-[#2563EB]/10 px-5 py-2.5 shadow-lg shadow-[#2563EB]/10">
-            <p className="flex items-center gap-2 text-sm font-black tracking-wide text-[#2563EB] md:text-base">
-              <span className="inline-block animate-[tapBounce_1.5s_ease-in-out_infinite] text-lg">👆</span>
-              タップして機能を確認
-              <span className="inline-block animate-[tapBounce_1.5s_ease-in-out_0.3s_infinite] text-lg">👆</span>
-            </p>
-          </div>
+        {/* 下の画面をタップで解説が出る、という控えめな案内 */}
+        <div className="mb-2 flex flex-col items-center">
+          <p className="text-sm font-bold text-[#475569] md:text-base">
+            下の画面をタップで機能の解説が開きます
+          </p>
+          <ChevronDown
+            size={22}
+            className="mt-1 animate-[arrowBob_1.4s_ease-in-out_infinite] text-[#2563EB]"
+          />
         </div>
 
         <div
           className="relative"
-          onMouseEnter={() => { isPaused.current = true; }}
-          onMouseLeave={() => { if (!isDragging.current) isPaused.current = false; }}
+          onMouseEnter={pause}
+          onMouseLeave={scheduleResume}
         >
           {/* 左右フェード */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white to-transparent" />
 
           <div
-            className="overflow-hidden touch-pan-y"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            style={{ cursor: isDragging.current ? "grabbing" : "grab" }}
+            ref={scrollRef}
+            className="screens-scroll overflow-x-auto overflow-y-hidden snap-x"
+            onScroll={onScroll}
+            onPointerDown={pause}
+            onPointerUp={scheduleResume}
+            onPointerCancel={scheduleResume}
+            onTouchStart={pause}
+            onTouchEnd={scheduleResume}
+            style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}
           >
-            <div
-              ref={trackRef}
-              className="flex gap-8 py-6 select-none"
-              style={{ width: "max-content" }}
-            >
+            <div className="flex gap-8 py-6 px-2" style={{ width: "max-content" }}>
               {loop.map((s, i) => (
-                <PhoneFrame key={i} s={s} onClick={() => handleFrameClick(i)} />
+                <PhoneFrame key={i} s={s} onClick={() => setOpen(i % SCREENS.length)} />
               ))}
             </div>
-          </div>
-
-          <div className="mt-6 flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400">
-            <span>← スワイプで閲覧 →</span>
           </div>
         </div>
 
@@ -212,7 +203,7 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
         </div>
       </div>
 
-      {/* ライトボックス */}
+      {/* ライトボックス（スワイプ対応） */}
       {open !== null && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-6 backdrop-blur-md animate-in fade-in duration-200"
@@ -223,17 +214,23 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
               e.stopPropagation();
               setOpen((o) => (o === null ? o : (o - 1 + SCREENS.length) % SCREENS.length));
             }}
-            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:left-10"
+            className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:left-10"
             aria-label="前の画面"
           >
             <ArrowRight className="h-5 w-5 rotate-180" />
           </button>
-          <div className="relative" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="relative touch-pan-y"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={onLbPointerDown}
+            onPointerUp={onLbPointerUp}
+          >
             <div className="mx-auto w-fit rounded-[2.5rem] border border-white/10 bg-white p-[8px] shadow-2xl">
               <img
                 src={SCREENS[open].src}
                 alt={SCREENS[open].label}
-                className="block h-auto max-h-[62vh] w-auto max-w-[80vw] rounded-[2rem] object-contain"
+                draggable={false}
+                className="block h-auto max-h-[62vh] w-auto max-w-[80vw] rounded-[2rem] object-contain select-none"
               />
             </div>
             {/* 画像の下に機能説明 */}
@@ -245,20 +242,23 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
               </div>
               <p className="text-xs leading-relaxed text-white/80">{SCREENS[open].description}</p>
             </div>
+            <p className="mt-3 text-center text-[11px] font-medium text-white/40 md:hidden">
+              左右にスワイプで切り替え
+            </p>
           </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               setOpen((o) => (o === null ? o : (o + 1) % SCREENS.length));
             }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10"
+            className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10"
             aria-label="次の画面"
           >
             <ArrowRight className="h-5 w-5" />
           </button>
           <button
             onClick={() => setOpen(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10 md:top-10"
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10 md:top-10"
             aria-label="閉じる"
           >
             <X className="h-5 w-5" />
@@ -267,14 +267,11 @@ function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string 
       )}
 
       <style jsx>{`
-        @keyframes tapPulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37,99,235,0.2); }
-          50% { transform: scale(1.03); box-shadow: 0 0 20px 4px rgba(37,99,235,0.15); }
+        @keyframes arrowBob {
+          0%, 100% { transform: translateY(0); opacity: 0.9; }
+          50% { transform: translateY(6px); opacity: 1; }
         }
-        @keyframes tapBounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-4px); }
-        }
+        .screens-scroll::-webkit-scrollbar { display: none; }
       `}</style>
     </section>
   );
