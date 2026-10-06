@@ -147,9 +147,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const items = await searchNdl(q, debug);
-    return NextResponse.json({ items, source: 'ndl', debug });
+    return NextResponse.json({ items, source: 'ndl' });
   } catch (e) {
     console.error('NDL failed:', e);
-    return NextResponse.json({ error: '検索サービスに接続できませんでした', debug }, { status: 502 });
+    return NextResponse.json({ error: '検索サービスに接続できませんでした' }, { status: 502 });
   }
 }
