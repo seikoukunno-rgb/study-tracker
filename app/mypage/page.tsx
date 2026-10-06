@@ -272,7 +272,7 @@ export default function MyPage() {
         </button>
 
         {/* 利用規約・プライバシーポリシー */}
-        <div className="flex items-center justify-center gap-4 mt-4 pb-2">
+        <div className="flex items-center justify-center gap-4 mt-4 pb-1">
           <button onClick={() => setShowTermsModal(true)} className={`text-[11px] font-bold underline underline-offset-2 ${isDarkMode ? 'text-slate-600 hover:text-slate-400' : 'text-slate-300 hover:text-slate-500'} transition-colors`}>
             利用規約
           </button>
@@ -280,6 +280,11 @@ export default function MyPage() {
           <button onClick={() => setShowPrivacyModal(true)} className={`text-[11px] font-bold underline underline-offset-2 ${isDarkMode ? 'text-slate-600 hover:text-slate-400' : 'text-slate-300 hover:text-slate-500'} transition-colors`}>
             プライバシーポリシー
           </button>
+        </div>
+        <div className="flex items-center justify-center mt-1 pb-2">
+          <a href="/?site" className={`text-[11px] font-bold underline underline-offset-2 ${isDarkMode ? 'text-slate-600 hover:text-slate-400' : 'text-slate-300 hover:text-slate-500'} transition-colors`}>
+            ウェブサイトを見る
+          </a>
         </div>
 
       </main>
