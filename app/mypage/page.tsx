@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { calculateLevel, getLevelStartMinutes, getNextLevelMinutes } from "../../lib/levels";
 import { QRCodeSVG } from 'qrcode.react';
+import LevelUpCelebration from "../../components/LevelUpCelebration";
 
 const AVATAR_COLORS = [
   "bg-indigo-500", "bg-blue-500", "bg-emerald-500", 
@@ -68,6 +69,7 @@ export default function MyPage() {
   const [showUniDropdown, setShowUniDropdown] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState("");
+  const [levelUp, setLevelUp] = useState<{ from: number; to: number } | null>(null);
 
   // サイドバー管理
   const sidebarStartX = useRef<number | null>(null);
@@ -114,6 +116,31 @@ export default function MyPage() {
   }, []);
 
   useEffect(() => { fetchProfileAndStats(); }, []);
+
+  // レベルアップ検知：この端末で最後に見たレベルより上がっていたら演出を出す
+  // （最後に見たレベルは localStorage に保存。初回は演出なしで現在のレベルを記録するだけ）
+  useEffect(() => {
+    if (isLoading || !myUserId) return;
+    const current = calculateLevel(stats.totalMinutes);
+    const key = `last_seen_level_${myUserId}`;
+    let stored: number | null = null;
+    try {
+      const raw = localStorage.getItem(key);
+      stored = raw === null ? null : Number(raw);
+    } catch {
+      return; // localStorage が使えない環境では何もしない
+    }
+    const save = () => { try { localStorage.setItem(key, String(current)); } catch {} };
+
+    if (stored === null || Number.isNaN(stored) || current < stored) {
+      save();
+      return;
+    }
+    if (current > stored) {
+      setLevelUp({ from: stored, to: current });
+      save(); // 表示した時点で記録し、同じレベルアップを二度出さない
+    }
+  }, [isLoading, myUserId, stats.totalMinutes]);
 
   const fetchProfileAndStats = async () => {
     setIsLoading(true);
@@ -460,6 +487,10 @@ export default function MyPage() {
             <button onClick={handleShareProfile} className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all"><Share2 className="w-5 h-5"/> リンクをシェア</button>
           </div>
         </>
+      )}
+
+      {levelUp && (
+        <LevelUpCelebration fromLevel={levelUp.from} toLevel={levelUp.to} onClose={() => setLevelUp(null)} />
       )}
 
       {toastMessage && (
