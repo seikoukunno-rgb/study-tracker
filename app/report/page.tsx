@@ -61,7 +61,7 @@ function ReportContent() {
   const [editDate, setEditDate] = useState("");
   const [editMinutes, setEditMinutes] = useState(0);
   const [editMemo, setEditMemo] = useState("");
-  const [floatingEmojis, setFloatingEmojis] = useState<{ id: number, emoji: string, offset: number }[]>([]);
+  const [floatingEmojis, setFloatingEmojis] = useState<{ id: number, logId: string, emoji: string, offset: number }[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [pieData, setPieData] = useState<any[]>([]);
   const [maxChartVal, setMaxChartVal] = useState(60);
@@ -1188,7 +1188,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                       {log.thoughts && <div className={`mb-6 text-base font-bold leading-relaxed px-1 border-l-4 pl-4 ${isDarkMode ? 'text-slate-300 border-indigo-900/50' : 'text-slate-700 border-indigo-100'}`}>{log.thoughts}</div>}
 
                       <div className={`flex flex-wrap items-center gap-2 relative border-t pt-4 ${isDarkMode ? 'border-[#38383a]' : 'border-slate-100'}`}>
-                        {floatingEmojis.filter(fe => fe.id > Date.now() - 2000).map(fe => (
+                        {floatingEmojis.filter(fe => fe.logId === log.id && fe.id > Date.now() - 2000).map(fe => (
                           <div key={fe.id} className="absolute bottom-full left-1/2 -translate-x-1/2 text-4xl animate-float-up z-[60]" style={{ '--x-offset': `${fe.offset}px` } as React.CSSProperties}>
                             {fe.emoji}
                           </div>
@@ -1229,7 +1229,7 @@ const FormatDurationJSX = ({ minutes }: { minutes: number }) => {
                         {activeReactionMenu === log.id && (
                           <div className={`absolute left-0 bottom-full mb-3 p-2 rounded-full shadow-2xl border flex gap-3 z-50 animate-in slide-in-from-bottom-2 duration-300 ${isDarkMode ? 'bg-[#2c2c2e] border-[#38383a]' : 'bg-white border-slate-100'}`}>
                             {EMOJIS.map(emoji => (
-                              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), emoji, offset: (Math.random()-0.5)*60 }]); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
+                              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReaction(log.id, emoji); setFloatingEmojis(prev => [...prev, { id: Date.now(), logId: log.id, emoji, offset: (Math.random()-0.5)*60 }]); }} className="text-2xl hover:scale-125 transition-transform px-1">{emoji}</button>
                             ))}
                           </div>
                         )}
