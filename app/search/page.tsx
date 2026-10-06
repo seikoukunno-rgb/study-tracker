@@ -25,6 +25,33 @@ async function fetchBooks(q: string, signal: AbortSignal): Promise<any[]> {
   }
 }
 
+// 検索結果の1件分（購入リンク込み）を作る。ISBNがあればISBNで、なければタイトルで商品検索する
+function buildItem(b: { id: string; title: string; authors?: string[]; thumbnail?: string | null; rating?: number; ratingsCount?: number; isbn?: string }) {
+  const isbn = b.isbn || "";
+  const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG;
+  const rakutenTag = process.env.NEXT_PUBLIC_RAKUTEN_TAG;
+  const mercariAfid = process.env.NEXT_PUBLIC_MERCARI_AFID;
+  const encodedKeyword = encodeURIComponent(isbn || b.title);
+  const encodedTitle = encodeURIComponent(b.title);
+
+  return {
+    id: b.id,
+    title: b.title,
+    author: b.authors && b.authors.length ? b.authors.join(", ") : "著者不明",
+    image_url: b.thumbnail || null,
+    rating: b.rating || 0,
+    reviewCount: b.ratingsCount || 0,
+    amazonUrl: `https://www.amazon.co.jp/gp/search?ie=UTF8&tag=${amazonTag}&keywords=${encodedKeyword}`,
+    rakutenUrl: `https://hb.afl.rakuten.co.jp/hgc/${rakutenTag}/?pc=https%3A%2F%2Fsearch.rakuten.co.jp%2Fsearch%2Fmall%2F${encodedKeyword}%2F`,
+    mercariUrl: `https://jp.mercari.com/search?keyword=${encodedTitle}${mercariAfid ? `&afid=${mercariAfid}` : ""}`,
+  };
+}
+
+// 見つからない（または検索サービスに繋がらない）ときは、検索語そのものを教材名にした教材を即時作成する（画像なし）
+function buildCustomItem(q: string) {
+  return { ...buildItem({ id: `custom-${q}`, title: q, authors: ["検索ワードから作成"] }), isCustom: true };
+}
+
 export default function SearchPage() {
   const router = useRouter();
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -32,6 +59,7 @@ export default function SearchPage() {
   const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<"success" | "error">("success");
@@ -62,38 +90,14 @@ export default function SearchPage() {
 
     setIsLoading(true);
     setErrorMsg(null);
+    setNotice(null);
     setResults([]);
 
     try {
       const books = await fetchBooks(query.trim(), abortController.signal);
 
       if (books.length > 0) {
-        const formatted = books.map((b: any) => {
-          const isbn: string = b.isbn || "";
-          const amazonTag = process.env.NEXT_PUBLIC_AMAZON_TAG;
-          const rakutenTag = process.env.NEXT_PUBLIC_RAKUTEN_TAG;
-          const mercariAfid = process.env.NEXT_PUBLIC_MERCARI_AFID;
-          const encodedIsbn = isbn ? encodeURIComponent(isbn) : "";
-          const encodedTitle = encodeURIComponent(b.title);
-
-          // ISBN優先、なければタイトル検索にフォールバック
-          const amazonKeyword = isbn ? encodedIsbn : encodedTitle;
-          const amazonUrl = `https://www.amazon.co.jp/gp/search?ie=UTF8&tag=${amazonTag}&keywords=${amazonKeyword}`;
-          const rakutenUrl = `https://hb.afl.rakuten.co.jp/hgc/${rakutenTag}/?pc=https%3A%2F%2Fsearch.rakuten.co.jp%2Fsearch%2Fmall%2F${isbn ? encodedIsbn : encodedTitle}%2F`;
-          const mercariUrl = `https://jp.mercari.com/search?keyword=${encodedTitle}${mercariAfid ? `&afid=${mercariAfid}` : ""}`;
-
-          return {
-            id: b.id,
-            title: b.title,
-            author: b.authors && b.authors.length ? b.authors.join(", ") : "著者不明",
-            image_url: b.thumbnail || null,
-            rating: b.rating || 0,
-            reviewCount: b.ratingsCount || 0,
-            amazonUrl,
-            rakutenUrl,
-            mercariUrl,
-          };
-        });
+        const formatted = books.map((b: any) => buildItem(b));
         setResults(formatted);
 
         // ==========================================
@@ -123,13 +127,17 @@ export default function SearchPage() {
         }, 100); // 描画直後のわずかなディレイ
 
       } else {
-        setErrorMsg("教材が見つかりませんでした。別の言葉で試してください。");
+        // 見つからなければ、検索語をそのまま教材名にした教材を出す
+        setResults([buildCustomItem(query.trim())]);
+        setNotice("該当する教材が見つかりませんでした。入力した言葉で教材を作成できます。右にスワイプで追加、下のボタンで商品を探せます。");
       }
     } catch (err) {
       // 新しい検索に置き換えられた場合は何も表示しない
       if (abortController.signal.aborted) return;
       console.error("Search Error:", err);
-      setErrorMsg("検索サービスに接続できませんでした。少し時間をおいて、もう一度検索してください。");
+      // 検索サービスに繋がらない時も、検索語から教材を作れるようにする
+      setResults([buildCustomItem(query.trim())]);
+      setNotice("検索サービスに接続できませんでした。入力した言葉で教材を作成できます。");
     } finally {
       if (searchAbortRef.current === abortController) {
         setIsLoading(false);
@@ -279,7 +287,11 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
               <p className="text-center text-sm font-bold max-w-[250px] leading-relaxed">{errorMsg}</p>
             </div>
           ) : (
-            results.map((item) => {
+            <>
+            {notice && (
+              <p className={`text-xs font-bold leading-relaxed px-1 ${isDarkMode ? 'text-amber-300' : 'text-amber-600'}`}>{notice}</p>
+            )}
+            {results.map((item) => {
               const isThresholdPassed = swipeState.id === item.id && swipeState.offset < -80;
 
               return (
@@ -372,7 +384,8 @@ console.log("保存するデータ:", { student_id: user?.id, title: item.title 
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </main>
