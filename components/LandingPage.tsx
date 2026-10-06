@@ -22,6 +22,167 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+/* ───────── Screens showcase ─────────
+ * アプリの各画面を小さく横に流し見せる区画。
+ * - 11枚のスクリーンショットを「電話フレーム」風にして横スクロールのマーキーで流す
+ * - ホバー/タップで停止、クリックで拡大表示（ライトボックス）
+ * - 普段は邪魔にならないよう、やや小さめ（高さ約360px）に収めて、興味がある人だけ見られる
+ */
+const SCREENS: { src: string; label: string }[] = [
+  { src: "/screens/shelf.jpg", label: "本棚（教材一覧）" },
+  { src: "/screens/search.jpg", label: "教材を検索" },
+  { src: "/screens/report.jpg", label: "学習レポート" },
+  { src: "/screens/timeline.jpg", label: "タイムライン・リアクション" },
+  { src: "/screens/materials.jpg", label: "教材別の最終学習日" },
+  { src: "/screens/calendar.jpg", label: "カレンダー・Todo" },
+  { src: "/screens/rooms.jpg", label: "ルーム一覧" },
+  { src: "/screens/chat.jpg", label: "ルーム内チャット" },
+  { src: "/screens/starun.jpg", label: "スタラン ランキング" },
+  { src: "/screens/connections.jpg", label: "フォロワー・フォロー" },
+  { src: "/screens/mypage.jpg", label: "マイページ（レベル）" },
+];
+
+function PhoneFrame({ src, label, onClick }: { src: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="group relative shrink-0 cursor-zoom-in focus:outline-none"
+      aria-label={`${label}を拡大`}
+    >
+      {/* 電話フレーム */}
+      <div className="relative h-[360px] w-[172px] rounded-[2.2rem] border border-slate-200/80 bg-white p-[6px] shadow-[0_18px_45px_-20px_rgba(37,99,235,0.35)] transition-all duration-500 group-hover:-translate-y-1 group-hover:shadow-[0_28px_55px_-20px_rgba(37,99,235,0.5)]">
+        <div className="relative h-full w-full overflow-hidden rounded-[1.75rem] bg-slate-100">
+          <img src={src} alt={label} loading="lazy" className="h-full w-full object-cover object-top" />
+        </div>
+        {/* ノッチ風の飾り */}
+        <div className="pointer-events-none absolute left-1/2 top-[8px] h-[8px] w-[52px] -translate-x-1/2 rounded-full bg-slate-900/85" />
+      </div>
+      {/* キャプション */}
+      <div className="mt-4 flex justify-center">
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-[#475569] shadow-sm">
+          {label}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function ScreensShowcase({ title, subtitle }: { title: string; subtitle: string }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [expanded, setExpanded] = useState(true); // 「表示を折りたたむ」で収納できる
+
+  // 無限ループ用に2周ぶん並べる
+  const loop = [...SCREENS, ...SCREENS];
+
+  return (
+    <section id="screens" className="relative overflow-hidden border-y border-slate-100 bg-gradient-to-b from-white via-slate-50/50 to-white py-20 md:py-28">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="mb-10 flex flex-col items-center text-center">
+          <span className="mb-3 rounded-full border border-[#2563EB]/20 bg-[#2563EB]/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#2563EB]">
+            Screens
+          </span>
+          <h2 className="text-3xl font-bold md:text-5xl">{title}</h2>
+          <p className="mt-3 max-w-xl text-sm text-[#64748B] md:text-base">{subtitle}</p>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-[#475569] shadow-sm transition-all hover:border-[#2563EB]/30 hover:text-[#2563EB]"
+          >
+            {expanded ? "画面プレビューを隠す" : "画面プレビューを見る"}
+          </button>
+        </div>
+
+        {expanded && (
+          <div
+            className="relative"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
+            {/* 左右フェード */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent" />
+
+            <div className="overflow-hidden">
+              <div
+                className="flex gap-8 py-6"
+                style={{
+                  width: "max-content",
+                  animation: `screens-marquee 60s linear infinite`,
+                  animationPlayState: paused ? "paused" : "running",
+                }}
+              >
+                {loop.map((s, i) => (
+                  <PhoneFrame key={i} src={s.src} label={s.label} onClick={() => setOpen(i % SCREENS.length)} />
+                ))}
+              </div>
+            </div>
+
+            <p className="mt-6 text-center text-[11px] font-bold tracking-widest text-[#94A3B8]">
+              TAP / CLICK TO ENLARGE
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ライトボックス */}
+      {open !== null && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-6 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setOpen(null)}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((o) => (o === null ? o : (o - 1 + SCREENS.length) % SCREENS.length));
+            }}
+            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:left-10"
+            aria-label="前の画面"
+          >
+            <ArrowRight className="h-5 w-5 rotate-180" />
+          </button>
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-[70vh] max-h-[720px] w-auto rounded-[2.5rem] border border-white/10 bg-white p-[8px] shadow-2xl">
+              <div className="relative h-full w-auto overflow-hidden rounded-[2rem]" style={{ aspectRatio: "9 / 19.5" }}>
+                <img src={SCREENS[open].src} alt={SCREENS[open].label} className="h-full w-full object-cover object-top" />
+              </div>
+            </div>
+            <div className="mt-4 text-center text-sm font-bold tracking-wide text-white">
+              {SCREENS[open].label}
+              <span className="ml-3 text-[11px] font-normal text-white/50">
+                {open + 1} / {SCREENS.length}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((o) => (o === null ? o : (o + 1) % SCREENS.length));
+            }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10"
+            aria-label="次の画面"
+          >
+            <ArrowRight className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setOpen(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur-md transition-all hover:bg-white/20 md:right-10 md:top-10"
+            aria-label="閉じる"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes screens-marquee {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+      `}</style>
+    </section>
+  );
+}
+
 /* ───────── i18n ───────── */
 const t: Record<string, Record<string, string>> = {
   ja: {
@@ -46,6 +207,8 @@ const t: Record<string, Record<string, string>> = {
     "abstract.r3t": "データに基づいた「継続」の設計",
     "abstract.r3d":
       "学習パターンを分析し、最適な復習タイミングや、次にやるべきことを提案します。",
+    "screens.title": "画面でわかるMercury",
+    "screens.subtitle": "記録・レポート・ルーム・スタラン。実際の画面をそのままどうぞ。",
     "features.title": "最強の学習環境を、その手に。",
     "features.c1t": "PDF Smart Viewer",
     "features.c1d":
@@ -108,6 +271,8 @@ const t: Record<string, Record<string, string>> = {
     "abstract.r3t": "Designed for Consistency",
     "abstract.r3d":
       "Analytics help you understand your patterns and suggest optimal review timings for better results.",
+    "screens.title": "See Mercury in Action",
+    "screens.subtitle": "Record, report, rooms, Starun. Take a look at the actual screens.",
     "features.title": "The Ultimate Study Environment.",
     "features.c1t": "PDF Smart Viewer",
     "features.c1d":
@@ -411,6 +576,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ═══════════ SCREENS ═══════════ */}
+      <ScreensShowcase title={g("screens.title")} subtitle={g("screens.subtitle")} />
 
       {/* ═══════════ TRUST ═══════════ */}
       <section id="trust" className="relative overflow-hidden border-y border-slate-100 bg-slate-50 py-24">
