@@ -9,7 +9,7 @@ const withPWA = withPWAInit({
   skipWaiting: true,
   runtimeCaching: [
     {
-      urlPattern: ({ url }: { url: URL }) => /^\/api\/(?:drive(?:\/|$)|google-drive(?:\/|$)|auth(?:\/|$))/.test(url.pathname),
+      urlPattern: ({ url }: { url: URL }) => /^\/api\/(?:drive(?:\/|$)|google-drive(?:\/|$)|auth(?:\/|$)|oauth(?:\/|$)|mcp(?:\/|$))/.test(url.pathname),
       handler: 'NetworkOnly',
     },
     ...defaultRuntimeCaching,
@@ -23,6 +23,17 @@ const nextConfig = {
   webpack: (config: any) => {
     config.resolve.alias.canvas = false;
     return config;
+  },
+
+  // Claude コネクタ (リモートMCP) の OAuth 検出用
+  async rewrites() {
+    return [
+      { source: '/.well-known/oauth-protected-resource', destination: '/api/oauth/protected-resource' },
+      { source: '/.well-known/oauth-protected-resource/:path*', destination: '/api/oauth/protected-resource' },
+      { source: '/.well-known/oauth-authorization-server', destination: '/api/oauth/metadata' },
+      { source: '/.well-known/oauth-authorization-server/:path*', destination: '/api/oauth/metadata' },
+      { source: '/.well-known/openid-configuration', destination: '/api/oauth/metadata' },
+    ];
   },
 };
 
