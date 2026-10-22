@@ -35,6 +35,22 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: 'add_study_log',
+    description:
+      '自分の学習記録を1件追加する (アプリの「記録」と同じ)。教材は名前の一部か ID で指定でき、省略すると教材なしで記録する。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        minutes: { type: 'number', description: '学習時間 (分)。1〜1440。' },
+        material: { type: 'string', description: '教材の名前の一部、または教材ID。省略可。' },
+        date: { type: 'string', description: '学習した日 (YYYY-MM-DD)。省略時は今日(日本時間)。' },
+        memo: { type: 'string', description: '感想・メモ。省略可。' },
+      },
+      required: ['minutes'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+  },
+  {
     name: 'list_materials',
     description: '自分の教材一覧 (ID とタイトル) を返す。read_notes で教材を絞るときに使う。',
     inputSchema: { type: 'object', properties: {} },
@@ -132,6 +148,38 @@ async function materialTitles(ids: string[]): Promise<Record<string, string>> {
   return Object.fromEntries((data ?? []).map((m) => [m.id, m.title]));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 自分の教材を ID か名前の一部で探す。見つからない・候補が複数ならエラーで候補を返す
+async function resolveMaterial(query: string, uid: string): Promise<{ id: string; title: string } | null> {
+  if (!query) return null;
+  const { data, error } = await createAdminClient()
+    .from('materials')
+    .select('id, title')
+    .eq('student_id', uid)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const mats = data ?? [];
+
+  if (UUID_RE.test(query)) {
+    const byId = mats.find((m) => m.id === query);
+    if (byId) return byId;
+  }
+  // 同じ名前の教材が複数あるときは、新しく登録した方を使う
+  const q = query.toLowerCase();
+  const exact = mats.filter((m) => (m.title ?? '').toLowerCase() === q);
+  if (exact.length >= 1) return exact[0];
+  const partial = mats.filter((m) => (m.title ?? '').toLowerCase().includes(q));
+  if (partial.length >= 1 && new Set(partial.map((m) => m.title)).size === 1) return partial[0];
+
+  const titles = [...new Set((partial.length ? partial : mats).map((m) => m.title))].slice(0, 15);
+  throw new Error(
+    partial.length
+      ? `「${query}」に当てはまる教材が複数あります。どれか指定してください: ${titles.join(' / ')}`
+      : `「${query}」という教材が見つかりません。教材一覧: ${titles.join(' / ')}`
+  );
+}
+
 async function callTool(name: string, args: Args, uid: string): Promise<unknown> {
   const db = createAdminClient();
 
@@ -179,6 +227,38 @@ async function callTool(name: string, args: Args, uid: string): Promise<unknown>
         教材: r.material_id ? names[r.material_id] ?? r.material_id : '(教材なし)',
         感想: r.thoughts ?? '',
       }));
+    }
+
+    case 'add_study_log': {
+      const minutes = Math.round(Number(args.minutes));
+      if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) {
+        throw new Error('minutes は 1〜1440 の分数で指定してください');
+      }
+      const date = typeof args.date === 'string' && args.date ? args.date : todayJst();
+      if (!DATE_RE.test(date)) throw new Error('date は YYYY-MM-DD 形式で指定してください');
+
+      const material = await resolveMaterial(typeof args.material === 'string' ? args.material.trim() : '', uid);
+      const { data, error } = await db
+        .from('study_logs')
+        .insert([
+          {
+            student_id: uid,
+            material_id: material?.id ?? null,
+            duration_minutes: minutes,
+            thoughts: typeof args.memo === 'string' ? args.memo : '',
+            studied_at: date,
+          },
+        ])
+        .select('studied_at, duration_minutes, thoughts')
+        .single();
+      if (error) throw error;
+      return {
+        結果: '学習記録を追加しました',
+        日付: data.studied_at,
+        分: data.duration_minutes,
+        教材: material?.title ?? '(教材なし)',
+        感想: data.thoughts ?? '',
+      };
     }
 
     case 'list_materials': {
