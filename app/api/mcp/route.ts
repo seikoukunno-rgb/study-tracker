@@ -54,24 +54,67 @@ const TOOLS = [
   },
   {
     name: 'list_todos',
-    description: '自分のTodo(リマインダー)を通知日時の順に返す。',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'Mercury のカレンダーにある自分のTodo(タスク・試験)を日付順に返す。既定では今日以降の未完了のものだけ。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'この日付 (YYYY-MM-DD) 以降を返す。省略時は今日。' },
+        include_completed: { type: 'boolean', description: '完了済みも含めるなら true。既定 false。' },
+      },
+    },
     annotations: { readOnlyHint: true },
   },
   {
     name: 'add_todo',
-    description: '自分のTodo(リマインダー)を1件追加する。',
+    description: 'Mercury のカレンダー(Todoリスト)に、自分のTodoを1件追加する。',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Todoの内容。' },
-        remind_at: { type: 'string', description: '通知日時 (ISO 8601、例 2026-10-25T09:00:00+09:00)。省略時は現在時刻。' },
+        date: { type: 'string', description: '予定日 (YYYY-MM-DD)。省略時は今日(日本時間)。' },
+        type: { type: 'string', enum: ['task', 'exam'], description: 'task=タスク(既定)、exam=試験。' },
+        notify_at: {
+          type: 'string',
+          description: '通知日時 (ISO 8601、例 2026-10-25T09:00:00+09:00)。通知が要らなければ省略。',
+        },
       },
       required: ['title'],
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
   },
+  {
+    name: 'complete_todo',
+    description: '自分のTodoを完了(または未完了に戻す)にする。id は list_todos で確認する。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'TodoのID。' },
+        completed: { type: 'boolean', description: '完了にするなら true(既定)、戻すなら false。' },
+      },
+      required: ['id'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+  },
 ];
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 日本時間の今日 (YYYY-MM-DD)
+function todayJst(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
+}
+
+function formatTodo(e: { id: string; date: string; title: string; event_type: string; is_completed: boolean; notify_time: string | null }) {
+  return {
+    id: e.id,
+    日付: e.date,
+    内容: e.title,
+    種類: e.event_type === 'exam' ? '試験' : 'タスク',
+    完了: e.is_completed,
+    通知: e.notify_time ?? 'なし',
+  };
+}
 
 function clampNumber(v: unknown, def: number, max: number): number {
   const n = typeof v === 'number' ? v : Number(v);
@@ -164,26 +207,61 @@ async function callTool(name: string, args: Args, uid: string): Promise<unknown>
     }
 
     case 'list_todos': {
-      const { data, error } = await db
-        .from('reminders')
-        .select('id, title, remind_at')
+      const from = typeof args.from === 'string' && DATE_RE.test(args.from) ? args.from : todayJst();
+      let q = db
+        .from('calendar_events')
+        .select('id, date, title, event_type, is_completed, notify_time')
         .eq('student_id', uid)
-        .order('remind_at', { ascending: true });
+        .gte('date', from)
+        .order('date', { ascending: true });
+      if (args.include_completed !== true) q = q.eq('is_completed', false);
+      const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []).map((r) => ({ id: r.id, 内容: r.title, 通知日時: r.remind_at }));
+      return (data ?? []).map(formatTodo);
     }
 
     case 'add_todo': {
       const title = typeof args.title === 'string' ? args.title.trim() : '';
       if (!title) throw new Error('title は必須です');
-      const remindAt = typeof args.remind_at === 'string' && args.remind_at ? args.remind_at : new Date().toISOString();
+      const date = typeof args.date === 'string' && args.date ? args.date : todayJst();
+      if (!DATE_RE.test(date)) throw new Error('date は YYYY-MM-DD 形式で指定してください');
+      let notifyTime: string | null = null;
+      if (typeof args.notify_at === 'string' && args.notify_at) {
+        const t = new Date(args.notify_at);
+        if (Number.isNaN(t.getTime())) throw new Error('notify_at の日時を読み取れません');
+        notifyTime = t.toISOString();
+      }
       const { data, error } = await db
-        .from('reminders')
-        .insert([{ student_id: uid, title, remind_at: remindAt }])
-        .select('id, title, remind_at')
+        .from('calendar_events')
+        .insert([
+          {
+            student_id: uid,
+            date,
+            title,
+            event_type: args.type === 'exam' ? 'exam' : 'task',
+            is_completed: false,
+            notify_time: notifyTime,
+          },
+        ])
+        .select('id, date, title, event_type, is_completed, notify_time')
         .single();
       if (error) throw error;
-      return { 結果: '追加しました', id: data.id, 内容: data.title, 通知日時: data.remind_at };
+      return { 結果: 'Todoに追加しました', ...formatTodo(data) };
+    }
+
+    case 'complete_todo': {
+      const id = typeof args.id === 'string' ? args.id : '';
+      if (!id) throw new Error('id は必須です');
+      const { data, error } = await db
+        .from('calendar_events')
+        .update({ is_completed: args.completed !== false })
+        .eq('id', id)
+        .eq('student_id', uid)
+        .select('id, date, title, event_type, is_completed, notify_time')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('そのIDのTodoが見つかりません');
+      return { 結果: data.is_completed ? '完了にしました' : '未完了に戻しました', ...formatTodo(data) };
     }
 
     default:
@@ -204,7 +282,8 @@ async function handle(msg: JsonRpcRequest, uid: string) {
         protocolVersion: SUPPORTED_VERSIONS.includes(requested) ? requested : SUPPORTED_VERSIONS[1],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'mercury', title: 'Mercury', version: '1.0.0' },
-        instructions: 'Mercury (学習管理アプリ) の、ログイン中ユーザー本人の学習記録・教材・ノート・Todo を扱います。',
+        instructions:
+          'Mercury (学習管理アプリ) の、ログイン中ユーザー本人の学習記録・教材・ノート・Todo を扱います。Todo は Mercury のカレンダーに表示されます。日付は日本時間で扱ってください。',
       });
     }
     case 'ping':
