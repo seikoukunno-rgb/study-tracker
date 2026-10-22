@@ -74,18 +74,28 @@ export default function OnboardingPage() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          real_name: fullName,
           nickname: formData.nickname,
-          age: formData.age,
           user_type: formData.user_type,
           university: formData.user_type === 'student' ? formData.university : null,
           grade: formData.user_type === 'student' ? formData.grade : null,
           occupation: formData.user_type === 'worker' ? formData.occupation : null,
-          is_setup_completed: true, 
+          is_setup_completed: true,
         })
         .eq('id', userId);
 
       if (error) throw error;
+
+      // 本名・年齢は本人と管理者しか読めない保護テーブルに保存する
+      const { error: privateError } = await supabase
+        .from('profiles_private')
+        .upsert({
+          id: userId,
+          real_name: fullName,
+          age: formData.age,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (privateError) throw privateError;
       router.push('/');
       
     } catch (error) {
