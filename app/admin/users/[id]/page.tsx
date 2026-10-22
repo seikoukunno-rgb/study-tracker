@@ -13,8 +13,12 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', currentUser.id).single();
   if (profile?.role !== 'admin') redirect('/');
 
-  const { data: userProfile } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
-  if (!userProfile) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
+  const { data: userProfileBase } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
+  if (!userProfileBase) return <div className="p-8 text-white">ユーザーが見つかりませんでした。</div>;
+
+  // 本名・年齢は保護テーブルから取得(管理者は is_admin() により読める)
+  const { data: priv } = await supabase.from('profiles_private').select('real_name, age').eq('id', targetUserId).single();
+  const userProfile = { ...userProfileBase, real_name: priv?.real_name ?? null, age: priv?.age ?? null };
 
   const fetchSafely = async (table: string) => {
     let res = await supabase.from(table).select('*').eq('student_id', targetUserId).order('created_at', { ascending: false }).limit(50);

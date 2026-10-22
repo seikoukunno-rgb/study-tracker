@@ -152,11 +152,14 @@ export default function MyPage() {
 
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
+    // 本名・年齢は保護テーブルから取得(本人なので読める)
+    const { data: priv } = await supabase.from('profiles_private').select('real_name, age').eq('id', user.id).single();
+
     if (profile) {
       setNickname(profile.nickname || "");
       setAvatarColor(profile.avatar_url || AVATAR_COLORS[0]);
-      setFullProfile(profile);
-      setAge(profile.age || "");
+      setFullProfile({ ...profile, real_name: priv?.real_name ?? null, age: priv?.age ?? null });
+      setAge(priv?.age || "");
       setUserType(profile.user_type || 'student');
       setUniversity(profile.university || "");
       setGrade(profile.grade || "");
@@ -193,10 +196,9 @@ export default function MyPage() {
     // 🌟 本名(real_name)は更新対象から外して変更不可に！
     const { error } = await supabase
       .from('profiles')
-      .update({ 
-        nickname: nickname, 
+      .update({
+        nickname: nickname,
         avatar_url: avatarColor,
-        age: age,
         user_type: userType,
         university: userType === 'student' ? university : null,
         grade: userType === 'student' ? grade : null,
@@ -204,6 +206,13 @@ export default function MyPage() {
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id);
+
+    // 年齢は保護テーブルに保存する(本名は変更不可なので触らない)
+    if (!error) {
+      await supabase
+        .from('profiles_private')
+        .upsert({ id: user.id, age: age, updated_at: new Date().toISOString() });
+    }
 
     if (error) {
       alert("保存に失敗しました: " + error.message);
