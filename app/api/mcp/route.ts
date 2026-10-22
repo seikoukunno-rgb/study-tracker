@@ -55,12 +55,15 @@ const TOOLS = [
   {
     name: 'list_todos',
     description:
-      'Mercury のカレンダーにある自分のTodo(タスク・試験)を日付順に返す。既定では今日以降の未完了のものだけ。',
+      'Mercury のカレンダーにある自分のTodo(タスク・試験)を日付順に返す。ユーザーがアプリで追加したものも含む。' +
+      '既定では日付に関係なく未完了のものをすべて返し、期限切れには印を付ける。Todoについて答える前に必ずこれで最新の状態を確認する。',
     inputSchema: {
       type: 'object',
       properties: {
-        from: { type: 'string', description: 'この日付 (YYYY-MM-DD) 以降を返す。省略時は今日。' },
+        from: { type: 'string', description: 'この日付 (YYYY-MM-DD) 以降に絞る。省略可。' },
+        to: { type: 'string', description: 'この日付 (YYYY-MM-DD) 以前に絞る。省略可。' },
         include_completed: { type: 'boolean', description: '完了済みも含めるなら true。既定 false。' },
+        limit: { type: 'number', description: '最大件数 (既定100、最大300)。' },
       },
     },
     annotations: { readOnlyHint: true },
@@ -112,6 +115,7 @@ function formatTodo(e: { id: string; date: string; title: string; event_type: st
     内容: e.title,
     種類: e.event_type === 'exam' ? '試験' : 'タスク',
     完了: e.is_completed,
+    期限切れ: !e.is_completed && e.date < todayJst(),
     通知: e.notify_time ?? 'なし',
   };
 }
@@ -207,17 +211,24 @@ async function callTool(name: string, args: Args, uid: string): Promise<unknown>
     }
 
     case 'list_todos': {
-      const from = typeof args.from === 'string' && DATE_RE.test(args.from) ? args.from : todayJst();
       let q = db
         .from('calendar_events')
         .select('id, date, title, event_type, is_completed, notify_time')
         .eq('student_id', uid)
-        .gte('date', from)
-        .order('date', { ascending: true });
+        .order('date', { ascending: true })
+        .limit(clampNumber(args.limit, 100, 300));
+      if (typeof args.from === 'string' && DATE_RE.test(args.from)) q = q.gte('date', args.from);
+      if (typeof args.to === 'string' && DATE_RE.test(args.to)) q = q.lte('date', args.to);
       if (args.include_completed !== true) q = q.eq('is_completed', false);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []).map(formatTodo);
+      const todos = (data ?? []).map(formatTodo);
+      return {
+        今日: todayJst(),
+        件数: todos.length,
+        期限切れ件数: todos.filter((t) => t.期限切れ).length,
+        Todo: todos,
+      };
     }
 
     case 'add_todo': {
