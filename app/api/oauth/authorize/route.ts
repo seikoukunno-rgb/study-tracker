@@ -1,8 +1,8 @@
-// 認可画面: Mercury にログイン中の本人(管理者)が「許可する」を押すと、Claude に認可コードを返す
+// 認可画面: Mercury にログイン中の本人(管理者)が「許可する」を押すと、接続元 (Claude / ChatGPT) に認可コードを返す
 import { NextResponse } from 'next/server';
 import { createClient } from '../../../utils/supabase/server';
 import { isAllowedUser } from '../../../../lib/mcp/admin-client';
-import { CODE_TTL, isAllowedRedirect, nowSec, signToken, verifyToken } from '../../../../lib/mcp/token';
+import { CODE_TTL, clientAppOf, isAllowedRedirect, nowSec, signToken, verifyToken } from '../../../../lib/mcp/token';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,12 +53,13 @@ export async function GET(req: Request) {
   const err = validate(p, url.searchParams.get('response_type'));
   if (err) return page('接続エラー', `<h1>接続できません</h1><p>${escapeHtml(err)}</p>`, 400);
 
+  const app = clientAppOf(p.redirect_uri) === 'ChatGPT' ? 'ChatGPT' : 'Claude';
   const user = await currentUser();
   if (!user) {
     return page(
       'ログインが必要です',
       `<h1>先に Mercury にログインしてください</h1>
-       <p>このブラウザで Mercury にログインしてから、Claude の画面でもう一度「連携/接続」を押してください。</p>
+       <p>このブラウザで Mercury にログインしてから、${app} の画面でもう一度「接続」を押してください。</p>
        <div class="btns"><a class="btn ok" href="${url.origin}/login" target="_blank">Mercury にログイン</a></div>`,
       401
     );
@@ -71,11 +72,11 @@ export async function GET(req: Request) {
   const hidden = FIELDS.map((f) => `<input type="hidden" name="${f}" value="${escapeHtml(p[f])}">`).join('');
 
   return page(
-    'Claude と Mercury を接続',
-    `<h1>Claude が Mercury へのアクセスを求めています</h1>
+    `${app} と Mercury を接続`,
+    `<h1>${app} が Mercury へのアクセスを求めています</h1>
      <p>ログイン中: <b>${escapeHtml(user.email ?? user.id)}</b></p>
-     <p>許可すると、Claude はあなたのアカウントについて次のことができます。</p>
-     <ul><li>学習時間・学習記録を見る</li><li>教材とノートを読む</li><li>Todo(リマインダー)を見る・追加する</li></ul>
+     <p>許可すると、${app} はあなたのアカウントについて次のことができます。</p>
+     <ul><li>学習時間・学習記録を見る・追加する</li><li>教材とノートを読む</li><li>Todo を見る・追加する・完了にする</li></ul>
      <form method="post">${hidden}<input type="hidden" name="csrf" value="${csrf}">
        <div class="btns"><button class="ng" name="decision" value="deny">拒否</button><button class="ok" name="decision" value="allow">許可する</button></div>
      </form>`
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
   const user = await currentUser();
   const csrf = verifyToken(get('csrf'), 'csrf');
   if (!user || !csrf || csrf.sub !== user.id || !(await isAllowedUser(user.id))) {
-    return page('接続エラー', `<h1>接続できません</h1><p>セッションが切れました。Claude からもう一度接続してください。</p>`, 403);
+    return page('接続エラー', `<h1>接続できません</h1><p>セッションが切れました。接続元のアプリからもう一度接続してください。</p>`, 403);
   }
 
   const back = new URL(p.redirect_uri);

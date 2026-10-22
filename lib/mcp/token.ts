@@ -55,20 +55,31 @@ export function pkceChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
-// Claude のコールバック、またはローカル (Claude Code) だけを許可する
-export function isAllowedRedirect(uri: string): boolean {
+export type ClientApp = 'Claude' | 'ChatGPT' | 'ローカル';
+
+// 戻り先から接続元のアプリを判定する。許可していない戻り先なら null
+export function clientAppOf(uri: string): ClientApp | null {
   try {
     const u = new URL(uri);
     if (u.protocol === 'https:' && ['claude.ai', 'claude.com'].includes(u.hostname)) {
-      return u.pathname === '/api/mcp/auth_callback';
+      return u.pathname === '/api/mcp/auth_callback' ? 'Claude' : null;
+    }
+    if (u.protocol === 'https:' && ['chatgpt.com', 'chat.openai.com'].includes(u.hostname)) {
+      const ok = u.pathname.startsWith('/connector/oauth/') || u.pathname === '/connector_platform_oauth_redirect';
+      return ok ? 'ChatGPT' : null;
     }
     if (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname)) {
-      return true;
+      return 'ローカル';
     }
-    return false;
+    return null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Claude・ChatGPT のコールバック、またはローカル (Claude Code など) だけを許可する
+export function isAllowedRedirect(uri: string): boolean {
+  return clientAppOf(uri) !== null;
 }
 
 export function originOf(req: Request): string {
